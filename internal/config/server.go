@@ -39,7 +39,7 @@ func DefaultServerConfig() *serverConfig {
 	config.API.BindAddr = ":8080"
 
 	// Storage defaults
-	config.Storage.ChunkSize = 4194304
+	config.Storage.ChunkSize = 4194304 // 4MB
 	config.Storage.EnableCompression = true
 
 	return config
