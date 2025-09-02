@@ -1,11 +1,11 @@
 package path
 
 import (
+	"net"
 	"strings"
 )
 
 // SplitBucketKey splits a key into bucket and object parts
-// Input: "bucket/path/to/object.txt" -> Output: ("bucket", "path/to/object.txt")
 func SplitBucketKey(key string) (bucket, objectKey string) {
 	parts := strings.SplitN(key, "/", 2)
 	if len(parts) == 2 {
@@ -15,7 +15,6 @@ func SplitBucketKey(key string) (bucket, objectKey string) {
 }
 
 // JoinBucketKey creates a bucket-scoped key
-// Input: ("bucket", "path/to/object.txt") -> Output: "bucket/path/to/object.txt"  
 func JoinBucketKey(bucket, objectKey string) string {
 	if bucket == "" {
 		return objectKey
@@ -23,19 +22,47 @@ func JoinBucketKey(bucket, objectKey string) string {
 	return bucket + "/" + objectKey
 }
 
-// ValidateBucketName checks if bucket name is valid
+// ValidateBucketName checks if bucket name is valid according to AWS S3 rules
 func ValidateBucketName(bucket string) bool {
 	if len(bucket) < 3 || len(bucket) > 63 {
 		return false
 	}
-	
-	// Basic validation - no special characters, dots, etc.
+
+	if bucket[0] == '-' || bucket[0] == '.' || bucket[len(bucket)-1] == '-' || bucket[len(bucket)-1] == '.' {
+		return false
+	}
+
+	// Check for valid characters and patterns
+	prevChar := byte(0)
 	for _, r := range bucket {
-		if !((r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-') {
+		char := byte(r)
+
+		if !((char >= 'a' && char <= 'z') || (char >= '0' && char <= '9') || char == '-' || char == '.') {
 			return false
 		}
+
+		if char == '.' && prevChar == '.' {
+			return false
+		}
+
+		if (char == '.' && prevChar == '-') || (char == '-' && prevChar == '.') {
+			return false
+		}
+
+		prevChar = char
 	}
-	
-	// Cannot start or end with hyphen
-	return bucket[0] != '-' && bucket[len(bucket)-1] != '-'
+
+	if net.ParseIP(bucket) != nil {
+		return false
+	}
+
+	if strings.HasPrefix(bucket, "xn--") {
+		return false
+	}
+
+	if strings.HasSuffix(bucket, "-s3alias") || strings.HasSuffix(bucket, "--ol-s3") {
+		return false
+	}
+
+	return true
 }
