@@ -61,6 +61,9 @@ func (p *PebbleDB) Exist(key []byte) (bool, error) {
 
 	_, closer, err := p.db.Get(key)
 	if err != nil {
+		if err == pebble.ErrNotFound {
+			return false, nil
+		}
 		return false, err
 	}
 	defer closer.Close()

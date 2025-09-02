@@ -25,14 +25,21 @@ type ListObjectsResponse struct {
 	Count   int          `json:"count"`
 }
 
-// ListObjects returns a list of stored objects, optionally filtered by prefix
-func ListObjects(prefix string) (*ListObjectsResponse, error) {
+// ListObjectsInBucket returns a list of objects in a specific bucket
+func ListObjectsInBucket(bucket, prefix string) (*ListObjectsResponse, error) {
 	db := database.LocalStore()
 	if db == nil {
 		return nil, fmt.Errorf("database not initialized")
 	}
 
-	iter, err := db.NewIteratorWithPrefix([]byte("metadata:"))
+	var searchPrefix string
+	if bucket != "" {
+		searchPrefix = fmt.Sprintf("metadata:%s/", bucket)
+	} else {
+		searchPrefix = "metadata:"
+	}
+
+	iter, err := db.NewIteratorWithPrefix([]byte(searchPrefix))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create iterator: %w", err)
 	}
@@ -44,11 +51,18 @@ func ListObjects(prefix string) (*ListObjectsResponse, error) {
 		key := string(iter.Key())
 		objectKey := dbutils.ExtractFilenameFromKey(key)
 
+		// Remove bucket prefix from object key for display
+		if bucket != "" {
+			if strings.HasPrefix(objectKey, bucket+"/") {
+				objectKey = objectKey[len(bucket)+1:]
+			}
+		}
+
 		if prefix != "" && !strings.HasPrefix(objectKey, prefix) {
 			continue
 		}
 
-		metadata, err := storage.GetMetadata(objectKey)
+		metadata, err := storage.GetMetadataFromBucket(bucket, objectKey)
 		if err != nil {
 			continue // Skip corrupted metadata
 		}

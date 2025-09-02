@@ -15,8 +15,9 @@ import (
 )
 
 type PutObjectRequest struct {
-	Key  string
-	Body io.Reader
+	Bucket string
+	Key    string
+	Body   io.Reader
 }
 
 type PutObjectResponse struct {
@@ -57,7 +58,7 @@ func PutObject(req *PutObjectRequest) (*PutObjectResponse, error) {
 		ChunkHashes: chunks,
 	}
 
-	if err := storage.StoreMetadata(metadata); err != nil {
+	if err := storage.StoreMetadataInBucket(req.Bucket, metadata); err != nil {
 		return nil, fmt.Errorf("failed to store metadata: %w", err)
 	}
 

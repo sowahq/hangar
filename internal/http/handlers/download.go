@@ -7,35 +7,44 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/phuslu/log"
 
+	"github.com/anhostfr/hangar/internal/http/response"
+	"github.com/anhostfr/hangar/internal/http/validation"
+	"github.com/anhostfr/hangar/internal/service/bucket"
 	"github.com/anhostfr/hangar/internal/service/object"
 )
 
 func Download(c *fiber.Ctx) error {
-	key := c.Params("*")
-	if key == "" {
-		return fiber.NewError(fiber.StatusBadRequest, "Missing object key")
+	bucketName := c.Params("bucket")
+	key, err := validation.ValidateKey(c, "*")
+	if err != nil {
+		return err
+	}
+
+	// Validate bucket exists
+	_, err = bucket.GetBucket(bucketName)
+	if err != nil {
+		return response.Error(c, fiber.StatusNotFound, "Bucket not found: "+bucketName)
 	}
 
 	req := &object.GetObjectRequest{
-		Key: key,
+		Bucket: bucketName,
+		Key:    key,
 	}
 
-	response, err := object.GetObject(req)
+	result, err := object.GetObject(req)
 	if err != nil {
-		log.Error().Err(err).Msgf("Failed to get object: %s", key)
-		return fiber.NewError(fiber.StatusNotFound, "Object not found")
+		return response.ErrorWithLog(c, fiber.StatusNotFound, "Object not found", err, "Failed to get object: "+key)
 	}
 
-	c.Set("Content-Type", response.ContentType)
-	c.Set("Content-Disposition", `attachment; filename="`+response.Filename+`"`)
-	c.Set("Content-Length", fmt.Sprintf("%d", response.Size))
+	c.Set("Content-Type", result.ContentType)
+	c.Set("Content-Disposition", `attachment; filename="`+result.Filename+`"`)
+	c.Set("Content-Length", fmt.Sprintf("%d", result.Size))
 
 	// Stream with larger buffer for better performance
 	buf := make([]byte, 64*1024) // 64KB buffer
-	_, err = io.CopyBuffer(c.Response().BodyWriter(), response.Reader, buf)
+	_, err = io.CopyBuffer(c.Response().BodyWriter(), result.Reader, buf)
 	if err != nil {
-		log.Error().Err(err).Msgf("Failed to stream object: %s", key)
-		return fiber.NewError(fiber.StatusInternalServerError, "Failed to stream file")
+		return response.ErrorWithLog(c, fiber.StatusInternalServerError, "Failed to stream file", err, "Failed to stream object: "+key)
 	}
 
 	log.Debug().Msgf("Object downloaded: %s", key)

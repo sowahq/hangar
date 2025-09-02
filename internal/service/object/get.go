@@ -13,7 +13,8 @@ import (
 )
 
 type GetObjectRequest struct {
-	Key string
+	Bucket string
+	Key    string
 }
 
 type GetObjectResponse struct {
@@ -26,7 +27,7 @@ type GetObjectResponse struct {
 
 // GetObject retrieves an object by its key and reconstructs it from chunks
 func GetObject(req *GetObjectRequest) (*GetObjectResponse, error) {
-	metadata, err := storage.GetMetadata(req.Key)
+	metadata, err := storage.GetMetadataFromBucket(req.Bucket, req.Key)
 	if err != nil {
 		return nil, fmt.Errorf("object not found: %w", err)
 	}

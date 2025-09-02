@@ -1,20 +1,28 @@
 package handlers
 
 import (
-	"github.com/anhostfr/hangar/internal/service/object"
 	"github.com/gofiber/fiber/v2"
+
+	"github.com/anhostfr/hangar/internal/http/response"
+	"github.com/anhostfr/hangar/internal/service/bucket"
+	"github.com/anhostfr/hangar/internal/service/object"
 )
 
-// ListObjects handles GET /objects requests to list stored objects
+// ListObjects handles GET /buckets/:bucket/objects requests to list stored objects
 func ListObjects(c *fiber.Ctx) error {
+	bucketName := c.Params("bucket")
 	prefix := c.Params("*")
 
-	response, err := object.ListObjects(prefix)
+	// Validate bucket exists
+	_, err := bucket.GetBucket(bucketName)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": err.Error(),
-		})
+		return response.Error(c, fiber.StatusNotFound, "Bucket not found: "+bucketName)
 	}
 
-	return c.JSON(response)
+	result, err := object.ListObjectsInBucket(bucketName, prefix)
+	if err != nil {
+		return response.ErrorWithLog(c, fiber.StatusInternalServerError, err.Error(), err, "Failed to list objects")
+	}
+
+	return response.JSON(c, result)
 }

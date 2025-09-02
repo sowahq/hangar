@@ -6,6 +6,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/anhostfr/hangar/cmd/bucket"
 	"github.com/anhostfr/hangar/internal/config"
 	"github.com/anhostfr/hangar/internal/http"
 	"github.com/phuslu/log"
@@ -15,8 +16,13 @@ import (
 func Execute() {
 	app := &cli.App{
 		Name:        "hangar",
-		Description: "Object Storage CL",
+		Description: "Object Storage CLI",
 		Commands: []*cli.Command{
+			{
+				Name:        "bucket",
+				Usage:       "Manage buckets",
+				Subcommands: bucket.Commands(),
+			},
 			{
 				Name:  "server",
 				Usage: "Start the object storage server",

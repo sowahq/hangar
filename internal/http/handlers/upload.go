@@ -4,29 +4,43 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/phuslu/log"
 
+	"github.com/anhostfr/hangar/internal/http/response"
+	"github.com/anhostfr/hangar/internal/http/validation"
+	"github.com/anhostfr/hangar/internal/service/bucket"
 	"github.com/anhostfr/hangar/internal/service/object"
 )
 
 func Upload(c *fiber.Ctx) error {
-	if c.Is("multipart/form-data") {
-		return fiber.NewError(fiber.StatusBadRequest, "Invalid request")
+	if err := validation.RejectMultipart(c); err != nil {
+		return err
 	}
 
-	key := c.Params("*")
+	bucketName := c.Params("bucket")
+	key, err := validation.ValidateKey(c, "*")
+	if err != nil {
+		return err
+	}
+
+	// Validate bucket exists
+	_, err = bucket.GetBucket(bucketName)
+	if err != nil {
+		return response.Error(c, fiber.StatusNotFound, "Bucket not found: "+bucketName)
+	}
+
 	bodyStream := c.Request().BodyStream()
 
 	req := &object.PutObjectRequest{
-		Key:  key,
-		Body: bodyStream,
+		Bucket: bucketName,
+		Key:    key,
+		Body:   bodyStream,
 	}
 
-	response, err := object.PutObject(req)
+	result, err := object.PutObject(req)
 	if err != nil {
-		log.Error().Err(err).Msgf("Failed to upload file: %s", key)
-		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+		return response.ErrorWithLog(c, fiber.StatusInternalServerError, err.Error(), err, "Failed to upload file: "+key)
 	}
 
-	log.Debug().Msgf("File uploaded: %s, Hash: %s, Size: %d", key, response.ObjectHash, response.Size)
+	log.Debug().Msgf("File uploaded: %s, Hash: %s, Size: %d", key, result.ObjectHash, result.Size)
 
-	return c.JSON(response)
+	return response.JSON(c, result)
 }

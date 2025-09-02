@@ -29,9 +29,17 @@ func Router() *fiber.App {
 	})
 
 	router.Get("/status", handlers.Status)
-	router.Get("/objects/*", handlers.ListObjects)
-	router.Get("/download/*", handlers.Download)
-	router.Post("/upload/*", handlers.Upload)
+	
+	// Bucket routes
+	router.Post("/buckets", handlers.CreateBucket)
+	router.Get("/buckets", handlers.ListBuckets)
+	router.Get("/buckets/:name", handlers.GetBucket)
+	router.Delete("/buckets/:name", handlers.DeleteBucket)
+	
+	// Object routes (bucket-scoped only)
+	router.Get("/buckets/:bucket/objects/*", handlers.ListObjects)
+	router.Get("/buckets/:bucket/download/*", handlers.Download)
+	router.Post("/buckets/:bucket/upload/*", handlers.Upload)
 
 	router.Hooks().OnListen(func(data fiber.ListenData) error {
 		log.Info().Msgf("Started web server on %s:%s", data.Host, data.Port)

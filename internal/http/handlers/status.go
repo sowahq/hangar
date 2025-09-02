@@ -1,11 +1,13 @@
 package handlers
 
-import "github.com/gofiber/fiber/v2"
+import (
+	"github.com/gofiber/fiber/v2"
+	
+	"github.com/anhostfr/hangar/internal/http/response"
+)
 
 func Status(c *fiber.Ctx) error {
-	c.JSON(fiber.Map{
+	return response.JSON(c, fiber.Map{
 		"status": "OK",
 	})
-
-	return nil
 }

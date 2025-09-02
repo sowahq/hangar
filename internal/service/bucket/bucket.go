@@ -1,0 +1,164 @@
+package bucket
+
+import (
+	"encoding/json"
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/cockroachdb/pebble"
+	"github.com/anhostfr/hangar/internal/database"
+	dbutils "github.com/anhostfr/hangar/internal/utils/database"
+)
+
+type BucketInfo struct {
+	Name      string `json:"name"`
+	CreatedAt int64  `json:"created_at"`
+	UpdatedAt int64  `json:"updated_at"`
+	Public    bool   `json:"public"`
+}
+
+type CreateBucketRequest struct {
+	Name   string `json:"name"`
+	Public bool   `json:"public"`
+}
+
+type CreateBucketResponse struct {
+	*BucketInfo
+}
+
+type ListBucketsResponse struct {
+	Buckets []BucketInfo `json:"buckets"`
+	Count   int          `json:"count"`
+}
+
+type DeleteBucketRequest struct {
+	Name  string `json:"name"`
+	Force bool   `json:"force"`
+}
+
+func CreateBucket(req *CreateBucketRequest) (*CreateBucketResponse, error) {
+	db := database.LocalStore()
+	if db == nil {
+		return nil, fmt.Errorf("database not initialized")
+	}
+
+	key := []byte(fmt.Sprintf("bucket:%s", req.Name))
+
+	exists, err := db.Exist(key)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check bucket existence: %w", err)
+	}
+
+	if exists {
+		return nil, fmt.Errorf("bucket already exists: %s", req.Name)
+	}
+
+	now := time.Now().UnixMilli()
+	bucket := &BucketInfo{
+		Name:      req.Name,
+		CreatedAt: now,
+		UpdatedAt: now,
+		Public:    req.Public,
+	}
+
+	data, err := json.Marshal(bucket)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal bucket: %w", err)
+	}
+
+	if err := db.Put(key, data); err != nil {
+		return nil, fmt.Errorf("failed to store bucket: %w", err)
+	}
+
+	return &CreateBucketResponse{BucketInfo: bucket}, nil
+}
+
+func ListBuckets() (*ListBucketsResponse, error) {
+	db := database.LocalStore()
+	if db == nil {
+		return nil, fmt.Errorf("database not initialized")
+	}
+
+	iter, err := db.NewIteratorWithPrefix([]byte("bucket:"))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create iterator: %w", err)
+	}
+	defer iter.Close()
+
+	var buckets []BucketInfo
+
+	for iter.First(); iter.Valid(); iter.Next() {
+		var bucket BucketInfo
+		if err := json.Unmarshal(iter.Value(), &bucket); err != nil {
+			continue // Skip corrupted data
+		}
+
+		buckets = append(buckets, bucket)
+	}
+
+	return &ListBucketsResponse{
+		Buckets: buckets,
+		Count:   len(buckets),
+	}, nil
+}
+
+func GetBucket(name string) (*BucketInfo, error) {
+	db := database.LocalStore()
+	if db == nil {
+		return nil, fmt.Errorf("database not initialized")
+	}
+
+	key := []byte(fmt.Sprintf("bucket:%s", name))
+
+	data, err := db.Get(key)
+	if err != nil {
+		if err == pebble.ErrNotFound {
+			return nil, fmt.Errorf("bucket not found: %s", name)
+		}
+		return nil, fmt.Errorf("bucket not found: %w", err)
+	}
+
+	var bucket BucketInfo
+	if err := json.Unmarshal(data, &bucket); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal bucket: %w", err)
+	}
+
+	return &bucket, nil
+}
+
+func DeleteBucket(req *DeleteBucketRequest) error {
+	db := database.LocalStore()
+	if db == nil {
+		return fmt.Errorf("database not initialized")
+	}
+
+	key := []byte(fmt.Sprintf("bucket:%s", req.Name))
+
+	exists, err := db.Exist(key)
+	if err != nil {
+		return fmt.Errorf("failed to check bucket existence: %w", err)
+	}
+
+	if !exists {
+		return fmt.Errorf("bucket not found: %s", req.Name)
+	}
+
+	if !req.Force {
+		// Check if bucket contains objects
+		iter, err := db.NewIteratorWithPrefix([]byte("metadata:"))
+		if err != nil {
+			return fmt.Errorf("failed to create iterator: %w", err)
+		}
+		defer iter.Close()
+
+		for iter.First(); iter.Valid(); iter.Next() {
+			objectKey := dbutils.ExtractFilenameFromKey(string(iter.Key()))
+			if strings.HasPrefix(objectKey, req.Name+"/") {
+				return fmt.Errorf("bucket not empty: %s. Use force=true to delete", req.Name)
+			}
+		}
+	}
+
+	return db.Delete(key)
+}

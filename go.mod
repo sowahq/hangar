@@ -8,6 +8,7 @@ require (
 	github.com/cockroachdb/pebble v1.1.5
 	github.com/go-playground/validator/v10 v10.27.0
 	github.com/gofiber/fiber/v2 v2.52.9
+	github.com/klauspost/compress v1.18.0
 	github.com/phuslu/log v1.0.119
 	github.com/urfave/cli/v2 v2.27.7
 	github.com/zeebo/blake3 v0.2.4
@@ -34,7 +35,6 @@ require (
 	github.com/golang/protobuf v1.5.3 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/google/uuid v1.6.0 // indirect
-	github.com/klauspost/compress v1.18.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
 	github.com/kr/pretty v0.3.1 // indirect
 	github.com/kr/text v0.2.0 // indirect
