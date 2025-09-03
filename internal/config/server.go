@@ -24,6 +24,10 @@ type serverConfig struct {
 		EnableCompression bool `toml:"enable_compression"`
 	} `toml:"storage"`
 
+	GarbageCollection struct {
+		Interval int `toml:"interval_hours" validate:"min=1"` // Hours between GC runs
+	} `toml:"garbage_collection"`
+
 	// TODO: S3 API
 }
 
@@ -41,6 +45,9 @@ func DefaultServerConfig() *serverConfig {
 	// Storage defaults
 	config.Storage.ChunkSize = 4194304 // 4MB
 	config.Storage.EnableCompression = true
+
+	// GC defaults
+	config.GarbageCollection.Interval = 24 // 24 hours
 
 	return config
 }
@@ -126,6 +133,17 @@ func CompressionEnabled() bool {
 	}
 
 	return c.Storage.EnableCompression
+}
+
+func GCInterval() int {
+	mu.RLock()
+	defer mu.RUnlock()
+
+	if c == nil {
+		c = DefaultServerConfig()
+	}
+
+	return c.GarbageCollection.Interval
 }
 
 func DataPath() string {

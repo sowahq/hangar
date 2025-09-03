@@ -1,6 +1,7 @@
 package root
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/signal"
@@ -9,6 +10,7 @@ import (
 	"github.com/anhostfr/hangar/cmd/bucket"
 	"github.com/anhostfr/hangar/internal/config"
 	"github.com/anhostfr/hangar/internal/api/http"
+	gcService "github.com/anhostfr/hangar/internal/service/gc"
 	"github.com/phuslu/log"
 	"github.com/urfave/cli/v2"
 )
@@ -56,8 +58,13 @@ func Execute() {
 
 					log.Debug().Msgf("Created data directory: %s", config.ServerConfig().DataDirectory)
 
-					router := http.Router()
-					go router.Listen(config.ServerConfig().API.BindAddr)
+					// Start HTTP API (with admin endpoints)
+					httpRouter := http.Router()
+					go httpRouter.Listen(config.ServerConfig().API.BindAddr)
+
+					// Start scheduled garbage collection
+					ctx, cancel := context.WithCancel(context.Background())
+					go gcService.StartScheduledGC(ctx)
 
 					osSignal := make(chan os.Signal, 1)
 					signal.Notify(osSignal, os.Interrupt, syscall.SIGTERM)
@@ -66,8 +73,11 @@ func Execute() {
 
 					log.Info().Msg("Shutting down Hangar...")
 
-					if err := router.Shutdown(); err != nil {
-						log.Error().Err(err).Msg("Failed to shutdown server.")
+					// Stop garbage collection
+					cancel()
+
+					if err := httpRouter.Shutdown(); err != nil {
+						log.Error().Err(err).Msg("Failed to shutdown HTTP server.")
 					}
 
 					return nil

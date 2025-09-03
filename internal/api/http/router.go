@@ -3,6 +3,7 @@ package http
 import (
 	"time"
 
+	"github.com/anhostfr/hangar/internal/api/http/admin"
 	"github.com/anhostfr/hangar/internal/api/http/handlers"
 	"github.com/gofiber/fiber/v2"
 	"github.com/phuslu/log"
@@ -21,12 +22,12 @@ func Router() *fiber.App {
 
 	router.Get("/status", handlers.Status)
 
-	// Admin API - Bucket management
-	admin := router.Group("/admin")
-	admin.Get("/buckets", handlers.ListBuckets)
-	admin.Put("/buckets/:bucket", handlers.CreateBucket)
-	admin.Get("/buckets/:bucket", handlers.GetBucket)
-	admin.Delete("/buckets/:bucket", handlers.DeleteBucket)
+	// Admin API
+	adminGroup := router.Group("/admin")
+	adminGroup.Get("/buckets", admin.ListBuckets)
+	adminGroup.Put("/buckets/:bucket", admin.CreateBucket)
+	adminGroup.Get("/buckets/:bucket", admin.GetBucket)
+	adminGroup.Delete("/buckets/:bucket", admin.DeleteBucket)
 
 	// Base Object API
 	router.Get("/:bucket", handlers.ListObjects)
