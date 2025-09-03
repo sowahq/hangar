@@ -6,8 +6,8 @@ import (
 
 	"github.com/anhostfr/hangar/internal/database"
 	"github.com/anhostfr/hangar/internal/storage"
-	dbutils "github.com/anhostfr/hangar/internal/utils/database"
-	"github.com/anhostfr/hangar/internal/utils/path"
+	dbutils "github.com/anhostfr/hangar/pkg/database"
+	"github.com/anhostfr/hangar/pkg/pathutil"
 )
 
 type ObjectInfo struct {
@@ -69,7 +69,7 @@ func ListObjectsInBucket(bucket, prefix string) (*ListObjectsResponse, error) {
 
 		objects = append(objects, ObjectInfo{
 			Key:         objectKey,
-			Filename:    path.ExtractFilename(objectKey),
+			Filename:    pathutil.ExtractFilename(objectKey),
 			ETag:        metadata.ETag,
 			Size:        metadata.Size,
 			ContentType: metadata.ContentType,

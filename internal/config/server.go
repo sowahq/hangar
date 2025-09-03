@@ -127,3 +127,14 @@ func CompressionEnabled() bool {
 
 	return c.Storage.EnableCompression
 }
+
+func DataPath() string {
+	mu.RLock()
+	defer mu.RUnlock()
+
+	if c == nil {
+		c = DefaultServerConfig()
+	}
+
+	return c.DataDirectory
+}

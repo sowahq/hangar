@@ -4,7 +4,7 @@ import (
 	"strings"
 	
 	"github.com/gofiber/fiber/v2"
-	"github.com/anhostfr/hangar/internal/http/response"
+	"github.com/anhostfr/hangar/internal/api/http/response"
 )
 
 // ValidateKey validates object key from URL parameter

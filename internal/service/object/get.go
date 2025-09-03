@@ -9,7 +9,7 @@ import (
 
 	"github.com/anhostfr/hangar/internal/config"
 	"github.com/anhostfr/hangar/internal/storage"
-	"github.com/anhostfr/hangar/internal/utils/path"
+	"github.com/anhostfr/hangar/pkg/pathutil"
 )
 
 type GetObjectRequest struct {
@@ -40,7 +40,7 @@ func GetObject(req *GetObjectRequest) (*GetObjectResponse, error) {
 
 	return &GetObjectResponse{
 		Key:         req.Key,
-		Filename:    path.ExtractFilename(req.Key),
+		Filename:    pathutil.ExtractFilename(req.Key),
 		ContentType: metadata.ContentType,
 		Size:        metadata.Size,
 		Reader:      reader,

@@ -3,8 +3,8 @@ package handlers
 import (
 	"github.com/gofiber/fiber/v2"
 
-	"github.com/anhostfr/hangar/internal/http/response"
-	"github.com/anhostfr/hangar/internal/http/validation"
+	"github.com/anhostfr/hangar/internal/api/http/response"
+	"github.com/anhostfr/hangar/internal/api/http/validation"
 	"github.com/anhostfr/hangar/internal/service/bucket"
 )
 
@@ -36,7 +36,7 @@ func ListBuckets(c *fiber.Ctx) error {
 }
 
 func GetBucket(c *fiber.Ctx) error {
-	name, err := validation.ValidateKey(c, "name")
+	name, err := validation.ValidateKey(c, "bucket")
 	if err != nil {
 		return err
 	}
@@ -50,7 +50,7 @@ func GetBucket(c *fiber.Ctx) error {
 }
 
 func DeleteBucket(c *fiber.Ctx) error {
-	name, err := validation.ValidateKey(c, "name")
+	name, err := validation.ValidateKey(c, "bucket")
 	if err != nil {
 		return err
 	}

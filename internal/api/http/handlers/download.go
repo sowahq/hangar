@@ -7,8 +7,8 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/phuslu/log"
 
-	"github.com/anhostfr/hangar/internal/http/response"
-	"github.com/anhostfr/hangar/internal/http/validation"
+	"github.com/anhostfr/hangar/internal/api/http/response"
+	"github.com/anhostfr/hangar/internal/api/http/validation"
 	"github.com/anhostfr/hangar/internal/service/bucket"
 	"github.com/anhostfr/hangar/internal/service/object"
 )

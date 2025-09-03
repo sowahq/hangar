@@ -11,7 +11,7 @@ import (
 
 	"github.com/anhostfr/hangar/internal/config"
 	"github.com/anhostfr/hangar/internal/storage"
-	"github.com/anhostfr/hangar/internal/utils/path"
+	"github.com/anhostfr/hangar/pkg/pathutil"
 )
 
 type PutObjectRequest struct {
@@ -64,7 +64,7 @@ func PutObject(req *PutObjectRequest) (*PutObjectResponse, error) {
 
 	return &PutObjectResponse{
 		Key:         req.Key,
-		Filename:    path.ExtractFilename(req.Key),
+		Filename:    pathutil.ExtractFilename(req.Key),
 		ETag:        fmt.Sprintf("%x", blake3.Sum256([]byte(req.Key))),
 		Size:        size,
 		ContentType: contentType,

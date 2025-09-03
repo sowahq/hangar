@@ -8,7 +8,7 @@ import (
 
 	"github.com/anhostfr/hangar/cmd/bucket"
 	"github.com/anhostfr/hangar/internal/config"
-	"github.com/anhostfr/hangar/internal/http"
+	"github.com/anhostfr/hangar/internal/api/http"
 	"github.com/phuslu/log"
 	"github.com/urfave/cli/v2"
 )

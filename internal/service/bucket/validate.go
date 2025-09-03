@@ -1,29 +1,21 @@
-package path
+package bucket
 
 import (
+	"fmt"
 	"net"
 	"strings"
 )
 
-// SplitBucketKey splits a key into bucket and object parts
-func SplitBucketKey(key string) (bucket, objectKey string) {
-	parts := strings.SplitN(key, "/", 2)
-	if len(parts) == 2 {
-		return parts[0], parts[1]
+// BucketName validates bucket name according to AWS S3 rules
+func BucketName(bucket string) error {
+	if !validBucketName(bucket) {
+		return fmt.Errorf("invalid bucket name: %s", bucket)
 	}
-	return "", key
+	return nil
 }
 
-// JoinBucketKey creates a bucket-scoped key
-func JoinBucketKey(bucket, objectKey string) string {
-	if bucket == "" {
-		return objectKey
-	}
-	return bucket + "/" + objectKey
-}
-
-// ValidateBucketName checks if bucket name is valid according to AWS S3 rules
-func ValidateBucketName(bucket string) bool {
+// validBucketName checks if bucket name is valid according to AWS S3 rules
+func validBucketName(bucket string) bool {
 	if len(bucket) < 3 || len(bucket) > 63 {
 		return false
 	}

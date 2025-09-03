@@ -9,7 +9,7 @@ import (
 	"github.com/anhostfr/hangar/internal/config"
 	"github.com/anhostfr/hangar/internal/database"
 	"github.com/anhostfr/hangar/internal/storage"
-	dbutils "github.com/anhostfr/hangar/internal/utils/database"
+	dbutils "github.com/anhostfr/hangar/pkg/database"
 )
 
 type GCStats struct {
