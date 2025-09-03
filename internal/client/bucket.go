@@ -9,7 +9,7 @@ import (
 
 // CreateBucket creates a new bucket via API
 func (c *Client) CreateBucket(req *bucket.CreateBucketRequest) (*bucket.CreateBucketResponse, error) {
-	resp, err := c.doRequest("POST", "/buckets", req)
+	resp, err := c.doRequest("PUT", fmt.Sprintf("/admin/buckets/%s", req.Name), req)
 	if err != nil {
 		return nil, err
 	}
@@ -29,7 +29,7 @@ func (c *Client) CreateBucket(req *bucket.CreateBucketRequest) (*bucket.CreateBu
 
 // ListBuckets lists all buckets via API
 func (c *Client) ListBuckets() (*bucket.ListBucketsResponse, error) {
-	resp, err := c.doRequest("GET", "/buckets", nil)
+	resp, err := c.doRequest("GET", "/admin/buckets", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -49,7 +49,7 @@ func (c *Client) ListBuckets() (*bucket.ListBucketsResponse, error) {
 
 // GetBucket gets bucket information via API
 func (c *Client) GetBucket(name string) (*bucket.BucketInfo, error) {
-	resp, err := c.doRequest("GET", fmt.Sprintf("/buckets/%s", name), nil)
+	resp, err := c.doRequest("GET", fmt.Sprintf("/admin/buckets/%s", name), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -69,7 +69,7 @@ func (c *Client) GetBucket(name string) (*bucket.BucketInfo, error) {
 
 // DeleteBucket deletes a bucket via API
 func (c *Client) DeleteBucket(name string, force bool) error {
-	path := fmt.Sprintf("/buckets/%s", name)
+	path := fmt.Sprintf("/admin/buckets/%s", name)
 	if force {
 		path += "?force=true"
 	}

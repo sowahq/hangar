@@ -1,22 +1,21 @@
 package bucket
 
 import (
+	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
+	"strings"
 	"time"
 
-	"github.com/anhostfr/hangar/internal/config"
-	"github.com/anhostfr/hangar/internal/service/object"
+	"github.com/anhostfr/hangar/internal/database"
+	dbutils "github.com/anhostfr/hangar/pkg/database"
+	"github.com/cockroachdb/pebble"
 )
 
-// Bucket types and requests
 type BucketInfo struct {
-	Name      string    `json:"name"`
-	CreatedAt time.Time `json:"created_at"`
-	Public    bool      `json:"public"`
-	Objects   int64     `json:"objects"`
-	Size      int64     `json:"size"`
+	Name      string `json:"name"`
+	CreatedAt int64  `json:"created_at"`
+	UpdatedAt int64  `json:"updated_at"`
+	Public    bool   `json:"public"`
 }
 
 type CreateBucketRequest struct {
@@ -25,9 +24,7 @@ type CreateBucketRequest struct {
 }
 
 type CreateBucketResponse struct {
-	Name      string    `json:"name"`
-	CreatedAt time.Time `json:"created_at"`
-	Public    bool      `json:"public"`
+	*BucketInfo
 }
 
 type ListBucketsResponse struct {
@@ -40,84 +37,64 @@ type DeleteBucketRequest struct {
 	Force bool   `json:"force"`
 }
 
-// CreateBucket creates a new bucket
 func CreateBucket(req *CreateBucketRequest) (*CreateBucketResponse, error) {
-	if err := BucketName(req.Name); err != nil {
-		return nil, err
+	db := database.LocalStore()
+	if db == nil {
+		return nil, fmt.Errorf("database not initialized")
 	}
 
-	bucketPath := filepath.Join(config.DataPath(), req.Name)
-	
-	// Check if bucket already exists
-	if _, err := os.Stat(bucketPath); err == nil {
+	key := []byte(fmt.Sprintf("bucket:%s", req.Name))
+
+	exists, err := db.Exist(key)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check bucket existence: %w", err)
+	}
+
+	if exists {
 		return nil, fmt.Errorf("bucket already exists: %s", req.Name)
 	}
 
-	// Create bucket directory
-	if err := os.MkdirAll(bucketPath, 0755); err != nil {
-		return nil, fmt.Errorf("failed to create bucket directory: %w", err)
-	}
-
-	now := time.Now()
-	
-	return &CreateBucketResponse{
+	now := time.Now().UnixMilli()
+	bucket := &BucketInfo{
 		Name:      req.Name,
 		CreatedAt: now,
+		UpdatedAt: now,
 		Public:    req.Public,
-	}, nil
+	}
+
+	data, err := json.Marshal(bucket)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal bucket: %w", err)
+	}
+
+	if err := db.Put(key, data); err != nil {
+		return nil, fmt.Errorf("failed to store bucket: %w", err)
+	}
+
+	return &CreateBucketResponse{BucketInfo: bucket}, nil
 }
 
-// GetBucket gets bucket information
-func GetBucket(name string) (*BucketInfo, error) {
-	if err := BucketName(name); err != nil {
-		return nil, err
-	}
-
-	bucketPath := filepath.Join(config.DataPath(), name)
-	
-	// Check if bucket exists
-	info, err := os.Stat(bucketPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("bucket not found: %s", name)
-		}
-		return nil, fmt.Errorf("failed to access bucket: %w", err)
-	}
-
-	// Count objects and calculate size
-	objects, size, err := countBucketObjects(name)
-	if err != nil {
-		objects = 0
-		size = 0
-	}
-
-	return &BucketInfo{
-		Name:      name,
-		CreatedAt: info.ModTime(),
-		Public:    false, // TODO: implement public bucket support
-		Objects:   objects,
-		Size:      size,
-	}, nil
-}
-
-// ListBuckets lists all buckets
 func ListBuckets() (*ListBucketsResponse, error) {
-	dataPath := config.DataPath()
-	
-	entries, err := os.ReadDir(dataPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read data directory: %w", err)
+	db := database.LocalStore()
+	if db == nil {
+		return nil, fmt.Errorf("database not initialized")
 	}
+
+	iter, err := db.NewIteratorWithPrefix([]byte("bucket:"))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create iterator: %w", err)
+	}
+	defer iter.Close()
 
 	var buckets []BucketInfo
-	for _, entry := range entries {
-		if entry.IsDir() {
-			bucketInfo, err := GetBucket(entry.Name())
-			if err != nil {
-				continue // Skip invalid buckets
-			}
-			buckets = append(buckets, *bucketInfo)
+
+	for iter.First(); iter.Valid(); iter.Next() {
+		var bucket BucketInfo
+		if err := json.Unmarshal(iter.Value(), &bucket); err != nil {
+			continue // Skip corrupted data
 		}
+
+		buckets = append(buckets, bucket)
 	}
 
 	return &ListBucketsResponse{
@@ -126,52 +103,62 @@ func ListBuckets() (*ListBucketsResponse, error) {
 	}, nil
 }
 
-// DeleteBucket deletes a bucket
-func DeleteBucket(req *DeleteBucketRequest) error {
-	if err := BucketName(req.Name); err != nil {
-		return err
+func GetBucket(name string) (*BucketInfo, error) {
+	db := database.LocalStore()
+	if db == nil {
+		return nil, fmt.Errorf("database not initialized")
 	}
 
-	bucketPath := filepath.Join(config.DataPath(), req.Name)
-	
-	// Check if bucket exists
-	if _, err := os.Stat(bucketPath); err != nil {
-		if os.IsNotExist(err) {
-			return fmt.Errorf("bucket not found: %s", req.Name)
+	key := []byte(fmt.Sprintf("bucket:%s", name))
+
+	data, err := db.Get(key)
+	if err != nil {
+		if err == pebble.ErrNotFound {
+			return nil, fmt.Errorf("bucket not found: %s", name)
 		}
-		return fmt.Errorf("failed to access bucket: %w", err)
+		return nil, fmt.Errorf("bucket not found: %w", err)
 	}
 
-	// Check if bucket is empty (unless force is specified)
-	if !req.Force {
-		objects, _, err := countBucketObjects(req.Name)
-		if err != nil {
-			return fmt.Errorf("failed to check bucket contents: %w", err)
-		}
-		if objects > 0 {
-			return fmt.Errorf("bucket is not empty (use force=true to delete anyway)")
-		}
+	var bucket BucketInfo
+	if err := json.Unmarshal(data, &bucket); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal bucket: %w", err)
 	}
 
-	// Remove bucket directory
-	if err := os.RemoveAll(bucketPath); err != nil {
-		return fmt.Errorf("failed to delete bucket: %w", err)
-	}
-
-	return nil
+	return &bucket, nil
 }
 
-// countBucketObjects counts objects and calculates total size in a bucket
-func countBucketObjects(bucketName string) (int64, int64, error) {
-	response, err := object.ListObjectsInBucket(bucketName, "")
+func DeleteBucket(req *DeleteBucketRequest) error {
+	db := database.LocalStore()
+	if db == nil {
+		return fmt.Errorf("database not initialized")
+	}
+
+	key := []byte(fmt.Sprintf("bucket:%s", req.Name))
+
+	exists, err := db.Exist(key)
 	if err != nil {
-		return 0, 0, err
+		return fmt.Errorf("failed to check bucket existence: %w", err)
 	}
 
-	var totalSize int64
-	for _, obj := range response.Objects {
-		totalSize += obj.Size
+	if !exists {
+		return fmt.Errorf("bucket not found: %s", req.Name)
 	}
 
-	return int64(response.Count), totalSize, nil
+	if !req.Force {
+		// Check if bucket contains objects
+		iter, err := db.NewIteratorWithPrefix([]byte("metadata:"))
+		if err != nil {
+			return fmt.Errorf("failed to create iterator: %w", err)
+		}
+		defer iter.Close()
+
+		for iter.First(); iter.Valid(); iter.Next() {
+			objectKey := dbutils.ExtractFilenameFromKey(string(iter.Key()))
+			if strings.HasPrefix(objectKey, req.Name+"/") {
+				return fmt.Errorf("bucket not empty: %s. Use force=true to delete", req.Name)
+			}
+		}
+	}
+
+	return db.Delete(key)
 }

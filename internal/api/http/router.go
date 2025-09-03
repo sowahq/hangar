@@ -16,6 +16,7 @@ func Router() *fiber.App {
 		IdleTimeout:                  3 * time.Minute,
 		DisableStartupMessage:        true,
 		Network:                      "tcp",
+		ReadTimeout:                  10 * time.Second,
 	})
 
 	router.Get("/status", handlers.Status)

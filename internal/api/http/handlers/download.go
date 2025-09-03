@@ -1,16 +1,15 @@
 package handlers
 
 import (
-	"fmt"
 	"io"
-
-	"github.com/gofiber/fiber/v2"
-	"github.com/phuslu/log"
 
 	"github.com/anhostfr/hangar/internal/api/http/response"
 	"github.com/anhostfr/hangar/internal/api/http/validation"
 	"github.com/anhostfr/hangar/internal/service/bucket"
 	"github.com/anhostfr/hangar/internal/service/object"
+	"github.com/anhostfr/hangar/pkg/ioutils"
+	"github.com/gofiber/fiber/v2"
+	"github.com/phuslu/log"
 )
 
 func Download(c *fiber.Ctx) error {
@@ -19,6 +18,9 @@ func Download(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
+
+	// Debug logging to track requests
+	log.Debug().Msgf("Download request: bucket='%s', key='%s', path='%s'", bucketName, key, c.Path())
 
 	// Validate bucket exists
 	_, err = bucket.GetBucket(bucketName)
@@ -36,18 +38,20 @@ func Download(c *fiber.Ctx) error {
 		return response.ErrorWithLog(c, fiber.StatusNotFound, "Object not found", err, "Failed to get object: "+key)
 	}
 
-	c.Set("Content-Type", result.ContentType)
+	c.Set("Content-Type", "application/octet-stream")
 	c.Set("Content-Disposition", `attachment; filename="`+result.Filename+`"`)
-	c.Set("Content-Length", fmt.Sprintf("%d", result.Size))
+	c.Set("Accept-Ranges", "none")
 
-	// Stream with larger buffer for better performance
-	buf := make([]byte, 64*1024) // 64KB buffer
-	_, err = io.CopyBuffer(c.Response().BodyWriter(), result.Reader, buf)
+	log.Debug().Msgf("Starting stream for object: %s", key)
+
+	ctx := c.Context()
+
+	err = c.SendStream(ioutils.NewCancelableReader(ctx, result.Reader.(io.ReadCloser)), int(result.Size))
 	if err != nil {
 		return response.ErrorWithLog(c, fiber.StatusInternalServerError, "Failed to stream file", err, "Failed to stream object: "+key)
 	}
 
-	log.Debug().Msgf("Object downloaded: %s", key)
+	log.Debug().Msgf("Object download completed: %s", key)
 
 	return nil
 }
