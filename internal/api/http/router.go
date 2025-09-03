@@ -12,11 +12,11 @@ func Router() *fiber.App {
 	router := fiber.New(fiber.Config{
 		BodyLimit:                    0, // we stream the request body so no limit
 		StreamRequestBody:            true,
-		DisablePreParseMultipartForm: true, // Disable pre-parsing of multipart form data since we handle it manually for file uploads
+		DisablePreParseMultipartForm: true, // disable pre-parsing of multipart form data since we handle it manually for file uploads
 		IdleTimeout:                  3 * time.Minute,
 		DisableStartupMessage:        true,
 		Network:                      "tcp",
-		ReadTimeout:                  10 * time.Second,
+		ReadTimeout:                  5 * time.Second,
 	})
 
 	router.Get("/status", handlers.Status)
@@ -28,6 +28,7 @@ func Router() *fiber.App {
 	admin.Get("/buckets/:bucket", handlers.GetBucket)
 	admin.Delete("/buckets/:bucket", handlers.DeleteBucket)
 
+	// Base Object API
 	router.Get("/:bucket", handlers.ListObjects)
 	router.Get("/:bucket/*", handlers.Download)
 	router.Put("/:bucket/*", handlers.Upload)
