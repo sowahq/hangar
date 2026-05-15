@@ -9,13 +9,15 @@ import (
 )
 
 type Metadatas struct {
-	Key         string   `json:"key"`
-	ETag        string   `json:"etag"`
-	Size        int64    `json:"size"`
-	ContentType string   `json:"content_type"`
-	CreatedAt   int64    `json:"created_at"`
-	ObjectHash  string   `json:"object_hash"`
-	ChunkHashes []string `json:"chunk_hashes"`
+	Key            string   `json:"key"`
+	ETag           string   `json:"etag"`
+	Size           int64    `json:"size"`
+	ContentType    string   `json:"content_type"`
+	CreatedAt      int64    `json:"created_at"`
+	ObjectHash     string   `json:"object_hash"`
+	ChunkHashes    []string `json:"chunk_hashes"`
+	VersionID      string   `json:"version_id,omitempty"`
+	IsDeleteMarker bool     `json:"is_delete_marker,omitempty"`
 }
 
 func StoreMetadataInBucket(bucket string, metadata *Metadatas) error {

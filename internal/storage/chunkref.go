@@ -127,12 +127,32 @@ func BootstrapChunkRefs() error {
 		if err := json.Unmarshal(metaIter.Value(), &m); err != nil {
 			continue
 		}
+		if m.VersionID != "" {
+			continue
+		}
 		for _, h := range m.ChunkHashes {
 			counts[h]++
 		}
 	}
 	if err := metaIter.Close(); err != nil {
 		return fmt.Errorf("failed to close metadata iterator: %w", err)
+	}
+
+	versionIter, err := db.NewIteratorWithPrefix([]byte(versionPrefix))
+	if err != nil {
+		return fmt.Errorf("failed to create version iterator: %w", err)
+	}
+	for versionIter.First(); versionIter.Valid(); versionIter.Next() {
+		var m Metadatas
+		if err := json.Unmarshal(versionIter.Value(), &m); err != nil {
+			continue
+		}
+		for _, h := range m.ChunkHashes {
+			counts[h]++
+		}
+	}
+	if err := versionIter.Close(); err != nil {
+		return fmt.Errorf("failed to close version iterator: %w", err)
 	}
 
 	for h, c := range counts {

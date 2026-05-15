@@ -12,12 +12,13 @@ import (
 )
 
 type BucketInfo struct {
-	Name       string `json:"name"`
-	CreatedAt  int64  `json:"created_at"`
-	UpdatedAt  int64  `json:"updated_at"`
-	Public     bool   `json:"public"`
-	MaxBytes   int64  `json:"max_bytes"`
-	MaxObjects int64  `json:"max_objects"`
+	Name              string `json:"name"`
+	CreatedAt         int64  `json:"created_at"`
+	UpdatedAt         int64  `json:"updated_at"`
+	Public            bool   `json:"public"`
+	MaxBytes          int64  `json:"max_bytes"`
+	MaxObjects        int64  `json:"max_objects"`
+	VersioningEnabled bool   `json:"versioning_enabled,omitempty"`
 }
 
 type CreateBucketRequest struct {
@@ -176,14 +177,43 @@ func DeleteBucket(req *DeleteBucketRequest) error {
 		if err := json.Unmarshal(iter.Value(), &meta); err != nil {
 			continue
 		}
-		chunkHashes = append(chunkHashes, meta.ChunkHashes...)
+		if meta.VersionID == "" {
+			chunkHashes = append(chunkHashes, meta.ChunkHashes...)
+		}
 	}
 	iter.Close()
+
+	if !req.Force {
+		versions, _, vErr := storage.ScanBucketVersions(req.Name)
+		if vErr != nil {
+			return fmt.Errorf("failed to scan versions: %w", vErr)
+		}
+		if len(versions) > 0 {
+			return fmt.Errorf("bucket not empty: %s. Use force=true to delete", req.Name)
+		}
+	}
+
+	if req.Force {
+		versions, versionKeys, vErr := storage.ScanBucketVersions(req.Name)
+		if vErr != nil {
+			return fmt.Errorf("failed to scan versions: %w", vErr)
+		}
+		for _, v := range versions {
+			chunkHashes = append(chunkHashes, v.ChunkHashes...)
+		}
+		if len(versionKeys) > 0 {
+			if err := db.DeleteBatch(versionKeys); err != nil {
+				return fmt.Errorf("failed to delete version records: %w", err)
+			}
+		}
+	}
 
 	if len(metaKeys) > 0 {
 		if err := db.DeleteBatch(metaKeys); err != nil {
 			return fmt.Errorf("failed to delete bucket metadata: %w", err)
 		}
+	}
+	if len(chunkHashes) > 0 {
 		if err := storage.DecrementChunkRefs(chunkHashes); err != nil {
 			return fmt.Errorf("failed to decrement chunk refs: %w", err)
 		}

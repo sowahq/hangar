@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
+	"sync/atomic"
 	"time"
 
 	"github.com/anhostfr/hangar/internal/config"
@@ -15,8 +17,8 @@ import (
 )
 
 var (
-	ErrQuotaExceeded    = errors.New("quota exceeded")
-	ErrLengthRequired   = errors.New("content-length required when quota enabled")
+	ErrQuotaExceeded  = errors.New("quota exceeded")
+	ErrLengthRequired = errors.New("content-length required when quota enabled")
 )
 
 type PutObjectRequest struct {
@@ -34,6 +36,19 @@ type PutObjectResponse struct {
 	ContentType string `json:"content_type"`
 	CreatedAt   int64  `json:"created_at"`
 	ObjectHash  string `json:"object_hash"`
+	VersionID   string `json:"version_id,omitempty"`
+}
+
+var versionSeq uint64
+
+func newVersionID() string {
+	ns := time.Now().UnixNano()
+	seq := atomic.AddUint64(&versionSeq, 1)
+	return strconv.FormatInt(ns, 10) + "-" + strconv.FormatUint(seq, 10)
+}
+
+func nowMillis() int64 {
+	return time.Now().UnixMilli()
 }
 
 func PutObject(req *PutObjectRequest) (*PutObjectResponse, error) {
@@ -73,6 +88,12 @@ func PutObject(req *PutObjectRequest) (*PutObjectResponse, error) {
 	etag := fmt.Sprintf("%q", fileHash)
 	createdAt := time.Now().UnixMilli()
 
+	versioning := info != nil && info.VersioningEnabled
+	var versionID string
+	if versioning {
+		versionID = newVersionID()
+	}
+
 	metadata := &storage.Metadatas{
 		Key:         req.Key,
 		ETag:        etag,
@@ -81,10 +102,20 @@ func PutObject(req *PutObjectRequest) (*PutObjectResponse, error) {
 		CreatedAt:   createdAt,
 		ObjectHash:  fileHash,
 		ChunkHashes: chunks,
+		VersionID:   versionID,
 	}
 
 	if err := storage.IncrementChunkRefs(chunks); err != nil {
 		return nil, fmt.Errorf("failed to increment chunk refs: %w", err)
+	}
+
+	if versioning {
+		if err := storage.StoreObjectVersion(req.Bucket, metadata); err != nil {
+			if rbErr := storage.DecrementChunkRefs(chunks); rbErr != nil {
+				return nil, fmt.Errorf("failed to store version (%v) and to rollback chunkrefs: %w", err, rbErr)
+			}
+			return nil, fmt.Errorf("failed to store version: %w", err)
+		}
 	}
 
 	if err := storage.StoreMetadataInBucket(req.Bucket, metadata); err != nil {
@@ -102,5 +133,6 @@ func PutObject(req *PutObjectRequest) (*PutObjectResponse, error) {
 		ContentType: contentType,
 		CreatedAt:   createdAt,
 		ObjectHash:  fileHash,
+		VersionID:   versionID,
 	}, nil
 }

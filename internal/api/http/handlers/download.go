@@ -11,6 +11,7 @@ import (
 	"github.com/anhostfr/hangar/internal/config"
 	"github.com/anhostfr/hangar/internal/service/bucket"
 	"github.com/anhostfr/hangar/internal/service/object"
+	"github.com/anhostfr/hangar/internal/storage"
 	"github.com/anhostfr/hangar/pkg/ioutils"
 	"github.com/gofiber/fiber/v2"
 	"github.com/phuslu/log"
@@ -27,9 +28,34 @@ func Download(c *fiber.Ctx) error {
 		return response.Error(c, fiber.StatusNotFound, "Bucket not found: "+bucketName)
 	}
 
-	metadata, err := object.GetMetadata(bucketName, key)
-	if err != nil {
-		return response.ErrorWithLog(c, fiber.StatusNotFound, "Object not found", err, "Failed to get metadata: "+key)
+	if c.Request().URI().QueryArgs().Has("versions") {
+		res, err := object.ListVersions(bucketName, key)
+		if err != nil {
+			return response.ErrorWithLog(c, fiber.StatusInternalServerError, "Failed to list versions", err, "Failed to list versions: "+key)
+		}
+		return response.JSON(c, res)
+	}
+	versionID := c.Query("versionId")
+	var metadata *storage.Metadatas
+	if versionID != "" {
+		m, err := object.GetVersionMetadata(bucketName, key, versionID)
+		if err != nil {
+			return response.ErrorWithLog(c, fiber.StatusNotFound, "Version not found", err, "Failed to get version: "+key)
+		}
+		metadata = m
+	} else {
+		m, err := object.GetMetadata(bucketName, key)
+		if err != nil {
+			return response.ErrorWithLog(c, fiber.StatusNotFound, "Object not found", err, "Failed to get metadata: "+key)
+		}
+		metadata = m
+	}
+	if metadata.IsDeleteMarker {
+		c.Set("X-Delete-Marker", "true")
+		return response.Error(c, fiber.StatusNotFound, "Object not found")
+	}
+	if metadata.VersionID != "" {
+		c.Set("X-Version-Id", metadata.VersionID)
 	}
 
 	rangeHeader := c.Get("Range")

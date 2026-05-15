@@ -57,7 +57,7 @@ func TestDeleteObjectDecrementsChunkRefs(t *testing.T) {
 	}
 	chunkHashes := append([]string{}, meta.ChunkHashes...)
 
-	if err := DeleteObject(&DeleteObjectRequest{Bucket: "b", Key: "obj"}); err != nil {
+	if _, err := DeleteObject(&DeleteObjectRequest{Bucket: "b", Key: "obj"}); err != nil {
 		t.Fatalf("DeleteObject: %v", err)
 	}
 
@@ -74,7 +74,7 @@ func TestDeleteObjectDecrementsChunkRefs(t *testing.T) {
 
 func TestDeleteObjectMissingReturnsErrObjectNotFound(t *testing.T) {
 	testutil.SetupServer(t)
-	err := DeleteObject(&DeleteObjectRequest{Bucket: "b", Key: "ghost"})
+	_, err := DeleteObject(&DeleteObjectRequest{Bucket: "b", Key: "ghost"})
 	if !errors.Is(err, ErrObjectNotFound) {
 		t.Errorf("err=%v want=ErrObjectNotFound", err)
 	}
@@ -96,7 +96,7 @@ func TestPutObjectDedupSharedChunksRefcount(t *testing.T) {
 		t.Fatalf("GetMetadataFromBucket: %v", err)
 	}
 
-	if err := DeleteObject(&DeleteObjectRequest{Bucket: "b", Key: "obj1"}); err != nil {
+	if _, err := DeleteObject(&DeleteObjectRequest{Bucket: "b", Key: "obj1"}); err != nil {
 		t.Fatalf("DeleteObject obj1: %v", err)
 	}
 
@@ -110,7 +110,7 @@ func TestPutObjectDedupSharedChunksRefcount(t *testing.T) {
 		}
 	}
 
-	if err := DeleteObject(&DeleteObjectRequest{Bucket: "b", Key: "obj2"}); err != nil {
+	if _, err := DeleteObject(&DeleteObjectRequest{Bucket: "b", Key: "obj2"}); err != nil {
 		t.Fatalf("DeleteObject obj2: %v", err)
 	}
 	for _, h := range meta.ChunkHashes {

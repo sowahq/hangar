@@ -23,13 +23,21 @@ func Delete(c *fiber.Ctx) error {
 		return response.Error(c, fiber.StatusNotFound, "Bucket not found: "+bucketName)
 	}
 
-	if err := object.DeleteObject(&object.DeleteObjectRequest{Bucket: bucketName, Key: key}); err != nil {
+	versionID := c.Query("versionId")
+	res, err := object.DeleteObject(&object.DeleteObjectRequest{Bucket: bucketName, Key: key, VersionID: versionID})
+	if err != nil {
 		if errors.Is(err, object.ErrObjectNotFound) {
 			return response.Error(c, fiber.StatusNotFound, "Object not found")
 		}
 		return response.ErrorWithLog(c, fiber.StatusInternalServerError, "Failed to delete object", err, "Failed to delete object: "+key)
 	}
 
-	log.Debug().Msgf("Object deleted: bucket=%s key=%s", bucketName, key)
+	log.Debug().Msgf("Object deleted: bucket=%s key=%s version=%s marker=%v", bucketName, key, res.VersionID, res.IsDeleteMarker)
+	if res.VersionID != "" {
+		c.Set("X-Version-Id", res.VersionID)
+		if res.IsDeleteMarker {
+			c.Set("X-Delete-Marker", "true")
+		}
+	}
 	return c.SendStatus(fiber.StatusNoContent)
 }

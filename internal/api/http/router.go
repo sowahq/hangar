@@ -49,6 +49,7 @@ func Router() *fiber.App {
 	adminGroup.Get("/buckets/:bucket", admin.GetBucket)
 	adminGroup.Delete("/buckets/:bucket", admin.DeleteBucket)
 	adminGroup.Put("/buckets/:bucket/quota", admin.UpdateQuota)
+	adminGroup.Put("/buckets/:bucket/versioning", admin.UpdateVersioning)
 	adminGroup.Post("/buckets/:bucket/tokens", admin.CreateToken)
 	adminGroup.Get("/buckets/:bucket/tokens", admin.ListTokens)
 	adminGroup.Delete("/buckets/:bucket/tokens/:id", admin.DeleteToken)
