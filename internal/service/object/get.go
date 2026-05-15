@@ -7,12 +7,14 @@ import (
 
 	"github.com/anhostfr/hangar/internal/config"
 	"github.com/anhostfr/hangar/internal/storage"
+	"github.com/anhostfr/hangar/pkg/crypto"
 )
 
 type GetObjectRequest struct {
 	Bucket    string
 	Key       string
 	VersionID string
+	SSE       *SSERequest
 }
 
 type GetObjectResponse struct {
@@ -38,9 +40,9 @@ func GetObject(req *GetObjectRequest) (*GetObjectResponse, error) {
 		return nil, fmt.Errorf("object not found")
 	}
 
-	reader := &ChunkReader{
-		chunkHashes: metadata.ChunkHashes,
-		chunksPath:  config.ChunksPath(),
+	reader, err := newReaderFor(metadata, req.SSE, 0)
+	if err != nil {
+		return nil, err
 	}
 
 	return &GetObjectResponse{
@@ -50,6 +52,23 @@ func GetObject(req *GetObjectRequest) (*GetObjectResponse, error) {
 		Size:        metadata.Size,
 		Reader:      reader,
 	}, nil
+}
+
+func newReaderFor(m *storage.Metadatas, sse *SSERequest, startIdx int) (*ChunkReader, error) {
+	cr := &ChunkReader{
+		metadata:    m,
+		chunkHashes: m.ChunkHashes,
+		chunksPath:  config.ChunksPath(),
+		currentIdx:  startIdx,
+	}
+
+	key, err := ResolveReadKey(m, sse)
+	if err != nil {
+		return nil, err
+	}
+	cr.key = key
+
+	return cr, nil
 }
 
 func GetMetadata(bucket, key string) (*storage.Metadatas, error) {
@@ -103,10 +122,15 @@ func ListVersions(bucket, key string) (*ListVersionsResponse, error) {
 
 func NewChunkReaderAt(metadata *storage.Metadatas, startIdx int) *ChunkReader {
 	return &ChunkReader{
+		metadata:    metadata,
 		chunkHashes: metadata.ChunkHashes,
 		chunksPath:  config.ChunksPath(),
 		currentIdx:  startIdx,
 	}
+}
+
+func NewChunkReaderAtWithSSE(metadata *storage.Metadatas, startIdx int, sse *SSERequest) (*ChunkReader, error) {
+	return newReaderFor(metadata, sse, startIdx)
 }
 
 func (cr *ChunkReader) SkipBytes(n int64) error {
@@ -118,10 +142,12 @@ func (cr *ChunkReader) SkipBytes(n int64) error {
 }
 
 type ChunkReader struct {
+	metadata    *storage.Metadatas
 	chunkHashes []string
 	chunksPath  string
 	currentIdx  int
 	current     io.ReadCloser
+	key         []byte
 }
 
 func (cr *ChunkReader) Read(p []byte) (n int, err error) {
@@ -132,7 +158,19 @@ func (cr *ChunkReader) Read(p []byte) (n int, err error) {
 			}
 
 			chunkPath := config.ChunkHashToPath(cr.chunkHashes[cr.currentIdx])
-			rc, openErr := storage.OpenChunk(chunkPath)
+
+			var rc io.ReadCloser
+			var openErr error
+			if cr.key != nil {
+				partNum, localIdx := chunkPartLookup(cr.metadata, cr.currentIdx)
+				nonce, nErr := crypto.ChunkNonce(cr.metadata.SSENoncePrefix, storage.ChunkNonceIdx(partNum, localIdx))
+				if nErr != nil {
+					return 0, fmt.Errorf("chunk nonce: %w", nErr)
+				}
+				rc, openErr = storage.OpenChunkEncrypted(chunkPath, cr.key, nonce)
+			} else {
+				rc, openErr = storage.OpenChunk(chunkPath)
+			}
 			if openErr != nil {
 				return 0, fmt.Errorf("failed to open chunk %s: %w", chunkPath, openErr)
 			}

@@ -30,8 +30,10 @@ var (
 )
 
 type InitiateMultipartRequest struct {
-	Bucket string
-	Key    string
+	Bucket      string
+	Key         string
+	ContentType string
+	SSE         *SSERequest
 }
 
 type InitiateMultipartResponse struct {
@@ -57,11 +59,24 @@ func InitiateMultipart(req *InitiateMultipartRequest) (*InitiateMultipartRespons
 		return nil, fmt.Errorf("failed to generate upload id: %w", err)
 	}
 	h := &storage.MultipartHeader{
-		UploadID:  uploadID,
-		Bucket:    req.Bucket,
-		Key:       req.Key,
-		CreatedAt: time.Now().UnixMilli(),
+		UploadID:    uploadID,
+		Bucket:      req.Bucket,
+		Key:         req.Key,
+		ContentType: req.ContentType,
+		CreatedAt:   time.Now().UnixMilli(),
 	}
+
+	if req.SSE != nil && req.SSE.Algorithm != SSEAlgoNone {
+		_, salt, np, md5sum, sErr := NewSSEParams(req.SSE)
+		if sErr != nil {
+			return nil, sErr
+		}
+		h.SSEAlgorithm = req.SSE.Algorithm
+		h.SSESalt = salt
+		h.SSENoncePrefix = np
+		h.SSECustomerKeyMD5 = md5sum
+	}
+
 	if err := storage.StoreMultipartHeader(h); err != nil {
 		return nil, err
 	}
@@ -74,6 +89,7 @@ type UploadPartRequest struct {
 	UploadID   string
 	PartNumber int
 	Body       io.Reader
+	SSE        *SSERequest
 }
 
 type UploadPartResponse struct {
@@ -86,14 +102,20 @@ func UploadPart(req *UploadPartRequest) (*UploadPartResponse, error) {
 	if req.PartNumber < MinPartNumber || req.PartNumber > MaxPartNumber {
 		return nil, ErrInvalidPartNumber
 	}
-	if _, err := storage.GetMultipartHeader(req.Bucket, req.Key, req.UploadID); err != nil {
+	header, err := storage.GetMultipartHeader(req.Bucket, req.Key, req.UploadID)
+	if err != nil {
 		if errors.Is(err, storage.ErrMultipartNotFound) {
 			return nil, ErrMultipartNotFound
 		}
 		return nil, err
 	}
 
-	chunks, partHash, size, err := storage.ChunkAndHash(req.Body, config.ChunksPath())
+	encParams, encErr := uploadPartEncryptParams(header, req)
+	if encErr != nil {
+		return nil, encErr
+	}
+
+	chunks, partHash, size, err := storage.ChunkAndHashOpts(req.Body, config.ChunksPath(), encParams)
 	if err != nil {
 		return nil, fmt.Errorf("failed to chunk part: %w", err)
 	}
@@ -135,7 +157,8 @@ type CompleteMultipartRequest struct {
 }
 
 func CompleteMultipart(req *CompleteMultipartRequest) (*PutObjectResponse, error) {
-	if _, err := storage.GetMultipartHeader(req.Bucket, req.Key, req.UploadID); err != nil {
+	header, err := storage.GetMultipartHeader(req.Bucket, req.Key, req.UploadID)
+	if err != nil {
 		if errors.Is(err, storage.ErrMultipartNotFound) {
 			return nil, ErrMultipartNotFound
 		}
@@ -177,10 +200,14 @@ func CompleteMultipart(req *CompleteMultipartRequest) (*PutObjectResponse, error
 
 	var totalSize int64
 	var allChunks []string
+	var partNumbers []int
+	var partChunkCounts []int
 	etagHasher := blake3.New()
 	for _, p := range ordered {
 		totalSize += p.Size
 		allChunks = append(allChunks, p.ChunkHashes...)
+		partNumbers = append(partNumbers, p.PartNumber)
+		partChunkCounts = append(partChunkCounts, len(p.ChunkHashes))
 		etagHasher.Write([]byte(p.ETag))
 	}
 
@@ -209,15 +236,29 @@ func CompleteMultipart(req *CompleteMultipartRequest) (*PutObjectResponse, error
 		versionID = newVersionID()
 	}
 
+	contentType := header.ContentType
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+
 	metadata := &storage.Metadatas{
-		Key:         req.Key,
-		ETag:        finalETag,
-		Size:        totalSize,
-		ContentType: "application/octet-stream",
-		CreatedAt:   createdAt,
-		ObjectHash:  combinedHash,
-		ChunkHashes: allChunks,
-		VersionID:   versionID,
+		Key:               req.Key,
+		ETag:              finalETag,
+		Size:              totalSize,
+		ContentType:       contentType,
+		CreatedAt:         createdAt,
+		ObjectHash:        combinedHash,
+		ChunkHashes:       allChunks,
+		VersionID:         versionID,
+		SSEAlgorithm:      header.SSEAlgorithm,
+		SSECustomerKeyMD5: header.SSECustomerKeyMD5,
+		SSESalt:           header.SSESalt,
+		SSENoncePrefix:    header.SSENoncePrefix,
+	}
+
+	if header.SSEAlgorithm != SSEAlgoNone {
+		metadata.SSEPartNumbers = partNumbers
+		metadata.SSEPartChunkCounts = partChunkCounts
 	}
 
 	if versioning {
@@ -234,14 +275,16 @@ func CompleteMultipart(req *CompleteMultipartRequest) (*PutObjectResponse, error
 	}
 
 	return &PutObjectResponse{
-		Key:         req.Key,
-		Filename:    pathutil.ExtractFilename(req.Key),
-		ETag:        finalETag,
-		Size:        totalSize,
-		ContentType: metadata.ContentType,
-		CreatedAt:   createdAt,
-		ObjectHash:  combinedHash,
-		VersionID:   versionID,
+		Key:            req.Key,
+		Filename:       pathutil.ExtractFilename(req.Key),
+		ETag:           finalETag,
+		Size:           totalSize,
+		ContentType:    metadata.ContentType,
+		CreatedAt:      createdAt,
+		ObjectHash:     combinedHash,
+		VersionID:      versionID,
+		SSEAlgorithm:   header.SSEAlgorithm,
+		SSECustomerMD5: header.SSECustomerKeyMD5,
 	}, nil
 }
 

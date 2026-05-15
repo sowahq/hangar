@@ -27,17 +27,20 @@ type PutObjectRequest struct {
 	Body          io.Reader
 	ContentLength int64
 	ContentType   string
+	SSE           *SSERequest
 }
 
 type PutObjectResponse struct {
-	Key         string `json:"key"`
-	Filename    string `json:"filename"`
-	ETag        string `json:"etag"`
-	Size        int64  `json:"size"`
-	ContentType string `json:"content_type"`
-	CreatedAt   int64  `json:"created_at"`
-	ObjectHash  string `json:"object_hash"`
-	VersionID   string `json:"version_id,omitempty"`
+	Key            string `json:"key"`
+	Filename       string `json:"filename"`
+	ETag           string `json:"etag"`
+	Size           int64  `json:"size"`
+	ContentType    string `json:"content_type"`
+	CreatedAt      int64  `json:"created_at"`
+	ObjectHash     string `json:"object_hash"`
+	VersionID      string `json:"version_id,omitempty"`
+	SSEAlgorithm   string `json:"sse_algorithm,omitempty"`
+	SSECustomerMD5 string `json:"sse_customer_md5,omitempty"`
 }
 
 var versionSeq uint64
@@ -86,7 +89,12 @@ func PutObject(req *PutObjectRequest) (*PutObjectResponse, error) {
 		fullReader = io.MultiReader(bytes.NewReader(probeBuf[:n]), req.Body)
 	}
 
-	chunks, fileHash, size, err := storage.ChunkAndHash(fullReader, config.ChunksPath())
+	sse, err := setupSSEWrite(req.SSE)
+	if err != nil {
+		return nil, err
+	}
+
+	chunks, fileHash, size, err := storage.ChunkAndHashOpts(fullReader, config.ChunksPath(), sse.encParams)
 	if err != nil {
 		return nil, fmt.Errorf("failed to chunk and hash object: %w", err)
 	}
@@ -101,14 +109,18 @@ func PutObject(req *PutObjectRequest) (*PutObjectResponse, error) {
 	}
 
 	metadata := &storage.Metadatas{
-		Key:         req.Key,
-		ETag:        etag,
-		Size:        size,
-		ContentType: contentType,
-		CreatedAt:   createdAt,
-		ObjectHash:  fileHash,
-		ChunkHashes: chunks,
-		VersionID:   versionID,
+		Key:               req.Key,
+		ETag:              etag,
+		Size:              size,
+		ContentType:       contentType,
+		CreatedAt:         createdAt,
+		ObjectHash:        fileHash,
+		ChunkHashes:       chunks,
+		VersionID:         versionID,
+		SSEAlgorithm:      sse.algo,
+		SSECustomerKeyMD5: sse.customerKeyMD5,
+		SSESalt:           sse.salt,
+		SSENoncePrefix:    sse.noncePrefix,
 	}
 
 	if err := storage.IncrementChunkRefs(chunks); err != nil {
@@ -132,13 +144,15 @@ func PutObject(req *PutObjectRequest) (*PutObjectResponse, error) {
 	}
 
 	return &PutObjectResponse{
-		Key:         req.Key,
-		Filename:    pathutil.ExtractFilename(req.Key),
-		ETag:        etag,
-		Size:        size,
-		ContentType: contentType,
-		CreatedAt:   createdAt,
-		ObjectHash:  fileHash,
-		VersionID:   versionID,
+		Key:            req.Key,
+		Filename:       pathutil.ExtractFilename(req.Key),
+		ETag:           etag,
+		Size:           size,
+		ContentType:    contentType,
+		CreatedAt:      createdAt,
+		ObjectHash:     fileHash,
+		VersionID:      versionID,
+		SSEAlgorithm:   sse.algo,
+		SSECustomerMD5: sse.customerKeyMD5,
 	}, nil
 }

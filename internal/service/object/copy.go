@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/anhostfr/hangar/internal/config"
 	"github.com/anhostfr/hangar/internal/service/bucket"
 	"github.com/anhostfr/hangar/internal/storage"
 )
@@ -18,6 +19,8 @@ type CopyObjectRequest struct {
 	DstKey            string
 	MetadataDirective string
 	ContentType       string
+	SrcSSE            *SSERequest
+	DstSSE            *SSERequest
 }
 
 func CopyObject(req *CopyObjectRequest) (*PutObjectResponse, error) {
@@ -49,6 +52,17 @@ func CopyObject(req *CopyObjectRequest) (*PutObjectResponse, error) {
 		versionID = newVersionID()
 	}
 
+	srcEncrypted := src.SSEAlgorithm != SSEAlgoNone
+	dstWantsEncryption := req.DstSSE != nil && req.DstSSE.Algorithm != SSEAlgoNone
+
+	if !srcEncrypted && !dstWantsEncryption {
+		return fastCopy(req, src, contentType, createdAt, versionID, versioning)
+	}
+
+	return reencryptCopy(req, src, contentType, createdAt, versionID, versioning)
+}
+
+func fastCopy(req *CopyObjectRequest, src *storage.Metadatas, contentType string, createdAt int64, versionID string, versioning bool) (*PutObjectResponse, error) {
 	dst := &storage.Metadatas{
 		Key:         req.DstKey,
 		ETag:        src.ETag,
@@ -88,6 +102,72 @@ func CopyObject(req *CopyObjectRequest) (*PutObjectResponse, error) {
 		CreatedAt:   createdAt,
 		ObjectHash:  src.ObjectHash,
 		VersionID:   versionID,
+	}, nil
+}
+
+func reencryptCopy(req *CopyObjectRequest, src *storage.Metadatas, contentType string, createdAt int64, versionID string, versioning bool) (*PutObjectResponse, error) {
+	reader, err := newReaderFor(src, req.SrcSSE, 0)
+	if err != nil {
+		return nil, err
+	}
+
+	sse, err := setupSSEWrite(req.DstSSE)
+	if err != nil {
+		return nil, err
+	}
+
+	chunks, fileHash, size, err := storage.ChunkAndHashOpts(reader, config.ChunksPath(), sse.encParams)
+	if err != nil {
+		return nil, fmt.Errorf("copy chunk: %w", err)
+	}
+
+	etag := fmt.Sprintf("%q", fileHash)
+
+	dst := &storage.Metadatas{
+		Key:               req.DstKey,
+		ETag:              etag,
+		Size:              size,
+		ContentType:       contentType,
+		CreatedAt:         createdAt,
+		ObjectHash:        fileHash,
+		ChunkHashes:       chunks,
+		VersionID:         versionID,
+		SSEAlgorithm:      sse.algo,
+		SSECustomerKeyMD5: sse.customerKeyMD5,
+		SSESalt:           sse.salt,
+		SSENoncePrefix:    sse.noncePrefix,
+	}
+
+	if err := storage.IncrementChunkRefs(chunks); err != nil {
+		return nil, fmt.Errorf("failed to increment chunk refs: %w", err)
+	}
+
+	if versioning {
+		if err := storage.StoreObjectVersion(req.DstBucket, dst); err != nil {
+			if rbErr := storage.DecrementChunkRefs(chunks); rbErr != nil {
+				return nil, fmt.Errorf("failed to store version (%v) and rollback chunkrefs: %w", err, rbErr)
+			}
+			return nil, fmt.Errorf("failed to store version: %w", err)
+		}
+	}
+
+	if err := storage.StoreMetadataInBucket(req.DstBucket, dst); err != nil {
+		if rbErr := storage.DecrementChunkRefs(chunks); rbErr != nil {
+			return nil, fmt.Errorf("failed to store metadata (%v) and rollback chunkrefs: %w", err, rbErr)
+		}
+		return nil, fmt.Errorf("failed to store metadata: %w", err)
+	}
+
+	return &PutObjectResponse{
+		Key:            req.DstKey,
+		ETag:           etag,
+		Size:           size,
+		ContentType:    contentType,
+		CreatedAt:      createdAt,
+		ObjectHash:     fileHash,
+		VersionID:      versionID,
+		SSEAlgorithm:   sse.algo,
+		SSECustomerMD5: sse.customerKeyMD5,
 	}, nil
 }
 
