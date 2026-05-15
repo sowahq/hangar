@@ -2,12 +2,10 @@ package database
 
 import (
 	"fmt"
-	"sync"
 
 	"github.com/cockroachdb/pebble"
 )
 
-// nopLogger is a no-op implementation of the Logger interface.
 type nopLogger struct{}
 
 func (nopLogger) Fatalf(format string, args ...interface{}) {}
@@ -15,7 +13,6 @@ func (nopLogger) Infof(format string, args ...interface{})  {}
 
 type PebbleDB struct {
 	db *pebble.DB
-	mu sync.RWMutex
 }
 
 func NewPebbleDB(path string) (*PebbleDB, error) {
@@ -29,9 +26,6 @@ func NewPebbleDB(path string) (*PebbleDB, error) {
 }
 
 func (p *PebbleDB) Get(key []byte) ([]byte, error) {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-
 	val, closer, err := p.db.Get(key)
 	if err != nil {
 		return nil, err
@@ -44,21 +38,14 @@ func (p *PebbleDB) Get(key []byte) ([]byte, error) {
 }
 
 func (p *PebbleDB) Put(key, value []byte) error {
-	p.mu.Lock()
-	defer p.mu.Unlock()
 	return p.db.Set(key, value, pebble.Sync)
 }
 
 func (p *PebbleDB) Delete(key []byte) error {
-	p.mu.Lock()
-	defer p.mu.Unlock()
 	return p.db.Delete(key, pebble.Sync)
 }
 
 func (p *PebbleDB) Exist(key []byte) (bool, error) {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-
 	_, closer, err := p.db.Get(key)
 	if err != nil {
 		if err == pebble.ErrNotFound {
@@ -71,18 +58,41 @@ func (p *PebbleDB) Exist(key []byte) (bool, error) {
 	return true, nil
 }
 
+func (p *PebbleDB) DeleteBatch(keys [][]byte) error {
+	if len(keys) == 0 {
+		return nil
+	}
+
+	batch := p.db.NewBatch()
+	defer batch.Close()
+
+	for _, k := range keys {
+		if err := batch.Delete(k, nil); err != nil {
+			return err
+		}
+	}
+	return batch.Commit(pebble.Sync)
+}
+
 func (p *PebbleDB) Close() error {
-	p.mu.Lock()
-	defer p.mu.Unlock()
 	return p.db.Close()
 }
 
 func (p *PebbleDB) NewIteratorWithPrefix(prefix []byte) (*pebble.Iterator, error) {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-
 	return p.db.NewIter(&pebble.IterOptions{
 		LowerBound: prefix,
-		UpperBound: nil,
+		UpperBound: keyUpperBound(prefix),
 	})
+}
+
+func keyUpperBound(prefix []byte) []byte {
+	end := make([]byte, len(prefix))
+	copy(end, prefix)
+	for i := len(end) - 1; i >= 0; i-- {
+		end[i]++
+		if end[i] != 0 {
+			return end[: i+1]
+		}
+	}
+	return nil
 }
