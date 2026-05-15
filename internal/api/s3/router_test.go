@@ -285,6 +285,46 @@ func TestS3HeadBucket(t *testing.T) {
 	}
 }
 
+func TestS3CopyObject(t *testing.T) {
+	s := newS3TestServer(t)
+	if _, err := bucket.CreateBucket(&bucket.CreateBucketRequest{Name: "cpsrc"}); err != nil {
+		t.Fatalf("seed src: %v", err)
+	}
+	if _, err := bucket.CreateBucket(&bucket.CreateBucketRequest{Name: "cpdst"}); err != nil {
+		t.Fatalf("seed dst: %v", err)
+	}
+	payload := []byte("copy me please")
+	resp := s.do(t, http.MethodPut, "/cpsrc/orig.txt", "", payload)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("seed put: %d", resp.StatusCode)
+	}
+	req := s.sign(t, http.MethodPut, "/cpdst/copy.txt", "", nil)
+	req.Header.Set("x-amz-copy-source", "/cpsrc/orig.txt")
+	resp, err := s.client.Do(req)
+	if err != nil {
+		t.Fatalf("copy: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		raw, _ := io.ReadAll(resp.Body)
+		t.Fatalf("copy status=%d body=%s", resp.StatusCode, raw)
+	}
+	var out CopyObjectResult
+	if err := xml.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if out.ETag == "" {
+		t.Fatalf("missing etag")
+	}
+	gresp := s.do(t, http.MethodGet, "/cpdst/copy.txt", "", nil)
+	body, _ := io.ReadAll(gresp.Body)
+	gresp.Body.Close()
+	if !bytes.Equal(body, payload) {
+		t.Fatalf("copied content mismatch: %q", body)
+	}
+}
+
 func TestS3DeleteObjectsBatch(t *testing.T) {
 	s := newS3TestServer(t)
 	if _, err := bucket.CreateBucket(&bucket.CreateBucketRequest{Name: "batch"}); err != nil {

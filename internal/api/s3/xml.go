@@ -80,6 +80,12 @@ type DeleteResult struct {
 	Errors  []DeleteErrorObject `xml:"Error,omitempty"`
 }
 
+type CopyObjectResult struct {
+	XMLName      xml.Name `xml:"CopyObjectResult"`
+	ETag         string   `xml:"ETag"`
+	LastModified string   `xml:"LastModified"`
+}
+
 type ErrorXML struct {
 	XMLName   xml.Name `xml:"Error"`
 	Code      string   `xml:"Code"`

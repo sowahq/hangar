@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -347,6 +348,10 @@ func handlePutObject(c *fiber.Ctx) error {
 		return writeError(c, fiber.StatusNotFound, "NoSuchBucket", err.Error(), "/"+name)
 	}
 
+	if src := c.Get("x-amz-copy-source"); src != "" {
+		return handleCopyObject(c, name, key, src)
+	}
+
 	bodyStream := c.Request().BodyStream()
 	contentLength := int64(c.Request().Header.ContentLength())
 
@@ -371,6 +376,70 @@ func handlePutObject(c *fiber.Ctx) error {
 		c.Set("x-amz-version-id", res.VersionID)
 	}
 	return c.SendStatus(fiber.StatusOK)
+}
+
+func handleCopyObject(c *fiber.Ctx, dstBucket, dstKey, source string) error {
+	srcBucket, srcKey, srcVersion, err := parseCopySource(source)
+	if err != nil {
+		return writeError(c, fiber.StatusBadRequest, "InvalidArgument", err.Error(), "/"+dstBucket+"/"+dstKey)
+	}
+	if !keyAllowsBucket(c, srcBucket) {
+		return writeError(c, fiber.StatusForbidden, "AccessDenied", "Access denied to source bucket", "/"+srcBucket+"/"+srcKey)
+	}
+	directive := strings.ToUpper(c.Get("x-amz-metadata-directive"))
+	res, err := object.CopyObject(&object.CopyObjectRequest{
+		SrcBucket:         srcBucket,
+		SrcKey:            srcKey,
+		SrcVersion:        srcVersion,
+		DstBucket:         dstBucket,
+		DstKey:            dstKey,
+		MetadataDirective: directive,
+		ContentType:       string(c.Request().Header.ContentType()),
+	})
+	if err != nil {
+		if errors.Is(err, object.ErrCopySourceNotFound) {
+			return writeError(c, fiber.StatusNotFound, "NoSuchKey", err.Error(), "/"+srcBucket+"/"+srcKey)
+		}
+		if errors.Is(err, object.ErrQuotaExceeded) {
+			return writeError(c, fiber.StatusRequestEntityTooLarge, "EntityTooLarge", "Quota exceeded", "/"+dstBucket+"/"+dstKey)
+		}
+		return writeError(c, fiber.StatusInternalServerError, "InternalError", err.Error(), "/"+dstBucket+"/"+dstKey)
+	}
+	if res.VersionID != "" {
+		c.Set("x-amz-version-id", res.VersionID)
+	}
+	return writeXML(c, fiber.StatusOK, CopyObjectResult{
+		ETag:         res.ETag,
+		LastModified: time.UnixMilli(res.CreatedAt).UTC().Format(time.RFC3339),
+	})
+}
+
+func parseCopySource(src string) (bucket, key, version string, err error) {
+	s := src
+	if strings.HasPrefix(s, "/") {
+		s = s[1:]
+	}
+	if idx := strings.IndexByte(s, '?'); idx >= 0 {
+		q := s[idx+1:]
+		s = s[:idx]
+		for _, kv := range strings.Split(q, "&") {
+			if strings.HasPrefix(kv, "versionId=") {
+				version = strings.TrimPrefix(kv, "versionId=")
+			}
+		}
+	}
+	slash := strings.IndexByte(s, '/')
+	if slash <= 0 || slash == len(s)-1 {
+		return "", "", "", fmt.Errorf("invalid copy source: %q", src)
+	}
+	bucket = s[:slash]
+	rawKey := s[slash+1:]
+	decoded, decErr := url.QueryUnescape(rawKey)
+	if decErr != nil {
+		return "", "", "", fmt.Errorf("invalid copy source key: %w", decErr)
+	}
+	key = decoded
+	return
 }
 
 func handleDeleteObject(c *fiber.Ctx) error {
