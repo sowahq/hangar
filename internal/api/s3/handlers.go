@@ -186,9 +186,29 @@ func handleInitiateMultipart(c *fiber.Ctx, bucketName, key string) error {
 		return writeError(c, fiber.StatusNotFound, "NoSuchBucket", err.Error(), "/"+bucketName)
 	}
 
-	res, err := object.InitiateMultipart(&object.InitiateMultipartRequest{Bucket: bucketName, Key: key})
+	sseReq, sseErr := parseSSERequest(c)
+	if sseErr != nil {
+		if ok, r := sseErrorResponse(c, sseErr, "/"+bucketName+"/"+key); ok {
+			return r
+		}
+		return writeError(c, fiber.StatusBadRequest, "InvalidArgument", sseErr.Error(), "/"+bucketName+"/"+key)
+	}
+
+	res, err := object.InitiateMultipart(&object.InitiateMultipartRequest{
+		Bucket:      bucketName,
+		Key:         key,
+		ContentType: string(c.Request().Header.ContentType()),
+		SSE:         sseReq,
+	})
 	if err != nil {
+		if ok, r := sseErrorResponse(c, err, "/"+bucketName+"/"+key); ok {
+			return r
+		}
 		return writeError(c, fiber.StatusInternalServerError, "InternalError", err.Error(), "/"+bucketName+"/"+key)
+	}
+
+	if sseReq != nil {
+		echoSSEResponse(c, sseReq.Algorithm, sseReq.CustomerKeyMD5)
 	}
 
 	return writeXML(c, fiber.StatusOK, InitiateMultipartUploadResult{
@@ -214,6 +234,14 @@ func handleUploadPart(c *fiber.Ctx) error {
 		return writeError(c, fiber.StatusBadRequest, "InvalidArgument", "invalid partNumber", "/"+bucketName+"/"+key)
 	}
 
+	sseReq, sseErr := parseSSERequest(c)
+	if sseErr != nil {
+		if ok, r := sseErrorResponse(c, sseErr, "/"+bucketName+"/"+key); ok {
+			return r
+		}
+		return writeError(c, fiber.StatusBadRequest, "InvalidArgument", sseErr.Error(), "/"+bucketName+"/"+key)
+	}
+
 	partBody, _ := requestBody(c)
 	res, err := object.UploadPart(&object.UploadPartRequest{
 		Bucket:     bucketName,
@@ -221,6 +249,7 @@ func handleUploadPart(c *fiber.Ctx) error {
 		UploadID:   uploadID,
 		PartNumber: partNumber,
 		Body:       partBody,
+		SSE:        sseReq,
 	})
 	if err != nil {
 		switch {
@@ -229,11 +258,17 @@ func handleUploadPart(c *fiber.Ctx) error {
 		case errors.Is(err, object.ErrMultipartNotFound):
 			return writeError(c, fiber.StatusNotFound, "NoSuchUpload", err.Error(), "/"+bucketName+"/"+key)
 		}
+		if ok, r := sseErrorResponse(c, err, "/"+bucketName+"/"+key); ok {
+			return r
+		}
 
 		return writeError(c, fiber.StatusInternalServerError, "InternalError", err.Error(), "/"+bucketName+"/"+key)
 	}
 
 	c.Set("ETag", res.ETag)
+	if sseReq != nil {
+		echoSSEResponse(c, sseReq.Algorithm, sseReq.CustomerKeyMD5)
+	}
 	return c.SendStatus(fiber.StatusOK)
 }
 
@@ -280,6 +315,7 @@ func handleCompleteMultipart(c *fiber.Ctx, bucketName, key, uploadID string) err
 	if res.VersionID != "" {
 		c.Set("x-amz-version-id", res.VersionID)
 	}
+	echoSSEResponse(c, res.SSEAlgorithm, res.SSECustomerMD5)
 
 	return writeXML(c, fiber.StatusOK, CompleteMultipartUploadResult{
 		Xmlns:    xmlNamespace,
@@ -540,6 +576,8 @@ func setObjectHeaders(c *fiber.Ctx, m *storage.Metadatas) {
 	if m.VersionID != "" {
 		c.Set("x-amz-version-id", m.VersionID)
 	}
+
+	writeSSEHeaders(c, m)
 }
 
 func handleHeadObject(c *fiber.Ctx) error {
@@ -562,6 +600,16 @@ func handleHeadObject(c *fiber.Ctx) error {
 	if m.IsDeleteMarker {
 		c.Set("x-amz-delete-marker", "true")
 		return c.SendStatus(fiber.StatusNotFound)
+	}
+
+	if m.SSEAlgorithm == object.SSEAlgoC {
+		sseReq, sseErr := parseSSERequest(c)
+		if sseErr != nil || sseReq == nil || sseReq.Algorithm != object.SSEAlgoC {
+			return c.SendStatus(fiber.StatusBadRequest)
+		}
+		if sseReq.CustomerKeyMD5 != m.SSECustomerKeyMD5 {
+			return c.SendStatus(fiber.StatusBadRequest)
+		}
 	}
 
 	setObjectHeaders(c, m)
@@ -601,12 +649,26 @@ func handleGetObject(c *fiber.Ctx) error {
 		return writeError(c, fiber.StatusNotFound, "NoSuchKey", "object not found", "/"+name+"/"+key)
 	}
 
+	sseReq, sseParseErr := parseSSERequest(c)
+	if sseParseErr != nil {
+		if ok, r := sseErrorResponse(c, sseParseErr, "/"+name+"/"+key); ok {
+			return r
+		}
+		return writeError(c, fiber.StatusBadRequest, "InvalidArgument", sseParseErr.Error(), "/"+name+"/"+key)
+	}
+
 	setObjectHeaders(c, m)
 
 	rangeHeader := c.Get("Range")
 
 	if rangeHeader == "" {
-		reader := object.NewChunkReaderAt(m, 0)
+		reader, rErr := object.NewChunkReaderAtWithSSE(m, 0, sseReq)
+		if rErr != nil {
+			if ok, r := sseErrorResponse(c, rErr, "/"+name+"/"+key); ok {
+				return r
+			}
+			return writeError(c, fiber.StatusInternalServerError, "InternalError", rErr.Error(), "/"+name+"/"+key)
+		}
 		ctx := c.Context()
 		return c.SendStream(ioutils.NewCancelableReader(ctx, io.NopCloser(reader)), int(m.Size))
 	}
@@ -621,7 +683,13 @@ func handleGetObject(c *fiber.Ctx) error {
 	startIdx := int(start / chunkSize)
 	offsetInFirst := start % chunkSize
 
-	cr := object.NewChunkReaderAt(m, startIdx)
+	cr, crErr := object.NewChunkReaderAtWithSSE(m, startIdx, sseReq)
+	if crErr != nil {
+		if ok, r := sseErrorResponse(c, crErr, "/"+name+"/"+key); ok {
+			return r
+		}
+		return writeError(c, fiber.StatusInternalServerError, "InternalError", crErr.Error(), "/"+name+"/"+key)
+	}
 	if err := cr.SkipBytes(offsetInFirst); err != nil {
 		_ = cr.Close()
 		return writeError(c, fiber.StatusInternalServerError, "InternalError", "seek failed", "/"+name+"/"+key)
@@ -653,6 +721,14 @@ func handlePutObject(c *fiber.Ctx) error {
 		return handleCopyObject(c, name, key, src)
 	}
 
+	sseReq, sseErr := parseSSERequest(c)
+	if sseErr != nil {
+		if ok, r := sseErrorResponse(c, sseErr, "/"+name+"/"+key); ok {
+			return r
+		}
+		return writeError(c, fiber.StatusBadRequest, "InvalidArgument", sseErr.Error(), "/"+name+"/"+key)
+	}
+
 	bodyStream, contentLength := requestBody(c)
 
 	res, err := object.PutObject(&object.PutObjectRequest{
@@ -661,6 +737,7 @@ func handlePutObject(c *fiber.Ctx) error {
 		Body:          bodyStream,
 		ContentLength: contentLength,
 		ContentType:   string(c.Request().Header.ContentType()),
+		SSE:           sseReq,
 	})
 	if err != nil {
 		if errors.Is(err, object.ErrQuotaExceeded) {
@@ -668,6 +745,9 @@ func handlePutObject(c *fiber.Ctx) error {
 		}
 		if errors.Is(err, object.ErrLengthRequired) {
 			return writeError(c, fiber.StatusLengthRequired, "MissingContentLength", "Content-Length required", "/"+name+"/"+key)
+		}
+		if ok, r := sseErrorResponse(c, err, "/"+name+"/"+key); ok {
+			return r
 		}
 
 		return writeError(c, fiber.StatusInternalServerError, "InternalError", err.Error(), "/"+name+"/"+key)
@@ -677,6 +757,7 @@ func handlePutObject(c *fiber.Ctx) error {
 	if res.VersionID != "" {
 		c.Set("x-amz-version-id", res.VersionID)
 	}
+	echoSSEResponse(c, res.SSEAlgorithm, res.SSECustomerMD5)
 
 	return c.SendStatus(fiber.StatusOK)
 }
@@ -693,6 +774,22 @@ func handleCopyObject(c *fiber.Ctx, dstBucket, dstKey, source string) error {
 
 	directive := strings.ToUpper(c.Get("x-amz-metadata-directive"))
 
+	srcSSE, srcErr := parseCopySourceSSERequest(c)
+	if srcErr != nil {
+		if ok, r := sseErrorResponse(c, srcErr, "/"+srcBucket+"/"+srcKey); ok {
+			return r
+		}
+		return writeError(c, fiber.StatusBadRequest, "InvalidArgument", srcErr.Error(), "/"+srcBucket+"/"+srcKey)
+	}
+
+	dstSSE, dstErr := parseSSERequest(c)
+	if dstErr != nil {
+		if ok, r := sseErrorResponse(c, dstErr, "/"+dstBucket+"/"+dstKey); ok {
+			return r
+		}
+		return writeError(c, fiber.StatusBadRequest, "InvalidArgument", dstErr.Error(), "/"+dstBucket+"/"+dstKey)
+	}
+
 	res, err := object.CopyObject(&object.CopyObjectRequest{
 		SrcBucket:         srcBucket,
 		SrcKey:            srcKey,
@@ -701,6 +798,8 @@ func handleCopyObject(c *fiber.Ctx, dstBucket, dstKey, source string) error {
 		DstKey:            dstKey,
 		MetadataDirective: directive,
 		ContentType:       string(c.Request().Header.ContentType()),
+		SrcSSE:            srcSSE,
+		DstSSE:            dstSSE,
 	})
 	if err != nil {
 		if errors.Is(err, object.ErrCopySourceNotFound) {
@@ -709,6 +808,9 @@ func handleCopyObject(c *fiber.Ctx, dstBucket, dstKey, source string) error {
 		if errors.Is(err, object.ErrQuotaExceeded) {
 			return writeError(c, fiber.StatusRequestEntityTooLarge, "EntityTooLarge", "Quota exceeded", "/"+dstBucket+"/"+dstKey)
 		}
+		if ok, r := sseErrorResponse(c, err, "/"+dstBucket+"/"+dstKey); ok {
+			return r
+		}
 
 		return writeError(c, fiber.StatusInternalServerError, "InternalError", err.Error(), "/"+dstBucket+"/"+dstKey)
 	}
@@ -716,6 +818,7 @@ func handleCopyObject(c *fiber.Ctx, dstBucket, dstKey, source string) error {
 	if res.VersionID != "" {
 		c.Set("x-amz-version-id", res.VersionID)
 	}
+	echoSSEResponse(c, res.SSEAlgorithm, res.SSECustomerMD5)
 
 	return writeXML(c, fiber.StatusOK, CopyObjectResult{
 		ETag:         res.ETag,
