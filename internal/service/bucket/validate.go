@@ -6,7 +6,6 @@ import (
 	"strings"
 )
 
-// BucketName validates bucket name according to AWS S3 rules
 func BucketName(bucket string) error {
 	if !validBucketName(bucket) {
 		return fmt.Errorf("invalid bucket name: %s", bucket)
@@ -14,8 +13,16 @@ func BucketName(bucket string) error {
 	return nil
 }
 
-// validBucketName checks if bucket name is valid according to AWS S3 rules
+var reservedBucketNames = map[string]struct{}{
+	"admin":  {},
+	"status": {},
+}
+
 func validBucketName(bucket string) bool {
+	if _, reserved := reservedBucketNames[bucket]; reserved {
+		return false
+	}
+
 	if len(bucket) < 3 || len(bucket) > 63 {
 		return false
 	}
@@ -24,7 +31,6 @@ func validBucketName(bucket string) bool {
 		return false
 	}
 
-	// Check for valid characters and patterns
 	prevChar := byte(0)
 	for _, r := range bucket {
 		char := byte(r)

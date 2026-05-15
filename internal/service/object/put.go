@@ -7,8 +7,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/zeebo/blake3"
-
 	"github.com/anhostfr/hangar/internal/config"
 	"github.com/anhostfr/hangar/internal/storage"
 	"github.com/anhostfr/hangar/pkg/pathutil"
@@ -30,10 +28,9 @@ type PutObjectResponse struct {
 	ObjectHash  string `json:"object_hash"`
 }
 
-// PutObject handles the core logic for uploading and storing an object
 func PutObject(req *PutObjectRequest) (*PutObjectResponse, error) {
 
-	probeSize := 4096 // 4KB
+	probeSize := 4096
 	probeBuf := make([]byte, probeSize)
 	n, err := io.ReadFull(req.Body, probeBuf)
 	if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
@@ -48,27 +45,37 @@ func PutObject(req *PutObjectRequest) (*PutObjectResponse, error) {
 		return nil, fmt.Errorf("failed to chunk and hash object: %w", err)
 	}
 
+	etag := fmt.Sprintf("%q", fileHash)
+	createdAt := time.Now().UnixMilli()
+
 	metadata := &storage.Metadatas{
-		Filename:    req.Key,
-		ETag:        fmt.Sprintf("%x", blake3.Sum256([]byte(req.Key))),
+		Key:         req.Key,
+		ETag:        etag,
 		Size:        size,
 		ContentType: contentType,
-		CreatedAt:   time.Now().UnixMilli(),
+		CreatedAt:   createdAt,
 		ObjectHash:  fileHash,
 		ChunkHashes: chunks,
 	}
 
+	if err := storage.IncrementChunkRefs(chunks); err != nil {
+		return nil, fmt.Errorf("failed to increment chunk refs: %w", err)
+	}
+
 	if err := storage.StoreMetadataInBucket(req.Bucket, metadata); err != nil {
+		if rbErr := storage.DecrementChunkRefs(chunks); rbErr != nil {
+			return nil, fmt.Errorf("failed to store metadata (%v) and to rollback chunkrefs: %w", err, rbErr)
+		}
 		return nil, fmt.Errorf("failed to store metadata: %w", err)
 	}
 
 	return &PutObjectResponse{
 		Key:         req.Key,
 		Filename:    pathutil.ExtractFilename(req.Key),
-		ETag:        fmt.Sprintf("%x", blake3.Sum256([]byte(req.Key))),
+		ETag:        etag,
 		Size:        size,
 		ContentType: contentType,
-		CreatedAt:   time.Now().UnixMilli(),
+		CreatedAt:   createdAt,
 		ObjectHash:  fileHash,
 	}, nil
 }

@@ -4,12 +4,23 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strings"
+	"path/filepath"
+	"sync"
 
 	"github.com/anhostfr/hangar/internal/config"
 	"github.com/klauspost/compress/zstd"
 	"github.com/zeebo/blake3"
 )
+
+var zstdEncoderPool = sync.Pool{
+	New: func() any {
+		enc, err := zstd.NewWriter(nil, zstd.WithEncoderLevel(zstd.SpeedBetterCompression))
+		if err != nil {
+			panic(fmt.Errorf("zstd encoder init: %w", err))
+		}
+		return enc
+	},
+}
 
 func ChunkAndHash(r io.Reader, chunkDir string) ([]string, string, int64, error) {
 	chunkSize := config.ChunkSize()
@@ -35,36 +46,10 @@ func ChunkAndHash(r io.Reader, chunkDir string) ([]string, string, int64, error)
 		hash := blake3.Sum256(buf[:n])
 		hashStr := fmt.Sprintf("%x", hash[:])
 		chunkPath := config.ChunkHashToPath(hashStr)
-		chunksPathPart := strings.Split(chunkPath, "/")
 
-		// Only write chunk if it doesn't exist (deduplication)
 		if _, err := os.Stat(chunkPath); os.IsNotExist(err) {
-			if err := os.MkdirAll(strings.Join(chunksPathPart[:len(chunksPathPart)-1], "/"), 0755); err != nil {
+			if err := writeChunkAtomic(chunkPath, buf[:n], compressionEnabled); err != nil {
 				return nil, "", 0, err
-			}
-
-			f, err := os.Create(chunkPath)
-			if err != nil {
-				return nil, "", 0, err
-			}
-
-			var dataToWrite []byte
-			if compressionEnabled {
-				encoder, err := zstd.NewWriter(nil, zstd.WithEncoderLevel(zstd.SpeedBetterCompression))
-				if err != nil {
-					f.Close()
-					return nil, "", 0, fmt.Errorf("failed to create zstd encoder: %w", err)
-				}
-				dataToWrite = encoder.EncodeAll(buf[:n], nil)
-				encoder.Close()
-			} else {
-				dataToWrite = buf[:n]
-			}
-
-			_, writeErr := f.Write(dataToWrite)
-			f.Close()
-			if writeErr != nil {
-				return nil, "", 0, writeErr
 			}
 		}
 
@@ -78,7 +63,49 @@ func ChunkAndHash(r io.Reader, chunkDir string) ([]string, string, int64, error)
 	return chunkHashes, globalHash, totalSize, nil
 }
 
-// OpenChunk opens a chunk file for reading, handling decompression if needed
+func writeChunkAtomic(chunkPath string, data []byte, compress bool) error {
+	dir := filepath.Dir(chunkPath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
+
+	tmp, err := os.CreateTemp(dir, ".chunk-*.tmp")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	cleanup := func() { _ = os.Remove(tmpName) }
+
+	var payload []byte
+	if compress {
+		encoder := zstdEncoderPool.Get().(*zstd.Encoder)
+		payload = encoder.EncodeAll(data, nil)
+		zstdEncoderPool.Put(encoder)
+	} else {
+		payload = data
+	}
+
+	if _, err := tmp.Write(payload); err != nil {
+		tmp.Close()
+		cleanup()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		tmp.Close()
+		cleanup()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		cleanup()
+		return err
+	}
+	if err := os.Rename(tmpName, chunkPath); err != nil {
+		cleanup()
+		return err
+	}
+	return nil
+}
+
 func OpenChunk(chunkPath string) (io.ReadCloser, error) {
 	file, err := os.Open(chunkPath)
 	if err != nil {
@@ -101,7 +128,6 @@ func OpenChunk(chunkPath string) (io.ReadCloser, error) {
 	return file, nil
 }
 
-// chunkReader wraps a zstd decoder and underlying file for proper cleanup
 type chunkReader struct {
 	decoder *zstd.Decoder
 	file    *os.File

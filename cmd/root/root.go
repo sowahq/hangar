@@ -11,6 +11,7 @@ import (
 	"github.com/anhostfr/hangar/internal/config"
 	"github.com/anhostfr/hangar/internal/api/http"
 	gcService "github.com/anhostfr/hangar/internal/service/gc"
+	"github.com/anhostfr/hangar/internal/storage"
 	"github.com/phuslu/log"
 	"github.com/urfave/cli/v2"
 )
@@ -46,8 +47,6 @@ func Execute() {
 						return err
 					}
 
-					// TODO: make a main file or idk its trash rn
-
 					if err := os.MkdirAll(config.ServerConfig().DataDirectory, 0755); err != nil {
 						log.Error().Err(err).Msg("Failed to create data directory.")
 					}
@@ -58,11 +57,14 @@ func Execute() {
 
 					log.Debug().Msgf("Created data directory: %s", config.ServerConfig().DataDirectory)
 
-					// Start HTTP API (with admin endpoints)
+					if err := storage.BootstrapChunkRefs(); err != nil {
+						log.Error().Err(err).Msg("Failed to bootstrap chunkref index.")
+						return err
+					}
+
 					httpRouter := http.Router()
 					go httpRouter.Listen(config.ServerConfig().API.BindAddr)
 
-					// Start scheduled garbage collection
 					ctx, cancel := context.WithCancel(context.Background())
 					go gcService.StartScheduledGC(ctx)
 
@@ -73,7 +75,6 @@ func Execute() {
 
 					log.Info().Msg("Shutting down Hangar...")
 
-					// Stop garbage collection
 					cancel()
 
 					if err := httpRouter.Shutdown(); err != nil {

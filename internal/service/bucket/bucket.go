@@ -1,13 +1,13 @@
 package bucket
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/anhostfr/hangar/internal/database"
-	dbutils "github.com/anhostfr/hangar/pkg/database"
+	"github.com/anhostfr/hangar/internal/storage"
 	"github.com/cockroachdb/pebble"
 )
 
@@ -38,6 +38,10 @@ type DeleteBucketRequest struct {
 }
 
 func CreateBucket(req *CreateBucketRequest) (*CreateBucketResponse, error) {
+	if err := BucketName(req.Name); err != nil {
+		return nil, err
+	}
+
 	db := database.LocalStore()
 	if db == nil {
 		return nil, fmt.Errorf("database not initialized")
@@ -91,7 +95,7 @@ func ListBuckets() (*ListBucketsResponse, error) {
 	for iter.First(); iter.Valid(); iter.Next() {
 		var bucket BucketInfo
 		if err := json.Unmarshal(iter.Value(), &bucket); err != nil {
-			continue // Skip corrupted data
+			continue
 		}
 
 		buckets = append(buckets, bucket)
@@ -133,9 +137,9 @@ func DeleteBucket(req *DeleteBucketRequest) error {
 		return fmt.Errorf("database not initialized")
 	}
 
-	key := []byte(fmt.Sprintf("bucket:%s", req.Name))
+	bucketKey := []byte(fmt.Sprintf("bucket:%s", req.Name))
 
-	exists, err := db.Exist(key)
+	exists, err := db.Exist(bucketKey)
 	if err != nil {
 		return fmt.Errorf("failed to check bucket existence: %w", err)
 	}
@@ -144,21 +148,44 @@ func DeleteBucket(req *DeleteBucketRequest) error {
 		return fmt.Errorf("bucket not found: %s", req.Name)
 	}
 
-	if !req.Force {
-		// Check if bucket contains objects
-		iter, err := db.NewIteratorWithPrefix([]byte("metadata:"))
-		if err != nil {
-			return fmt.Errorf("failed to create iterator: %w", err)
-		}
-		defer iter.Close()
+	metaPrefix := []byte(fmt.Sprintf("metadata:%s/", req.Name))
 
-		for iter.First(); iter.Valid(); iter.Next() {
-			objectKey := dbutils.ExtractFilenameFromKey(string(iter.Key()))
-			if strings.HasPrefix(objectKey, req.Name+"/") {
-				return fmt.Errorf("bucket not empty: %s. Use force=true to delete", req.Name)
-			}
+	iter, err := db.NewIteratorWithPrefix(metaPrefix)
+	if err != nil {
+		return fmt.Errorf("failed to create iterator: %w", err)
+	}
+
+	var metaKeys [][]byte
+	var chunkHashes []string
+	for iter.SeekGE(metaPrefix); iter.Valid(); iter.Next() {
+		k := iter.Key()
+		if !bytes.HasPrefix(k, metaPrefix) {
+			break
+		}
+		if !req.Force {
+			iter.Close()
+			return fmt.Errorf("bucket not empty: %s. Use force=true to delete", req.Name)
+		}
+		keyCopy := make([]byte, len(k))
+		copy(keyCopy, k)
+		metaKeys = append(metaKeys, keyCopy)
+
+		var meta storage.Metadatas
+		if err := json.Unmarshal(iter.Value(), &meta); err != nil {
+			continue
+		}
+		chunkHashes = append(chunkHashes, meta.ChunkHashes...)
+	}
+	iter.Close()
+
+	if len(metaKeys) > 0 {
+		if err := db.DeleteBatch(metaKeys); err != nil {
+			return fmt.Errorf("failed to delete bucket metadata: %w", err)
+		}
+		if err := storage.DecrementChunkRefs(chunkHashes); err != nil {
+			return fmt.Errorf("failed to decrement chunk refs: %w", err)
 		}
 	}
 
-	return db.Delete(key)
+	return db.Delete(bucketKey)
 }
