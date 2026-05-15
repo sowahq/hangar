@@ -35,6 +35,10 @@ func Download(c *fiber.Ctx) error {
 		}
 		return response.JSON(c, res)
 	}
+	if uploadID := c.Query("uploadId"); uploadID != "" {
+		return listMultipartParts(c, bucketName, key, uploadID)
+	}
+
 	versionID := c.Query("versionId")
 	var metadata *storage.Metadatas
 	if versionID != "" {

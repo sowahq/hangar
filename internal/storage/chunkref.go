@@ -155,6 +155,23 @@ func BootstrapChunkRefs() error {
 		return fmt.Errorf("failed to close version iterator: %w", err)
 	}
 
+	mpuIter, err := db.NewIteratorWithPrefix([]byte(mpuPartPrefix))
+	if err != nil {
+		return fmt.Errorf("failed to create mpu part iterator: %w", err)
+	}
+	for mpuIter.First(); mpuIter.Valid(); mpuIter.Next() {
+		var p MultipartPart
+		if err := json.Unmarshal(mpuIter.Value(), &p); err != nil {
+			continue
+		}
+		for _, h := range p.ChunkHashes {
+			counts[h]++
+		}
+	}
+	if err := mpuIter.Close(); err != nil {
+		return fmt.Errorf("failed to close mpu part iterator: %w", err)
+	}
+
 	for h, c := range counts {
 		if err := writeRefCount(db, chunkRefKey(h), c); err != nil {
 			return fmt.Errorf("failed to bootstrap chunkref %s: %w", h, err)

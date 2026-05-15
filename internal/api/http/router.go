@@ -57,6 +57,7 @@ func Router() *fiber.App {
 	router.Get("/:bucket", middleware.RequireAuth(auth.PermRead), handlers.ListObjects)
 	router.Get("/:bucket/*", middleware.RequireAuth(auth.PermRead), handlers.Download)
 	router.Put("/:bucket/*", middleware.RequireAuth(auth.PermWrite), handlers.Upload)
+	router.Post("/:bucket/*", middleware.RequireAuth(auth.PermWrite), handlers.PostObject)
 	router.Delete("/:bucket/*", middleware.RequireAuth(auth.PermDelete), handlers.Delete)
 
 	router.Hooks().OnListen(func(data fiber.ListenData) error {

@@ -29,6 +29,10 @@ func Upload(c *fiber.Ctx) error {
 		return response.Error(c, fiber.StatusNotFound, "Bucket not found: "+bucketName)
 	}
 
+	if uploadID := c.Query("uploadId"); uploadID != "" {
+		return uploadMultipartPart(c, bucketName, key, uploadID)
+	}
+
 	bodyStream := c.Request().BodyStream()
 	contentLength := int64(c.Request().Header.ContentLength())
 

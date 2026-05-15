@@ -23,6 +23,10 @@ func Delete(c *fiber.Ctx) error {
 		return response.Error(c, fiber.StatusNotFound, "Bucket not found: "+bucketName)
 	}
 
+	if uploadID := c.Query("uploadId"); uploadID != "" {
+		return abortMultipart(c, bucketName, key, uploadID)
+	}
+
 	versionID := c.Query("versionId")
 	res, err := object.DeleteObject(&object.DeleteObjectRequest{Bucket: bucketName, Key: key, VersionID: versionID})
 	if err != nil {

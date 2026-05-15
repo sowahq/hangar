@@ -191,6 +191,13 @@ func DeleteBucket(req *DeleteBucketRequest) error {
 		if len(versions) > 0 {
 			return fmt.Errorf("bucket not empty: %s. Use force=true to delete", req.Name)
 		}
+		mpus, mErr := storage.ScanBucketMultiparts(req.Name)
+		if mErr != nil {
+			return fmt.Errorf("failed to scan multiparts: %w", mErr)
+		}
+		if len(mpus) > 0 {
+			return fmt.Errorf("bucket has pending multipart uploads: %s. Use force=true to delete", req.Name)
+		}
 	}
 
 	if req.Force {
@@ -204,6 +211,23 @@ func DeleteBucket(req *DeleteBucketRequest) error {
 		if len(versionKeys) > 0 {
 			if err := db.DeleteBatch(versionKeys); err != nil {
 				return fmt.Errorf("failed to delete version records: %w", err)
+			}
+		}
+
+		mpuParts, mpErr := storage.ScanBucketMultipartParts(req.Name)
+		if mpErr != nil {
+			return fmt.Errorf("failed to scan mpu parts: %w", mpErr)
+		}
+		for _, p := range mpuParts {
+			chunkHashes = append(chunkHashes, p.ChunkHashes...)
+		}
+		mpus, mpuErr := storage.ScanBucketMultiparts(req.Name)
+		if mpuErr != nil {
+			return fmt.Errorf("failed to scan mpu headers: %w", mpuErr)
+		}
+		for _, h := range mpus {
+			if _, err := storage.DeleteMultipart(h.Bucket, h.Key, h.UploadID); err != nil {
+				return fmt.Errorf("failed to delete mpu state: %w", err)
 			}
 		}
 	}
