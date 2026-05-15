@@ -264,6 +264,27 @@ func TestS3HeadObjectHeaders(t *testing.T) {
 	}
 }
 
+func TestS3HeadBucket(t *testing.T) {
+	s := newS3TestServer(t)
+	resp := s.do(t, http.MethodHead, "/missing", "", nil)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("head missing status=%d", resp.StatusCode)
+	}
+	if _, err := bucket.CreateBucket(&bucket.CreateBucketRequest{Name: "hbucket"}); err != nil {
+		t.Fatalf("seed bucket: %v", err)
+	}
+	resp = s.do(t, http.MethodHead, "/hbucket", "", nil)
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("head exists status=%d", resp.StatusCode)
+	}
+	if len(body) != 0 {
+		t.Fatalf("HEAD body must be empty, got %q", body)
+	}
+}
+
 func TestS3StreamingPayloadRejected(t *testing.T) {
 	s := newS3TestServer(t)
 	req := s.sign(t, http.MethodPut, "/x", "", nil)

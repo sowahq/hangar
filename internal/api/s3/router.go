@@ -85,6 +85,7 @@ func NewRouter(now func() time.Time) *fiber.App {
 	app.Get("/", handleListBuckets)
 	app.Put("/:bucket", handleCreateBucket)
 	app.Delete("/:bucket", handleDeleteBucket)
+	app.Head("/:bucket", handleHeadBucket)
 	app.Get("/:bucket", handleListObjectsV2)
 
 	app.Head("/:bucket/*", handleHeadObject)

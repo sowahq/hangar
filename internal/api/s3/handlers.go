@@ -123,6 +123,17 @@ func handleDeleteBucket(c *fiber.Ctx) error {
 	return c.SendStatus(fiber.StatusNoContent)
 }
 
+func handleHeadBucket(c *fiber.Ctx) error {
+	name := c.Params("bucket")
+	if !hasPerm(c, auth.PermRead) || !keyAllowsBucket(c, name) {
+		return c.SendStatus(fiber.StatusForbidden)
+	}
+	if _, err := bucket.GetBucket(name); err != nil {
+		return c.SendStatus(fiber.StatusNotFound)
+	}
+	return c.SendStatus(fiber.StatusOK)
+}
+
 func handleListObjectsV2(c *fiber.Ctx) error {
 	name := c.Params("bucket")
 	if !hasPerm(c, auth.PermRead) || !keyAllowsBucket(c, name) {
