@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -182,7 +183,7 @@ func handleListObjectsV2(c *fiber.Ctx) error {
 func setObjectHeaders(c *fiber.Ctx, m *storage.Metadatas) {
 	c.Set("Content-Type", m.ContentType)
 	c.Set("ETag", m.ETag)
-	c.Set("Last-Modified", time.UnixMilli(m.CreatedAt).UTC().Format(time.RFC1123))
+	c.Set("Last-Modified", time.UnixMilli(m.CreatedAt).UTC().Format(http.TimeFormat))
 	c.Set("Accept-Ranges", "bytes")
 	if m.VersionID != "" {
 		c.Set("x-amz-version-id", m.VersionID)
@@ -207,8 +208,9 @@ func handleHeadObject(c *fiber.Ctx) error {
 		return c.SendStatus(fiber.StatusNotFound)
 	}
 	setObjectHeaders(c, m)
-	c.Set("Content-Length", strconv.FormatInt(m.Size, 10))
-	return c.SendStatus(fiber.StatusOK)
+	c.Status(fiber.StatusOK)
+	c.Response().Header.SetContentLength(int(m.Size))
+	return nil
 }
 
 func handleGetObject(c *fiber.Ctx) error {

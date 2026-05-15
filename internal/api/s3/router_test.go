@@ -235,6 +235,35 @@ func TestS3DeleteObject(t *testing.T) {
 	}
 }
 
+func TestS3HeadObjectHeaders(t *testing.T) {
+	s := newS3TestServer(t)
+	if _, err := bucket.CreateBucket(&bucket.CreateBucketRequest{Name: "headbucket"}); err != nil {
+		t.Fatalf("seed bucket: %v", err)
+	}
+	payload := []byte("hello from sigv4 s3")
+	resp := s.do(t, http.MethodPut, "/headbucket/x.txt", "", payload)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("put status=%d", resp.StatusCode)
+	}
+	resp = s.do(t, http.MethodHead, "/headbucket/x.txt", "", nil)
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("head status=%d", resp.StatusCode)
+	}
+	if len(body) != 0 {
+		t.Fatalf("HEAD body must be empty, got %q", body)
+	}
+	if got := resp.Header.Get("Content-Length"); got != "19" {
+		t.Fatalf("Content-Length=%q want 19", got)
+	}
+	lm := resp.Header.Get("Last-Modified")
+	if _, err := time.Parse(http.TimeFormat, lm); err != nil {
+		t.Fatalf("Last-Modified %q not IMF-fixdate: %v", lm, err)
+	}
+}
+
 func TestS3StreamingPayloadRejected(t *testing.T) {
 	s := newS3TestServer(t)
 	req := s.sign(t, http.MethodPut, "/x", "", nil)
