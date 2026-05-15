@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/anhostfr/hangar/cmd/bucket"
+	"github.com/anhostfr/hangar/cmd/s3keys"
 	"github.com/anhostfr/hangar/internal/api/http"
 	"github.com/anhostfr/hangar/internal/config"
 	"github.com/anhostfr/hangar/internal/database"
@@ -29,6 +30,11 @@ func Execute() {
 				Name:        "bucket",
 				Usage:       "Manage buckets",
 				Subcommands: bucket.Commands(),
+			},
+			{
+				Name:        "s3keys",
+				Usage:       "Manage S3 access keys",
+				Subcommands: s3keys.Commands(),
 			},
 			{
 				Name:  "server",
