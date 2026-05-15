@@ -3,8 +3,10 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/md5"
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"io"
@@ -256,11 +258,109 @@ func main() {
 		step("HeadObject(after batch delete)", fmt.Errorf("object still exists"), "")
 	}
 
+	runSSETests(ctx, cli, bucket, &fails, step)
+
 	if fails > 0 {
 		fmt.Printf("\n%d FAIL\n", fails)
 		os.Exit(1)
 	}
 	fmt.Println("\nALL OK")
+}
+
+func runSSETests(ctx context.Context, cli *s3.Client, bucket string, fails *int, step func(string, error, string)) {
+	sseKey := "interop/sse-s3.bin"
+	sseBody := []byte("hello SSE-S3 content")
+
+	_, err := cli.PutObject(ctx, &s3.PutObjectInput{
+		Bucket:               &bucket,
+		Key:                  &sseKey,
+		Body:                 bytes.NewReader(sseBody),
+		ServerSideEncryption: types.ServerSideEncryptionAes256,
+	})
+	step("Put SSE-S3", err, "")
+
+	if err == nil {
+		hg, herr := cli.HeadObject(ctx, &s3.HeadObjectInput{Bucket: &bucket, Key: &sseKey})
+		if herr == nil {
+			step("Head SSE-S3", nil, fmt.Sprintf("sse=%s", string(hg.ServerSideEncryption)))
+		} else {
+			step("Head SSE-S3", herr, "")
+		}
+
+		gg, gerr := cli.GetObject(ctx, &s3.GetObjectInput{Bucket: &bucket, Key: &sseKey})
+		if gerr == nil {
+			b, _ := io.ReadAll(gg.Body)
+			_ = gg.Body.Close()
+			step("Get SSE-S3", nil, fmt.Sprintf("bodyOK=%v sse=%s", bytes.Equal(b, sseBody), string(gg.ServerSideEncryption)))
+		} else {
+			step("Get SSE-S3", gerr, "")
+		}
+
+		_, _ = cli.DeleteObject(ctx, &s3.DeleteObjectInput{Bucket: &bucket, Key: &sseKey})
+	}
+
+	cKey := make([]byte, 32)
+	_, _ = rand.Read(cKey)
+	cKeyB64 := base64.StdEncoding.EncodeToString(cKey)
+	cMD5sum := md5.Sum(cKey)
+	cMD5 := base64.StdEncoding.EncodeToString(cMD5sum[:])
+
+	scKey := "interop/sse-c.bin"
+	scBody := []byte("hello SSE-C content")
+
+	_, err = cli.PutObject(ctx, &s3.PutObjectInput{
+		Bucket:               &bucket,
+		Key:                  &scKey,
+		Body:                 bytes.NewReader(scBody),
+		SSECustomerAlgorithm: aws.String("AES256"),
+		SSECustomerKey:       aws.String(cKeyB64),
+		SSECustomerKeyMD5:    aws.String(cMD5),
+	})
+	step("Put SSE-C", err, "")
+
+	if err == nil {
+		gg, gerr := cli.GetObject(ctx, &s3.GetObjectInput{
+			Bucket:               &bucket,
+			Key:                  &scKey,
+			SSECustomerAlgorithm: aws.String("AES256"),
+			SSECustomerKey:       aws.String(cKeyB64),
+			SSECustomerKeyMD5:    aws.String(cMD5),
+		})
+		if gerr == nil {
+			b, _ := io.ReadAll(gg.Body)
+			_ = gg.Body.Close()
+			step("Get SSE-C", nil, fmt.Sprintf("bodyOK=%v", bytes.Equal(b, scBody)))
+		} else {
+			step("Get SSE-C", gerr, "")
+		}
+
+		_, gerrMissing := cli.GetObject(ctx, &s3.GetObjectInput{Bucket: &bucket, Key: &scKey})
+		if gerrMissing != nil {
+			step("Get SSE-C(missing hdrs)", nil, "rejected as expected")
+		} else {
+			step("Get SSE-C(missing hdrs)", fmt.Errorf("missing hdrs accepted"), "")
+		}
+
+		wrongKey := make([]byte, 32)
+		_, _ = rand.Read(wrongKey)
+		wrongB64 := base64.StdEncoding.EncodeToString(wrongKey)
+		wrongMD5sum := md5.Sum(wrongKey)
+		wrongMD5 := base64.StdEncoding.EncodeToString(wrongMD5sum[:])
+		_, gerrWrong := cli.GetObject(ctx, &s3.GetObjectInput{
+			Bucket:               &bucket,
+			Key:                  &scKey,
+			SSECustomerAlgorithm: aws.String("AES256"),
+			SSECustomerKey:       aws.String(wrongB64),
+			SSECustomerKeyMD5:    aws.String(wrongMD5),
+		})
+		if gerrWrong != nil {
+			step("Get SSE-C(wrong key)", nil, "rejected as expected")
+		} else {
+			step("Get SSE-C(wrong key)", fmt.Errorf("wrong key accepted"), "")
+		}
+
+		_, _ = cli.DeleteObject(ctx, &s3.DeleteObjectInput{Bucket: &bucket, Key: &scKey})
+	}
 }
 
 func rawHeadRaw(ctx context.Context, endpoint, bucket, key, ak, sk string) {
