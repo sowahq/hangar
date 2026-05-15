@@ -27,6 +27,12 @@ type MultipartHeader struct {
 	Bucket    string `json:"bucket"`
 	Key       string `json:"key"`
 	CreatedAt int64  `json:"created_at"`
+
+	ContentType       string `json:"content_type,omitempty"`
+	SSEAlgorithm      string `json:"sse_algorithm,omitempty"`
+	SSECustomerKeyMD5 string `json:"sse_customer_key_md5,omitempty"`
+	SSESalt           []byte `json:"sse_salt,omitempty"`
+	SSENoncePrefix    []byte `json:"sse_nonce_prefix,omitempty"`
 }
 
 type MultipartPart struct {

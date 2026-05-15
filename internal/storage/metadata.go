@@ -18,6 +18,13 @@ type Metadatas struct {
 	ChunkHashes    []string `json:"chunk_hashes"`
 	VersionID      string   `json:"version_id,omitempty"`
 	IsDeleteMarker bool     `json:"is_delete_marker,omitempty"`
+
+	SSEAlgorithm        string  `json:"sse_algorithm,omitempty"`
+	SSECustomerKeyMD5   string  `json:"sse_customer_key_md5,omitempty"`
+	SSESalt             []byte  `json:"sse_salt,omitempty"`
+	SSENoncePrefix      []byte  `json:"sse_nonce_prefix,omitempty"`
+	SSEPartNumbers      []int   `json:"sse_part_numbers,omitempty"`
+	SSEPartChunkCounts  []int   `json:"sse_part_chunk_counts,omitempty"`
 }
 
 func StoreMetadataInBucket(bucket string, metadata *Metadatas) error {
