@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"testing"
@@ -479,6 +480,93 @@ func TestS3PutPreservesContentType(t *testing.T) {
 	resp.Body.Close()
 	if got := resp.Header.Get("Content-Type"); got != "application/x-custom" {
 		t.Fatalf("Content-Type=%q want application/x-custom", got)
+	}
+}
+
+func TestS3PresignedGet(t *testing.T) {
+	s := newS3TestServer(t)
+	if _, err := bucket.CreateBucket(&bucket.CreateBucketRequest{Name: "presign"}); err != nil {
+		t.Fatalf("seed bucket: %v", err)
+	}
+	resp := s.do(t, http.MethodPut, "/presign/p.txt", "", []byte("presigned hello"))
+	resp.Body.Close()
+
+	amzDate := s.now.Format("20060102T150405Z")
+	date := s.now.Format("20060102")
+	region := "us-east-1"
+	credential := s.key.AccessKeyID + "/" + date + "/" + region + "/s3/aws4_request"
+	q := url.Values{}
+	q.Set("X-Amz-Algorithm", "AWS4-HMAC-SHA256")
+	q.Set("X-Amz-Credential", credential)
+	q.Set("X-Amz-Date", amzDate)
+	q.Set("X-Amz-Expires", "300")
+	q.Set("X-Amz-SignedHeaders", "host")
+
+	rawQuery := q.Encode()
+	sigReq := &Request{
+		Method:   http.MethodGet,
+		Path:     "/presign/p.txt",
+		RawQuery: rawQuery,
+		Headers:  http.Header{},
+	}
+	sigReq.Headers.Set("Host", s.host)
+	cr, _, err := CanonicalRequest(sigReq, []string{"host"}, PayloadUnsigned)
+	if err != nil {
+		t.Fatalf("canonical: %v", err)
+	}
+	sts := StringToSign(amzDate, date, region, "s3", sha256Hex(cr))
+	signingKey := DeriveSigningKey(s.key.SecretKey, date, region, "s3")
+	sig := Sign(sts, signingKey)
+	q.Set("X-Amz-Signature", sig)
+
+	full := s.url + "/presign/p.txt?" + q.Encode()
+	httpReq, _ := http.NewRequest(http.MethodGet, full, nil)
+	httpReq.Header.Set("Host", s.host)
+	resp, err = s.client.Do(httpReq)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status=%d body=%s", resp.StatusCode, body)
+	}
+	if !bytes.Equal(body, []byte("presigned hello")) {
+		t.Fatalf("body mismatch: %q", body)
+	}
+}
+
+func TestS3PresignedExpired(t *testing.T) {
+	s := newS3TestServer(t)
+	if _, err := bucket.CreateBucket(&bucket.CreateBucketRequest{Name: "presignex"}); err != nil {
+		t.Fatalf("seed bucket: %v", err)
+	}
+	past := s.now.Add(-10 * time.Minute)
+	amzDate := past.Format("20060102T150405Z")
+	date := past.Format("20060102")
+	region := "us-east-1"
+	credential := s.key.AccessKeyID + "/" + date + "/" + region + "/s3/aws4_request"
+	q := url.Values{}
+	q.Set("X-Amz-Algorithm", "AWS4-HMAC-SHA256")
+	q.Set("X-Amz-Credential", credential)
+	q.Set("X-Amz-Date", amzDate)
+	q.Set("X-Amz-Expires", "60")
+	q.Set("X-Amz-SignedHeaders", "host")
+	rawQuery := q.Encode()
+	sigReq := &Request{Method: http.MethodGet, Path: "/presignex/k", RawQuery: rawQuery, Headers: http.Header{}}
+	sigReq.Headers.Set("Host", s.host)
+	cr, _, _ := CanonicalRequest(sigReq, []string{"host"}, PayloadUnsigned)
+	sts := StringToSign(amzDate, date, region, "s3", sha256Hex(cr))
+	signingKey := DeriveSigningKey(s.key.SecretKey, date, region, "s3")
+	q.Set("X-Amz-Signature", Sign(sts, signingKey))
+
+	full := s.url + "/presignex/k?" + q.Encode()
+	httpReq, _ := http.NewRequest(http.MethodGet, full, nil)
+	httpReq.Header.Set("Host", s.host)
+	resp, _ := s.client.Do(httpReq)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("expired must be 403, got %d", resp.StatusCode)
 	}
 }
 

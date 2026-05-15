@@ -39,6 +39,7 @@ var (
 	ErrSigV4ClockSkew         = errors.New("sigv4: request time too skewed")
 	ErrSigV4MissingDate       = errors.New("sigv4: missing X-Amz-Date or Date header")
 	ErrSigV4MissingPayloadHash = errors.New("sigv4: missing X-Amz-Content-Sha256 header")
+	ErrSigV4Expired           = errors.New("sigv4: presigned URL expired")
 )
 
 type AuthHeader struct {
@@ -307,6 +308,11 @@ type SecretLookup func(accessKeyID string) (secret string, err error)
 
 func Verify(r *Request, lookup SecretLookup, now time.Time) (*AuthHeader, error) {
 	authVal := r.Headers.Get(headerAuthorization)
+	if authVal == "" {
+		if q, _ := url.ParseQuery(r.RawQuery); q.Get("X-Amz-Signature") != "" {
+			return verifyPresigned(r, q, lookup, now)
+		}
+	}
 	ah, err := ParseAuthorization(authVal)
 	if err != nil {
 		return nil, err
@@ -360,4 +366,98 @@ func Verify(r *Request, lookup SecretLookup, now time.Time) (*AuthHeader, error)
 		return nil, ErrSigV4BadSignature
 	}
 	return ah, nil
+}
+
+func verifyPresigned(r *Request, q url.Values, lookup SecretLookup, now time.Time) (*AuthHeader, error) {
+	if q.Get("X-Amz-Algorithm") != signingAlgorithm {
+		return nil, ErrSigV4Malformed
+	}
+	credential := q.Get("X-Amz-Credential")
+	scope := strings.Split(credential, "/")
+	if len(scope) != 5 || scope[4] != scopeTerminator {
+		return nil, ErrSigV4Malformed
+	}
+	ah := &AuthHeader{
+		AccessKeyID: scope[0],
+		Date:        scope[1],
+		Region:      scope[2],
+		Service:     scope[3],
+		Signature:   q.Get("X-Amz-Signature"),
+	}
+	if ah.Service != scopeService {
+		return nil, fmt.Errorf("%w: wrong service %q", ErrSigV4Malformed, ah.Service)
+	}
+	signedHeadersRaw := q.Get("X-Amz-SignedHeaders")
+	if signedHeadersRaw == "" {
+		return nil, ErrSigV4Malformed
+	}
+	ah.SignedHeaders = strings.Split(signedHeadersRaw, ";")
+
+	amzDate := q.Get("X-Amz-Date")
+	if amzDate == "" {
+		return nil, ErrSigV4MissingDate
+	}
+	t, err := parseAmzDate(amzDate)
+	if err != nil {
+		return nil, fmt.Errorf("%w: bad date %q", ErrSigV4Malformed, amzDate)
+	}
+	expiresStr := q.Get("X-Amz-Expires")
+	if expiresStr == "" {
+		return nil, ErrSigV4Malformed
+	}
+	expSec, err := time.ParseDuration(expiresStr + "s")
+	if err != nil {
+		return nil, fmt.Errorf("%w: bad expires %q", ErrSigV4Malformed, expiresStr)
+	}
+	if !now.IsZero() && now.After(t.Add(expSec)) {
+		return nil, ErrSigV4Expired
+	}
+	if !now.IsZero() {
+		diff := now.Sub(t)
+		if diff < 0 {
+			diff = -diff
+		}
+		if diff > maxClockSkew && now.Before(t) {
+			return nil, ErrSigV4ClockSkew
+		}
+	}
+
+	secret, err := lookup(ah.AccessKeyID)
+	if err != nil {
+		return nil, ErrSigV4UnknownKey
+	}
+
+	filteredRaw := stripQueryParam(r.RawQuery, "X-Amz-Signature")
+	canonReq := &Request{
+		Method:   r.Method,
+		Path:     r.Path,
+		RawQuery: filteredRaw,
+		Headers:  r.Headers,
+	}
+	cr, _, err := CanonicalRequest(canonReq, ah.SignedHeaders, PayloadUnsigned)
+	if err != nil {
+		return nil, err
+	}
+	sts := StringToSign(amzDate, ah.Date, ah.Region, ah.Service, sha256Hex(cr))
+	key := DeriveSigningKey(secret, ah.Date, ah.Region, ah.Service)
+	expected := Sign(sts, key)
+	if subtle.ConstantTimeCompare([]byte(expected), []byte(ah.Signature)) != 1 {
+		return nil, ErrSigV4BadSignature
+	}
+	return ah, nil
+}
+
+func stripQueryParam(raw, name string) string {
+	if raw == "" {
+		return ""
+	}
+	var out []string
+	prefix := name + "="
+	for _, p := range strings.Split(raw, "&") {
+		if p == name || strings.HasPrefix(p, prefix) {
+			continue
+		}
+		out = append(out, p)
+	}
+	return strings.Join(out, "&")
 }

@@ -57,6 +57,8 @@ func s3AuthError(c *fiber.Ctx, err error) error {
 		return writeError(c, fiber.StatusForbidden, "SignatureDoesNotMatch", err.Error(), c.Path())
 	case errors.Is(err, ErrSigV4ClockSkew):
 		return writeError(c, fiber.StatusForbidden, "RequestTimeTooSkewed", err.Error(), c.Path())
+	case errors.Is(err, ErrSigV4Expired):
+		return writeError(c, fiber.StatusForbidden, "AccessDenied", err.Error(), c.Path())
 	case errors.Is(err, ErrSigV4ChunkedUnsupported):
 		return writeError(c, fiber.StatusNotImplemented, "NotImplemented", "aws-chunked streaming not supported", c.Path())
 	case errors.Is(err, ErrSigV4MissingPayloadHash), errors.Is(err, ErrSigV4MissingDate):
