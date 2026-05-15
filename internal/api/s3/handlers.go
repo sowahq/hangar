@@ -297,6 +297,7 @@ func handlePutObject(c *fiber.Ctx) error {
 		Key:           key,
 		Body:          bodyStream,
 		ContentLength: contentLength,
+		ContentType:   string(c.Request().Header.ContentType()),
 	})
 	if err != nil {
 		if errors.Is(err, object.ErrQuotaExceeded) {

@@ -285,6 +285,29 @@ func TestS3HeadBucket(t *testing.T) {
 	}
 }
 
+func TestS3PutPreservesContentType(t *testing.T) {
+	s := newS3TestServer(t)
+	if _, err := bucket.CreateBucket(&bucket.CreateBucketRequest{Name: "ctype"}); err != nil {
+		t.Fatalf("seed bucket: %v", err)
+	}
+	payload := []byte("zzzzzzzzzzzzzzzzzzzzzzzz")
+	req := s.sign(t, http.MethodPut, "/ctype/a.bin", "", payload)
+	req.Header.Set("Content-Type", "application/x-custom")
+	resp, err := s.client.Do(req)
+	if err != nil {
+		t.Fatalf("do: %v", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("put status=%d", resp.StatusCode)
+	}
+	resp = s.do(t, http.MethodHead, "/ctype/a.bin", "", nil)
+	resp.Body.Close()
+	if got := resp.Header.Get("Content-Type"); got != "application/x-custom" {
+		t.Fatalf("Content-Type=%q want application/x-custom", got)
+	}
+}
+
 func TestS3StreamingPayloadRejected(t *testing.T) {
 	s := newS3TestServer(t)
 	req := s.sign(t, http.MethodPut, "/x", "", nil)

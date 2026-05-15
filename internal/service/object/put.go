@@ -26,6 +26,7 @@ type PutObjectRequest struct {
 	Key           string
 	Body          io.Reader
 	ContentLength int64
+	ContentType   string
 }
 
 type PutObjectResponse struct {
@@ -70,15 +71,20 @@ func PutObject(req *PutObjectRequest) (*PutObjectResponse, error) {
 		}
 	}
 
-	probeSize := 4096
-	probeBuf := make([]byte, probeSize)
-	n, err := io.ReadFull(req.Body, probeBuf)
-	if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
-		return nil, fmt.Errorf("failed to read content for probing: %w", err)
+	var contentType string
+	var fullReader io.Reader
+	if req.ContentType != "" {
+		contentType = req.ContentType
+		fullReader = req.Body
+	} else {
+		probeBuf := make([]byte, 4096)
+		n, err := io.ReadFull(req.Body, probeBuf)
+		if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
+			return nil, fmt.Errorf("failed to read content for probing: %w", err)
+		}
+		contentType = http.DetectContentType(probeBuf[:n])
+		fullReader = io.MultiReader(bytes.NewReader(probeBuf[:n]), req.Body)
 	}
-
-	contentType := http.DetectContentType(probeBuf[:n])
-	fullReader := io.MultiReader(bytes.NewReader(probeBuf[:n]), req.Body)
 
 	chunks, fileHash, size, err := storage.ChunkAndHash(fullReader, config.ChunksPath())
 	if err != nil {
