@@ -285,6 +285,40 @@ func TestS3HeadBucket(t *testing.T) {
 	}
 }
 
+func TestS3DeleteObjectsBatch(t *testing.T) {
+	s := newS3TestServer(t)
+	if _, err := bucket.CreateBucket(&bucket.CreateBucketRequest{Name: "batch"}); err != nil {
+		t.Fatalf("seed bucket: %v", err)
+	}
+	keys := []string{"a.txt", "b.txt", "c.txt"}
+	for _, k := range keys {
+		resp := s.do(t, http.MethodPut, "/batch/"+k, "", []byte("x"))
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("put %s: %d", k, resp.StatusCode)
+		}
+	}
+	body := []byte(`<Delete><Object><Key>a.txt</Key></Object><Object><Key>b.txt</Key></Object><Object><Key>missing.txt</Key></Object></Delete>`)
+	resp := s.do(t, http.MethodPost, "/batch", "delete=", body)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		raw, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status=%d body=%s", resp.StatusCode, raw)
+	}
+	var out DeleteResult
+	if err := xml.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(out.Deleted) != 3 || len(out.Errors) != 0 {
+		t.Fatalf("got deleted=%d errors=%d", len(out.Deleted), len(out.Errors))
+	}
+	resp = s.do(t, http.MethodHead, "/batch/c.txt", "", nil)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("c.txt should remain: %d", resp.StatusCode)
+	}
+}
+
 func TestS3PutPreservesContentType(t *testing.T) {
 	s := newS3TestServer(t)
 	if _, err := bucket.CreateBucket(&bucket.CreateBucketRequest{Name: "ctype"}); err != nil {

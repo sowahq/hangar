@@ -49,6 +49,37 @@ type ListBucketResultV2 struct {
 	CommonPrefixes        []CommonPrefix `xml:"CommonPrefixes"`
 }
 
+type DeleteRequestObject struct {
+	Key       string `xml:"Key"`
+	VersionID string `xml:"VersionId,omitempty"`
+}
+
+type DeleteRequest struct {
+	XMLName xml.Name              `xml:"Delete"`
+	Objects []DeleteRequestObject `xml:"Object"`
+	Quiet   bool                  `xml:"Quiet,omitempty"`
+}
+
+type DeletedObject struct {
+	Key                   string `xml:"Key"`
+	VersionID             string `xml:"VersionId,omitempty"`
+	DeleteMarker          bool   `xml:"DeleteMarker,omitempty"`
+	DeleteMarkerVersionID string `xml:"DeleteMarkerVersionId,omitempty"`
+}
+
+type DeleteErrorObject struct {
+	Key     string `xml:"Key"`
+	Code    string `xml:"Code"`
+	Message string `xml:"Message"`
+}
+
+type DeleteResult struct {
+	XMLName xml.Name            `xml:"DeleteResult"`
+	Xmlns   string              `xml:"xmlns,attr"`
+	Deleted []DeletedObject     `xml:"Deleted,omitempty"`
+	Errors  []DeleteErrorObject `xml:"Error,omitempty"`
+}
+
 type ErrorXML struct {
 	XMLName   xml.Name `xml:"Error"`
 	Code      string   `xml:"Code"`

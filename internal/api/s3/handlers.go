@@ -123,6 +123,64 @@ func handleDeleteBucket(c *fiber.Ctx) error {
 	return c.SendStatus(fiber.StatusNoContent)
 }
 
+func handleBucketPost(c *fiber.Ctx) error {
+	if c.Request().URI().QueryArgs().Has("delete") {
+		return handleDeleteObjects(c)
+	}
+	return writeError(c, fiber.StatusNotImplemented, "NotImplemented", "unsupported bucket POST", c.Path())
+}
+
+func handleDeleteObjects(c *fiber.Ctx) error {
+	name := c.Params("bucket")
+	if !hasPerm(c, auth.PermDelete) || !keyAllowsBucket(c, name) {
+		return writeError(c, fiber.StatusForbidden, "AccessDenied", "Access denied", "/"+name)
+	}
+	if _, err := bucket.GetBucket(name); err != nil {
+		return writeError(c, fiber.StatusNotFound, "NoSuchBucket", err.Error(), "/"+name)
+	}
+	body := c.Body()
+	if len(body) == 0 {
+		return writeError(c, fiber.StatusBadRequest, "MalformedXML", "empty delete body", "/"+name)
+	}
+	var req DeleteRequest
+	if err := xml.Unmarshal(body, &req); err != nil {
+		return writeError(c, fiber.StatusBadRequest, "MalformedXML", err.Error(), "/"+name)
+	}
+	if len(req.Objects) == 0 {
+		return writeError(c, fiber.StatusBadRequest, "MalformedXML", "no objects to delete", "/"+name)
+	}
+	out := DeleteResult{Xmlns: xmlNamespace}
+	for _, obj := range req.Objects {
+		res, err := object.DeleteObject(&object.DeleteObjectRequest{
+			Bucket:    name,
+			Key:       obj.Key,
+			VersionID: obj.VersionID,
+		})
+		if err != nil && !errors.Is(err, object.ErrObjectNotFound) {
+			out.Errors = append(out.Errors, DeleteErrorObject{
+				Key:     obj.Key,
+				Code:    "InternalError",
+				Message: err.Error(),
+			})
+			continue
+		}
+		if req.Quiet {
+			continue
+		}
+		entry := DeletedObject{Key: obj.Key, VersionID: obj.VersionID}
+		if res != nil {
+			if res.IsDeleteMarker {
+				entry.DeleteMarker = true
+				entry.DeleteMarkerVersionID = res.VersionID
+			} else if res.VersionID != "" {
+				entry.VersionID = res.VersionID
+			}
+		}
+		out.Deleted = append(out.Deleted, entry)
+	}
+	return writeXML(c, fiber.StatusOK, out)
+}
+
 func handleHeadBucket(c *fiber.Ctx) error {
 	name := c.Params("bucket")
 	if !hasPerm(c, auth.PermRead) || !keyAllowsBucket(c, name) {
