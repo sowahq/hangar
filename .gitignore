@@ -34,3 +34,8 @@ go.work.sum
 *.toml
 data/
 hangar
+
+# Ignore files related to Claude
+CLAUDE.md
+.claude/
+docs/
