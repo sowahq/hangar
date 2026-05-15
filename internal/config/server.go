@@ -1,6 +1,8 @@
 package config
 
 import (
+	"encoding/base64"
+	"log"
 	"os"
 	"sync"
 
@@ -39,7 +41,13 @@ type serverConfig struct {
 		BindAddr string `toml:"bind_addr"`
 		Region   string `toml:"region"`
 	} `toml:"s3"`
+
+	Security struct {
+		MasterKeyB64 string `toml:"master_key_b64"`
+	} `toml:"security"`
 }
+
+var masterKey []byte
 
 var (
 	c  *serverConfig
@@ -160,7 +168,50 @@ func LoadServerConfig(path string) error {
 		return err
 	}
 
+	loadMasterKey()
+
 	return nil
+}
+
+func loadMasterKey() {
+	raw := c.Security.MasterKeyB64
+	if env := os.Getenv("HANGAR_MASTER_KEY"); env != "" {
+		raw = env
+	}
+
+	if raw == "" {
+		masterKey = nil
+		log.Printf("SSE-S3 disabled: no master key configured ([security] master_key_b64 or HANGAR_MASTER_KEY)")
+		return
+	}
+
+	decoded, err := base64.StdEncoding.DecodeString(raw)
+	if err != nil {
+		masterKey = nil
+		log.Printf("SSE-S3 disabled: master key not valid base64: %v", err)
+		return
+	}
+
+	if len(decoded) != 32 {
+		masterKey = nil
+		log.Printf("SSE-S3 disabled: master key must decode to 32 bytes (got %d)", len(decoded))
+		return
+	}
+
+	masterKey = decoded
+	log.Printf("SSE-S3 enabled: master key loaded")
+}
+
+func MasterKey() []byte {
+	mu.RLock()
+	defer mu.RUnlock()
+	return masterKey
+}
+
+func SetMasterKeyForTest(k []byte) {
+	mu.Lock()
+	defer mu.Unlock()
+	masterKey = k
 }
 
 func ChunksPath() string {
