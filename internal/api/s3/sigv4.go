@@ -35,7 +35,6 @@ var (
 	ErrSigV4Malformed         = errors.New("sigv4: malformed authorization header")
 	ErrSigV4BadSignature      = errors.New("sigv4: signature mismatch")
 	ErrSigV4UnknownKey        = errors.New("sigv4: unknown access key id")
-	ErrSigV4ChunkedUnsupported = errors.New("sigv4: chunked streaming payload not supported")
 	ErrSigV4ClockSkew         = errors.New("sigv4: request time too skewed")
 	ErrSigV4MissingDate       = errors.New("sigv4: missing X-Amz-Date or Date header")
 	ErrSigV4MissingPayloadHash = errors.New("sigv4: missing X-Amz-Content-Sha256 header")
@@ -49,6 +48,9 @@ type AuthHeader struct {
 	Service       string
 	SignedHeaders []string
 	Signature     string
+	Streaming     bool
+	AmzDate       string
+	SigningKey    []byte
 }
 
 type Request struct {
@@ -347,7 +349,7 @@ func Verify(r *Request, lookup SecretLookup, now time.Time) (*AuthHeader, error)
 		return nil, ErrSigV4MissingPayloadHash
 	}
 	if payloadHash == PayloadStreaming {
-		return nil, ErrSigV4ChunkedUnsupported
+		ah.Streaming = true
 	}
 
 	secret, err := lookup(ah.AccessKeyID)
@@ -364,6 +366,10 @@ func Verify(r *Request, lookup SecretLookup, now time.Time) (*AuthHeader, error)
 	expected := Sign(sts, key)
 	if subtle.ConstantTimeCompare([]byte(expected), []byte(ah.Signature)) != 1 {
 		return nil, ErrSigV4BadSignature
+	}
+	if ah.Streaming {
+		ah.AmzDate = amzDate
+		ah.SigningKey = key
 	}
 	return ah, nil
 }

@@ -45,6 +45,7 @@ func sigv4Middleware(now func() time.Time) fiber.Handler {
 			return writeError(c, fiber.StatusForbidden, "InvalidAccessKeyId", "unknown access key", c.Path())
 		}
 		c.Locals("s3_key", k)
+		c.Locals("s3_auth", ah)
 		return c.Next()
 	}
 }
@@ -59,8 +60,6 @@ func s3AuthError(c *fiber.Ctx, err error) error {
 		return writeError(c, fiber.StatusForbidden, "RequestTimeTooSkewed", err.Error(), c.Path())
 	case errors.Is(err, ErrSigV4Expired):
 		return writeError(c, fiber.StatusForbidden, "AccessDenied", err.Error(), c.Path())
-	case errors.Is(err, ErrSigV4ChunkedUnsupported):
-		return writeError(c, fiber.StatusNotImplemented, "NotImplemented", "aws-chunked streaming not supported", c.Path())
 	case errors.Is(err, ErrSigV4MissingPayloadHash), errors.Is(err, ErrSigV4MissingDate):
 		return writeError(c, fiber.StatusBadRequest, "InvalidRequest", err.Error(), c.Path())
 	default:

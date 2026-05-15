@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/xml"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -570,17 +571,81 @@ func TestS3PresignedExpired(t *testing.T) {
 	}
 }
 
-func TestS3StreamingPayloadRejected(t *testing.T) {
+func TestS3AwsChunkedPut(t *testing.T) {
 	s := newS3TestServer(t)
-	req := s.sign(t, http.MethodPut, "/x", "", nil)
-	req.Header.Set("X-Amz-Content-Sha256", PayloadStreaming)
-	resp, err := s.client.Do(req)
+	if _, err := bucket.CreateBucket(&bucket.CreateBucketRequest{Name: "chunked"}); err != nil {
+		t.Fatalf("seed bucket: %v", err)
+	}
+	decoded := []byte("hello aws-chunked payload here")
+	amzDate := s.now.Format("20060102T150405Z")
+	date := s.now.Format("20060102")
+	region := "us-east-1"
+
+	signedHeaders := []string{"content-encoding", "host", "x-amz-content-sha256", "x-amz-date", "x-amz-decoded-content-length"}
+	headers := http.Header{}
+	headers.Set("Host", s.host)
+	headers.Set("X-Amz-Date", amzDate)
+	headers.Set("X-Amz-Content-Sha256", PayloadStreaming)
+	headers.Set("Content-Encoding", "aws-chunked")
+	headers.Set("X-Amz-Decoded-Content-Length", strconv.Itoa(len(decoded)))
+
+	sigReq := &Request{Method: http.MethodPut, Path: "/chunked/c.txt", Headers: headers}
+	cr, _, err := CanonicalRequest(sigReq, signedHeaders, PayloadStreaming)
+	if err != nil {
+		t.Fatalf("canonical: %v", err)
+	}
+	sts := StringToSign(amzDate, date, region, "s3", sha256Hex(cr))
+	signingKey := DeriveSigningKey(s.key.SecretKey, date, region, "s3")
+	seedSig := Sign(sts, signingKey)
+
+	chunk1 := decoded[:10]
+	chunk2 := decoded[10:]
+	scope := date + "/" + region + "/s3/aws4_request"
+	makeChunkSig := func(prev string, body []byte) string {
+		h := sha256.Sum256(body)
+		s := "AWS4-HMAC-SHA256-PAYLOAD\n" + amzDate + "\n" + scope + "\n" + prev + "\n" + emptyStringSHA256 + "\n" + hex.EncodeToString(h[:])
+		return Sign(s, signingKey)
+	}
+	sig1 := makeChunkSig(seedSig, chunk1)
+	sig2 := makeChunkSig(sig1, chunk2)
+	sig3 := makeChunkSig(sig2, nil)
+
+	var body bytes.Buffer
+	fmt.Fprintf(&body, "%x;chunk-signature=%s\r\n", len(chunk1), sig1)
+	body.Write(chunk1)
+	body.WriteString("\r\n")
+	fmt.Fprintf(&body, "%x;chunk-signature=%s\r\n", len(chunk2), sig2)
+	body.Write(chunk2)
+	body.WriteString("\r\n")
+	fmt.Fprintf(&body, "0;chunk-signature=%s\r\n\r\n", sig3)
+
+	httpReq, _ := http.NewRequest(http.MethodPut, s.url+"/chunked/c.txt", bytes.NewReader(body.Bytes()))
+	for k, vs := range headers {
+		for _, v := range vs {
+			httpReq.Header.Set(k, v)
+		}
+	}
+	httpReq.Header.Set("Content-Length", strconv.Itoa(body.Len()))
+	httpReq.Header.Set("Authorization", "AWS4-HMAC-SHA256 "+
+		"Credential="+s.key.AccessKeyID+"/"+date+"/"+region+"/s3/aws4_request,"+
+		"SignedHeaders="+strings.Join(signedHeaders, ";")+","+
+		"Signature="+seedSig)
+
+	resp, err := s.client.Do(httpReq)
 	if err != nil {
 		t.Fatalf("do: %v", err)
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusNotImplemented {
-		t.Fatalf("status=%d want=501", resp.StatusCode)
+	raw, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status=%d body=%s", resp.StatusCode, raw)
+	}
+
+	resp = s.do(t, http.MethodGet, "/chunked/c.txt", "", nil)
+	got, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if !bytes.Equal(got, decoded) {
+		t.Fatalf("payload mismatch: got %q want %q", got, decoded)
 	}
 }
 

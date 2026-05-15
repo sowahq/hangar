@@ -187,12 +187,13 @@ func handleUploadPart(c *fiber.Ctx) error {
 	if err != nil {
 		return writeError(c, fiber.StatusBadRequest, "InvalidArgument", "invalid partNumber", "/"+bucketName+"/"+key)
 	}
+	partBody, _ := requestBody(c)
 	res, err := object.UploadPart(&object.UploadPartRequest{
 		Bucket:     bucketName,
 		Key:        key,
 		UploadID:   uploadID,
 		PartNumber: partNumber,
-		Body:       c.Request().BodyStream(),
+		Body:       partBody,
 	})
 	if err != nil {
 		switch {
@@ -313,6 +314,21 @@ func handleListParts(c *fiber.Ctx) error {
 		})
 	}
 	return writeXML(c, fiber.StatusOK, out)
+}
+
+func requestBody(c *fiber.Ctx) (io.Reader, int64) {
+	stream := c.Request().BodyStream()
+	contentLength := int64(c.Request().Header.ContentLength())
+	if ah, ok := c.Locals("s3_auth").(*AuthHeader); ok && ah != nil && ah.Streaming {
+		decoded := int64(0)
+		if v := c.Get("x-amz-decoded-content-length"); v != "" {
+			if n, err := strconv.ParseInt(v, 10, 64); err == nil {
+				decoded = n
+			}
+		}
+		return newChunkedReader(stream, ah), decoded
+	}
+	return stream, contentLength
 }
 
 func handleBucketPost(c *fiber.Ctx) error {
@@ -546,8 +562,7 @@ func handlePutObject(c *fiber.Ctx) error {
 		return handleCopyObject(c, name, key, src)
 	}
 
-	bodyStream := c.Request().BodyStream()
-	contentLength := int64(c.Request().Header.ContentLength())
+	bodyStream, contentLength := requestBody(c)
 
 	res, err := object.PutObject(&object.PutObjectRequest{
 		Bucket:        name,

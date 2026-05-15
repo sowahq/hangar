@@ -282,14 +282,6 @@ func TestVerifyRoundTrip(t *testing.T) {
 		t.Fatalf("expected ErrSigV4ClockSkew, got %v", err)
 	}
 
-	// Chunked unsupported.
-	r2 := *r
-	r2.Headers = r.Headers.Clone()
-	r2.Headers.Set(headerContentSHA256, PayloadStreaming)
-	if _, err := Verify(&r2, lookup, now); !errors.Is(err, ErrSigV4ChunkedUnsupported) {
-		t.Fatalf("expected ErrSigV4ChunkedUnsupported, got %v", err)
-	}
-
 	// Missing payload hash.
 	r3 := *r
 	r3.Headers = r.Headers.Clone()
