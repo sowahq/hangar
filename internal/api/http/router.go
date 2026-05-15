@@ -5,6 +5,7 @@ import (
 
 	"github.com/anhostfr/hangar/internal/api/http/admin"
 	"github.com/anhostfr/hangar/internal/api/http/handlers"
+	"github.com/anhostfr/hangar/internal/api/http/response"
 	"github.com/gofiber/fiber/v2"
 	"github.com/phuslu/log"
 )
@@ -17,6 +18,7 @@ func Router() *fiber.App {
 		IdleTimeout:                  3 * time.Minute,
 		DisableStartupMessage:        true,
 		Network:                      "tcp",
+		ErrorHandler:                 response.ErrorHandler,
 	})
 
 	router.Get("/status", handlers.Status)
