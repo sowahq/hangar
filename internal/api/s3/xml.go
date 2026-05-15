@@ -80,6 +80,62 @@ type DeleteResult struct {
 	Errors  []DeleteErrorObject `xml:"Error,omitempty"`
 }
 
+type InitiateMultipartUploadResult struct {
+	XMLName  xml.Name `xml:"InitiateMultipartUploadResult"`
+	Xmlns    string   `xml:"xmlns,attr"`
+	Bucket   string   `xml:"Bucket"`
+	Key      string   `xml:"Key"`
+	UploadID string   `xml:"UploadId"`
+}
+
+type CompletePart struct {
+	PartNumber int    `xml:"PartNumber"`
+	ETag       string `xml:"ETag"`
+}
+
+type CompleteMultipartUpload struct {
+	XMLName xml.Name       `xml:"CompleteMultipartUpload"`
+	Parts   []CompletePart `xml:"Part"`
+}
+
+type CompleteMultipartUploadResult struct {
+	XMLName  xml.Name `xml:"CompleteMultipartUploadResult"`
+	Xmlns    string   `xml:"xmlns,attr"`
+	Location string   `xml:"Location"`
+	Bucket   string   `xml:"Bucket"`
+	Key      string   `xml:"Key"`
+	ETag     string   `xml:"ETag"`
+}
+
+type ListPart struct {
+	PartNumber   int    `xml:"PartNumber"`
+	LastModified string `xml:"LastModified"`
+	ETag         string `xml:"ETag"`
+	Size         int64  `xml:"Size"`
+}
+
+type ListPartsResult struct {
+	XMLName  xml.Name   `xml:"ListPartsResult"`
+	Xmlns    string     `xml:"xmlns,attr"`
+	Bucket   string     `xml:"Bucket"`
+	Key      string     `xml:"Key"`
+	UploadID string     `xml:"UploadId"`
+	Parts    []ListPart `xml:"Part"`
+}
+
+type MultipartUploadEntry struct {
+	Key       string `xml:"Key"`
+	UploadID  string `xml:"UploadId"`
+	Initiated string `xml:"Initiated"`
+}
+
+type ListMultipartUploadsResult struct {
+	XMLName xml.Name               `xml:"ListMultipartUploadsResult"`
+	Xmlns   string                 `xml:"xmlns,attr"`
+	Bucket  string                 `xml:"Bucket"`
+	Uploads []MultipartUploadEntry `xml:"Upload"`
+}
+
 type CopyObjectResult struct {
 	XMLName      xml.Name `xml:"CopyObjectResult"`
 	ETag         string   `xml:"ETag"`

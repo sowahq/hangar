@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -282,6 +283,105 @@ func TestS3HeadBucket(t *testing.T) {
 	}
 	if len(body) != 0 {
 		t.Fatalf("HEAD body must be empty, got %q", body)
+	}
+}
+
+func TestS3MultipartRoundtrip(t *testing.T) {
+	s := newS3TestServer(t)
+	if _, err := bucket.CreateBucket(&bucket.CreateBucketRequest{Name: "mpu"}); err != nil {
+		t.Fatalf("seed bucket: %v", err)
+	}
+
+	resp := s.do(t, http.MethodPost, "/mpu/big.bin", "uploads=", nil)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		raw, _ := io.ReadAll(resp.Body)
+		t.Fatalf("init status=%d body=%s", resp.StatusCode, raw)
+	}
+	var init InitiateMultipartUploadResult
+	if err := xml.NewDecoder(resp.Body).Decode(&init); err != nil {
+		t.Fatalf("decode init: %v", err)
+	}
+	if init.UploadID == "" {
+		t.Fatalf("missing upload id")
+	}
+
+	type part struct{ num int; etag string }
+	var parts []part
+	for i := 1; i <= 2; i++ {
+		body := bytes.Repeat([]byte{byte('a' + i)}, 16)
+		q := "uploadId=" + init.UploadID + "&partNumber=" + strconv.Itoa(i)
+		resp := s.do(t, http.MethodPut, "/mpu/big.bin", q, body)
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("part %d status=%d", i, resp.StatusCode)
+		}
+		parts = append(parts, part{num: i, etag: resp.Header.Get("ETag")})
+	}
+
+	resp = s.do(t, http.MethodGet, "/mpu/big.bin", "uploadId="+init.UploadID, nil)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		raw, _ := io.ReadAll(resp.Body)
+		t.Fatalf("list parts status=%d body=%s", resp.StatusCode, raw)
+	}
+	var lp ListPartsResult
+	if err := xml.NewDecoder(resp.Body).Decode(&lp); err != nil {
+		t.Fatalf("decode list parts: %v", err)
+	}
+	if len(lp.Parts) != 2 {
+		t.Fatalf("expected 2 parts, got %d", len(lp.Parts))
+	}
+
+	cb := &bytes.Buffer{}
+	cb.WriteString("<CompleteMultipartUpload>")
+	for _, p := range parts {
+		cb.WriteString("<Part><PartNumber>")
+		cb.WriteString(strconv.Itoa(p.num))
+		cb.WriteString("</PartNumber><ETag>")
+		cb.WriteString(p.etag)
+		cb.WriteString("</ETag></Part>")
+	}
+	cb.WriteString("</CompleteMultipartUpload>")
+	resp = s.do(t, http.MethodPost, "/mpu/big.bin", "uploadId="+init.UploadID, cb.Bytes())
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		raw, _ := io.ReadAll(resp.Body)
+		t.Fatalf("complete status=%d body=%s", resp.StatusCode, raw)
+	}
+	var done CompleteMultipartUploadResult
+	if err := xml.NewDecoder(resp.Body).Decode(&done); err != nil {
+		t.Fatalf("decode complete: %v", err)
+	}
+	if done.ETag == "" {
+		t.Fatalf("missing etag")
+	}
+
+	resp = s.do(t, http.MethodHead, "/mpu/big.bin", "", nil)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("head after complete=%d", resp.StatusCode)
+	}
+	if cl := resp.Header.Get("Content-Length"); cl != "32" {
+		t.Fatalf("size=%q want 32", cl)
+	}
+}
+
+func TestS3MultipartAbort(t *testing.T) {
+	s := newS3TestServer(t)
+	if _, err := bucket.CreateBucket(&bucket.CreateBucketRequest{Name: "mpuabort"}); err != nil {
+		t.Fatalf("seed bucket: %v", err)
+	}
+	resp := s.do(t, http.MethodPost, "/mpuabort/k", "uploads=", nil)
+	defer resp.Body.Close()
+	var init InitiateMultipartUploadResult
+	if err := xml.NewDecoder(resp.Body).Decode(&init); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	resp = s.do(t, http.MethodDelete, "/mpuabort/k", "uploadId="+init.UploadID, nil)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("abort status=%d", resp.StatusCode)
 	}
 }
 

@@ -90,9 +90,10 @@ func NewRouter(now func() time.Time) *fiber.App {
 	app.Get("/:bucket", handleListObjectsV2)
 
 	app.Head("/:bucket/*", handleHeadObject)
-	app.Get("/:bucket/*", handleGetObject)
-	app.Put("/:bucket/*", handlePutObject)
-	app.Delete("/:bucket/*", handleDeleteObject)
+	app.Get("/:bucket/*", handleObjectGet)
+	app.Put("/:bucket/*", handleObjectPut)
+	app.Post("/:bucket/*", handleObjectPost)
+	app.Delete("/:bucket/*", handleObjectDelete)
 
 	app.Hooks().OnListen(func(data fiber.ListenData) error {
 		log.Info().Msgf("Started S3 server on %s:%s", data.Host, data.Port)

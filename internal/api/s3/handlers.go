@@ -124,6 +124,197 @@ func handleDeleteBucket(c *fiber.Ctx) error {
 	return c.SendStatus(fiber.StatusNoContent)
 }
 
+func handleObjectGet(c *fiber.Ctx) error {
+	if c.Query("uploadId") != "" {
+		return handleListParts(c)
+	}
+	return handleGetObject(c)
+}
+
+func handleObjectPut(c *fiber.Ctx) error {
+	if c.Query("uploadId") != "" && c.Query("partNumber") != "" {
+		return handleUploadPart(c)
+	}
+	return handlePutObject(c)
+}
+
+func handleObjectPost(c *fiber.Ctx) error {
+	name := c.Params("bucket")
+	key := c.Params("*")
+	if c.Request().URI().QueryArgs().Has("uploads") {
+		return handleInitiateMultipart(c, name, key)
+	}
+	if uploadID := c.Query("uploadId"); uploadID != "" {
+		return handleCompleteMultipart(c, name, key, uploadID)
+	}
+	return writeError(c, fiber.StatusNotImplemented, "NotImplemented", "unsupported object POST", c.Path())
+}
+
+func handleObjectDelete(c *fiber.Ctx) error {
+	if uploadID := c.Query("uploadId"); uploadID != "" {
+		return handleAbortMultipart(c, uploadID)
+	}
+	return handleDeleteObject(c)
+}
+
+func handleInitiateMultipart(c *fiber.Ctx, bucketName, key string) error {
+	if !hasPerm(c, auth.PermWrite) || !keyAllowsBucket(c, bucketName) {
+		return writeError(c, fiber.StatusForbidden, "AccessDenied", "Access denied", "/"+bucketName+"/"+key)
+	}
+	if _, err := bucket.GetBucket(bucketName); err != nil {
+		return writeError(c, fiber.StatusNotFound, "NoSuchBucket", err.Error(), "/"+bucketName)
+	}
+	res, err := object.InitiateMultipart(&object.InitiateMultipartRequest{Bucket: bucketName, Key: key})
+	if err != nil {
+		return writeError(c, fiber.StatusInternalServerError, "InternalError", err.Error(), "/"+bucketName+"/"+key)
+	}
+	return writeXML(c, fiber.StatusOK, InitiateMultipartUploadResult{
+		Xmlns:    xmlNamespace,
+		Bucket:   bucketName,
+		Key:      key,
+		UploadID: res.UploadID,
+	})
+}
+
+func handleUploadPart(c *fiber.Ctx) error {
+	bucketName := c.Params("bucket")
+	key := c.Params("*")
+	if !hasPerm(c, auth.PermWrite) || !keyAllowsBucket(c, bucketName) {
+		return writeError(c, fiber.StatusForbidden, "AccessDenied", "Access denied", "/"+bucketName+"/"+key)
+	}
+	uploadID := c.Query("uploadId")
+	partNumber, err := strconv.Atoi(c.Query("partNumber"))
+	if err != nil {
+		return writeError(c, fiber.StatusBadRequest, "InvalidArgument", "invalid partNumber", "/"+bucketName+"/"+key)
+	}
+	res, err := object.UploadPart(&object.UploadPartRequest{
+		Bucket:     bucketName,
+		Key:        key,
+		UploadID:   uploadID,
+		PartNumber: partNumber,
+		Body:       c.Request().BodyStream(),
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, object.ErrInvalidPartNumber):
+			return writeError(c, fiber.StatusBadRequest, "InvalidArgument", err.Error(), "/"+bucketName+"/"+key)
+		case errors.Is(err, object.ErrMultipartNotFound):
+			return writeError(c, fiber.StatusNotFound, "NoSuchUpload", err.Error(), "/"+bucketName+"/"+key)
+		}
+		return writeError(c, fiber.StatusInternalServerError, "InternalError", err.Error(), "/"+bucketName+"/"+key)
+	}
+	c.Set("ETag", res.ETag)
+	return c.SendStatus(fiber.StatusOK)
+}
+
+func handleCompleteMultipart(c *fiber.Ctx, bucketName, key, uploadID string) error {
+	if !hasPerm(c, auth.PermWrite) || !keyAllowsBucket(c, bucketName) {
+		return writeError(c, fiber.StatusForbidden, "AccessDenied", "Access denied", "/"+bucketName+"/"+key)
+	}
+	body := c.Body()
+	var parts []int
+	if len(body) > 0 {
+		var req CompleteMultipartUpload
+		if err := xml.Unmarshal(body, &req); err != nil {
+			return writeError(c, fiber.StatusBadRequest, "MalformedXML", err.Error(), "/"+bucketName+"/"+key)
+		}
+		for _, p := range req.Parts {
+			parts = append(parts, p.PartNumber)
+		}
+	}
+	res, err := object.CompleteMultipart(&object.CompleteMultipartRequest{
+		Bucket:   bucketName,
+		Key:      key,
+		UploadID: uploadID,
+		Parts:    parts,
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, object.ErrMultipartNotFound):
+			return writeError(c, fiber.StatusNotFound, "NoSuchUpload", err.Error(), "/"+bucketName+"/"+key)
+		case errors.Is(err, object.ErrNoPartsToComplete):
+			return writeError(c, fiber.StatusBadRequest, "InvalidPart", err.Error(), "/"+bucketName+"/"+key)
+		case errors.Is(err, object.ErrPartMissing):
+			return writeError(c, fiber.StatusBadRequest, "InvalidPart", err.Error(), "/"+bucketName+"/"+key)
+		case errors.Is(err, object.ErrCompleteQuotaFail):
+			return writeError(c, fiber.StatusRequestEntityTooLarge, "EntityTooLarge", "Quota exceeded", "/"+bucketName+"/"+key)
+		}
+		return writeError(c, fiber.StatusInternalServerError, "InternalError", err.Error(), "/"+bucketName+"/"+key)
+	}
+	if res.VersionID != "" {
+		c.Set("x-amz-version-id", res.VersionID)
+	}
+	return writeXML(c, fiber.StatusOK, CompleteMultipartUploadResult{
+		Xmlns:    xmlNamespace,
+		Location: "/" + bucketName + "/" + key,
+		Bucket:   bucketName,
+		Key:      key,
+		ETag:     res.ETag,
+	})
+}
+
+func handleAbortMultipart(c *fiber.Ctx, uploadID string) error {
+	bucketName := c.Params("bucket")
+	key := c.Params("*")
+	if !hasPerm(c, auth.PermDelete) || !keyAllowsBucket(c, bucketName) {
+		return writeError(c, fiber.StatusForbidden, "AccessDenied", "Access denied", "/"+bucketName+"/"+key)
+	}
+	if err := object.AbortMultipart(&object.AbortMultipartRequest{Bucket: bucketName, Key: key, UploadID: uploadID}); err != nil {
+		if errors.Is(err, object.ErrMultipartNotFound) {
+			return writeError(c, fiber.StatusNotFound, "NoSuchUpload", err.Error(), "/"+bucketName+"/"+key)
+		}
+		return writeError(c, fiber.StatusInternalServerError, "InternalError", err.Error(), "/"+bucketName+"/"+key)
+	}
+	return c.SendStatus(fiber.StatusNoContent)
+}
+
+func handleListMultipartUploads(c *fiber.Ctx, bucketName string) error {
+	headers, err := storage.ScanBucketMultiparts(bucketName)
+	if err != nil {
+		return writeError(c, fiber.StatusInternalServerError, "InternalError", err.Error(), "/"+bucketName)
+	}
+	out := ListMultipartUploadsResult{Xmlns: xmlNamespace, Bucket: bucketName}
+	for _, h := range headers {
+		out.Uploads = append(out.Uploads, MultipartUploadEntry{
+			Key:       h.Key,
+			UploadID:  h.UploadID,
+			Initiated: time.UnixMilli(h.CreatedAt).UTC().Format(time.RFC3339),
+		})
+	}
+	return writeXML(c, fiber.StatusOK, out)
+}
+
+func handleListParts(c *fiber.Ctx) error {
+	bucketName := c.Params("bucket")
+	key := c.Params("*")
+	if !hasPerm(c, auth.PermRead) || !keyAllowsBucket(c, bucketName) {
+		return writeError(c, fiber.StatusForbidden, "AccessDenied", "Access denied", "/"+bucketName+"/"+key)
+	}
+	uploadID := c.Query("uploadId")
+	res, err := object.ListPartsService(bucketName, key, uploadID)
+	if err != nil {
+		if errors.Is(err, object.ErrMultipartNotFound) {
+			return writeError(c, fiber.StatusNotFound, "NoSuchUpload", err.Error(), "/"+bucketName+"/"+key)
+		}
+		return writeError(c, fiber.StatusInternalServerError, "InternalError", err.Error(), "/"+bucketName+"/"+key)
+	}
+	out := ListPartsResult{
+		Xmlns:    xmlNamespace,
+		Bucket:   bucketName,
+		Key:      key,
+		UploadID: uploadID,
+	}
+	for _, p := range res.Parts {
+		out.Parts = append(out.Parts, ListPart{
+			PartNumber:   p.PartNumber,
+			LastModified: time.UnixMilli(p.UploadedAt).UTC().Format(time.RFC3339),
+			ETag:         p.ETag,
+			Size:         p.Size,
+		})
+	}
+	return writeXML(c, fiber.StatusOK, out)
+}
+
 func handleBucketPost(c *fiber.Ctx) error {
 	if c.Request().URI().QueryArgs().Has("delete") {
 		return handleDeleteObjects(c)
@@ -200,6 +391,9 @@ func handleListObjectsV2(c *fiber.Ctx) error {
 	}
 	if _, err := bucket.GetBucket(name); err != nil {
 		return writeError(c, fiber.StatusNotFound, "NoSuchBucket", err.Error(), "/"+name)
+	}
+	if c.Request().URI().QueryArgs().Has("uploads") {
+		return handleListMultipartUploads(c, name)
 	}
 
 	prefix := c.Query("prefix")
