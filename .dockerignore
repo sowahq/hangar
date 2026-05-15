@@ -1,0 +1,16 @@
+.git
+.github
+.gitignore
+.dockerignore
+Dockerfile
+Makefile
+README.md
+bin/
+data/
+*.md
+*.log
+.idea/
+.vscode/
+.DS_Store
+config.toml
+docs/
