@@ -5,6 +5,8 @@ Self-hosted object storage in Go. Content-addressed chunks (blake3) with zstd co
 ## Features
 
 - HTTP API with bucket + object semantics
+- S3-compatible API (path-style, SigV4, multipart, presigned URLs)
+- Server-Side Encryption: SSE-S3 (AES-256-GCM, server master key) and SSE-C (customer-provided key)
 - Per-bucket auth tokens (argon2id) with `read` / `write` / `delete` / `admin` permissions
 - Per-bucket quotas (max bytes / max objects)
 - HTTP range requests (RFC 7233)
@@ -58,7 +60,17 @@ interval_hours = 24
 enabled     = false
 max         = 100
 window_sec  = 60
+
+[security]
+master_key_b64 = ""  # 32-byte base64 key for SSE-S3. Empty disables SSE-S3.
+                     # Can also be set via HANGAR_MASTER_KEY env var.
 ```
+
+### Server-Side Encryption
+
+- **SSE-S3** (`x-amz-server-side-encryption: AES256`) uses the server master key. If unconfigured, PUTs with SSE-S3 return 503 `ServerSideEncryptionConfigurationNotFoundError`.
+- **SSE-C** uses the standard 3 headers (`-customer-algorithm`, `-customer-key` b64 32B, `-customer-key-MD5`). GET/HEAD require the same 3 headers; missing/mismatch returns 400.
+- **Caveat:** cross-object dedup is broken for encrypted objects (different keys/nonces). Intra-object dedup is preserved.
 
 ## HTTP API
 
