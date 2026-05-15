@@ -11,10 +11,12 @@ import (
 	"github.com/anhostfr/hangar/cmd/bucket"
 	"github.com/anhostfr/hangar/cmd/s3keys"
 	"github.com/anhostfr/hangar/internal/api/http"
+	"github.com/anhostfr/hangar/internal/api/s3"
 	"github.com/anhostfr/hangar/internal/config"
 	"github.com/anhostfr/hangar/internal/database"
 	gcService "github.com/anhostfr/hangar/internal/service/gc"
 	"github.com/anhostfr/hangar/internal/storage"
+	"github.com/gofiber/fiber/v2"
 	"github.com/phuslu/log"
 	"github.com/urfave/cli/v2"
 )
@@ -78,6 +80,15 @@ func Execute() {
 						httpErr <- httpRouter.Listen(config.ServerConfig().API.BindAddr)
 					}()
 
+					var s3Router *fiber.App
+					s3Err := make(chan error, 1)
+					if config.S3Enabled() {
+						s3Router = s3.Router()
+						go func() {
+							s3Err <- s3Router.Listen(config.S3BindAddr())
+						}()
+					}
+
 					ctx, cancel := context.WithCancel(context.Background())
 					gcDone := make(chan struct{})
 					go gcService.StartScheduledGC(ctx, gcDone)
@@ -90,12 +101,19 @@ func Execute() {
 						log.Info().Str("signal", sig.String()).Msg("Shutdown signal received")
 					case err := <-httpErr:
 						log.Error().Err(err).Msg("HTTP server exited unexpectedly")
+					case err := <-s3Err:
+						log.Error().Err(err).Msg("S3 server exited unexpectedly")
 					}
 
 					log.Info().Dur("timeout", shutdownTimeout).Msg("Shutting down Hangar...")
 
 					if err := httpRouter.ShutdownWithTimeout(shutdownTimeout); err != nil {
 						log.Error().Err(err).Msg("HTTP server shutdown error")
+					}
+					if s3Router != nil {
+						if err := s3Router.ShutdownWithTimeout(shutdownTimeout); err != nil {
+							log.Error().Err(err).Msg("S3 server shutdown error")
+						}
 					}
 
 					cancel()

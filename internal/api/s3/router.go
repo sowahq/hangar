@@ -1,0 +1,101 @@
+package s3
+
+import (
+	"errors"
+	"net/http"
+	"time"
+
+	"github.com/anhostfr/hangar/internal/service/auth"
+	"github.com/gofiber/fiber/v2"
+	"github.com/phuslu/log"
+)
+
+func adaptRequest(c *fiber.Ctx) *Request {
+	h := make(http.Header)
+	c.Request().Header.VisitAll(func(k, v []byte) {
+		h.Add(string(k), string(v))
+	})
+	if h.Get("Host") == "" {
+		h.Set("Host", string(c.Request().Host()))
+	}
+	return &Request{
+		Method:   string(c.Method()),
+		Path:     string(c.Request().URI().Path()),
+		RawQuery: string(c.Request().URI().QueryString()),
+		Headers:  h,
+	}
+}
+
+func sigv4Middleware(now func() time.Time) fiber.Handler {
+	lookup := func(accessKeyID string) (string, error) {
+		k, err := auth.GetS3Key(accessKeyID)
+		if err != nil {
+			return "", err
+		}
+		return k.SecretKey, nil
+	}
+	return func(c *fiber.Ctx) error {
+		req := adaptRequest(c)
+		ah, err := Verify(req, lookup, now())
+		if err != nil {
+			return s3AuthError(c, err)
+		}
+		k, err := auth.GetS3Key(ah.AccessKeyID)
+		if err != nil {
+			return writeError(c, fiber.StatusForbidden, "InvalidAccessKeyId", "unknown access key", c.Path())
+		}
+		c.Locals("s3_key", k)
+		return c.Next()
+	}
+}
+
+func s3AuthError(c *fiber.Ctx, err error) error {
+	switch {
+	case errors.Is(err, ErrSigV4UnknownKey):
+		return writeError(c, fiber.StatusForbidden, "InvalidAccessKeyId", err.Error(), c.Path())
+	case errors.Is(err, ErrSigV4BadSignature):
+		return writeError(c, fiber.StatusForbidden, "SignatureDoesNotMatch", err.Error(), c.Path())
+	case errors.Is(err, ErrSigV4ClockSkew):
+		return writeError(c, fiber.StatusForbidden, "RequestTimeTooSkewed", err.Error(), c.Path())
+	case errors.Is(err, ErrSigV4ChunkedUnsupported):
+		return writeError(c, fiber.StatusNotImplemented, "NotImplemented", "aws-chunked streaming not supported", c.Path())
+	case errors.Is(err, ErrSigV4MissingPayloadHash), errors.Is(err, ErrSigV4MissingDate):
+		return writeError(c, fiber.StatusBadRequest, "InvalidRequest", err.Error(), c.Path())
+	default:
+		return writeError(c, fiber.StatusBadRequest, "AuthorizationHeaderMalformed", err.Error(), c.Path())
+	}
+}
+
+func Router() *fiber.App {
+	return NewRouter(time.Now)
+}
+
+func NewRouter(now func() time.Time) *fiber.App {
+	app := fiber.New(fiber.Config{
+		BodyLimit:                    0,
+		StreamRequestBody:            true,
+		DisablePreParseMultipartForm: true,
+		IdleTimeout:                  3 * time.Minute,
+		DisableStartupMessage:        true,
+		Network:                      "tcp",
+	})
+
+	app.Use(sigv4Middleware(now))
+
+	app.Get("/", handleListBuckets)
+	app.Put("/:bucket", handleCreateBucket)
+	app.Delete("/:bucket", handleDeleteBucket)
+	app.Get("/:bucket", handleListObjectsV2)
+
+	app.Head("/:bucket/*", handleHeadObject)
+	app.Get("/:bucket/*", handleGetObject)
+	app.Put("/:bucket/*", handlePutObject)
+	app.Delete("/:bucket/*", handleDeleteObject)
+
+	app.Hooks().OnListen(func(data fiber.ListenData) error {
+		log.Info().Msgf("Started S3 server on %s:%s", data.Host, data.Port)
+		return nil
+	})
+
+	return app
+}

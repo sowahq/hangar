@@ -33,6 +33,12 @@ type serverConfig struct {
 		Max       int  `toml:"max"`
 		WindowSec int  `toml:"window_sec"`
 	} `toml:"rate_limit"`
+
+	S3 struct {
+		Enabled  bool   `toml:"enabled"`
+		BindAddr string `toml:"bind_addr"`
+		Region   string `toml:"region"`
+	} `toml:"s3"`
 }
 
 var (
@@ -57,7 +63,38 @@ func DefaultServerConfig() *serverConfig {
 	config.RateLimit.Max = 100
 	config.RateLimit.WindowSec = 60
 
+	config.S3.Enabled = false
+	config.S3.BindAddr = ":9000"
+	config.S3.Region = "us-east-1"
+
 	return config
+}
+
+func S3Enabled() bool {
+	mu.RLock()
+	defer mu.RUnlock()
+	if c == nil {
+		c = DefaultServerConfig()
+	}
+	return c.S3.Enabled
+}
+
+func S3BindAddr() string {
+	mu.RLock()
+	defer mu.RUnlock()
+	if c == nil {
+		c = DefaultServerConfig()
+	}
+	return c.S3.BindAddr
+}
+
+func S3Region() string {
+	mu.RLock()
+	defer mu.RUnlock()
+	if c == nil {
+		c = DefaultServerConfig()
+	}
+	return c.S3.Region
 }
 
 func RateLimitEnabled() bool {
