@@ -2,20 +2,28 @@ package object
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"time"
 
 	"github.com/anhostfr/hangar/internal/config"
+	"github.com/anhostfr/hangar/internal/service/bucket"
 	"github.com/anhostfr/hangar/internal/storage"
 	"github.com/anhostfr/hangar/pkg/pathutil"
 )
 
+var (
+	ErrQuotaExceeded    = errors.New("quota exceeded")
+	ErrLengthRequired   = errors.New("content-length required when quota enabled")
+)
+
 type PutObjectRequest struct {
-	Bucket string
-	Key    string
-	Body   io.Reader
+	Bucket        string
+	Key           string
+	Body          io.Reader
+	ContentLength int64
 }
 
 type PutObjectResponse struct {
@@ -29,6 +37,23 @@ type PutObjectResponse struct {
 }
 
 func PutObject(req *PutObjectRequest) (*PutObjectResponse, error) {
+	info, _ := bucket.GetBucket(req.Bucket)
+	quotaEnabled := info != nil && (info.MaxBytes > 0 || info.MaxObjects > 0)
+	if quotaEnabled {
+		if req.ContentLength <= 0 {
+			return nil, ErrLengthRequired
+		}
+		curBytes, curObjects, usageErr := bucket.GetUsage(req.Bucket)
+		if usageErr != nil {
+			return nil, fmt.Errorf("failed to get usage: %w", usageErr)
+		}
+		if info.MaxBytes > 0 && curBytes+req.ContentLength > info.MaxBytes {
+			return nil, ErrQuotaExceeded
+		}
+		if info.MaxObjects > 0 && curObjects+1 > info.MaxObjects {
+			return nil, ErrQuotaExceeded
+		}
+	}
 
 	probeSize := 4096
 	probeBuf := make([]byte, probeSize)

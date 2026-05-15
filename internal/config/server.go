@@ -28,7 +28,11 @@ type serverConfig struct {
 		Interval int `toml:"interval_hours" validate:"min=1"` // Hours between GC runs
 	} `toml:"garbage_collection"`
 
-	// TODO: S3 API
+	RateLimit struct {
+		Enabled   bool `toml:"enabled"`
+		Max       int  `toml:"max"`
+		WindowSec int  `toml:"window_sec"`
+	} `toml:"rate_limit"`
 }
 
 var (
@@ -49,7 +53,49 @@ func DefaultServerConfig() *serverConfig {
 	// GC defaults
 	config.GarbageCollection.Interval = 24 // 24 hours
 
+	config.RateLimit.Enabled = false
+	config.RateLimit.Max = 100
+	config.RateLimit.WindowSec = 60
+
 	return config
+}
+
+func RateLimitEnabled() bool {
+	mu.RLock()
+	defer mu.RUnlock()
+	if c == nil {
+		c = DefaultServerConfig()
+	}
+	return c.RateLimit.Enabled
+}
+
+func RateLimitMax() int {
+	mu.RLock()
+	defer mu.RUnlock()
+	if c == nil {
+		c = DefaultServerConfig()
+	}
+	return c.RateLimit.Max
+}
+
+func RateLimitWindowSec() int {
+	mu.RLock()
+	defer mu.RUnlock()
+	if c == nil {
+		c = DefaultServerConfig()
+	}
+	return c.RateLimit.WindowSec
+}
+
+func SetRateLimitForTest(enabled bool, max, windowSec int) {
+	mu.Lock()
+	defer mu.Unlock()
+	if c == nil {
+		c = DefaultServerConfig()
+	}
+	c.RateLimit.Enabled = enabled
+	c.RateLimit.Max = max
+	c.RateLimit.WindowSec = windowSec
 }
 
 func LoadServerConfig(path string) error {

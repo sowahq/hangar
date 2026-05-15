@@ -42,6 +42,26 @@ func GetObject(req *GetObjectRequest) (*GetObjectResponse, error) {
 	}, nil
 }
 
+func GetMetadata(bucket, key string) (*storage.Metadatas, error) {
+	return storage.GetMetadataFromBucket(bucket, key)
+}
+
+func NewChunkReaderAt(metadata *storage.Metadatas, startIdx int) *ChunkReader {
+	return &ChunkReader{
+		chunkHashes: metadata.ChunkHashes,
+		chunksPath:  config.ChunksPath(),
+		currentIdx:  startIdx,
+	}
+}
+
+func (cr *ChunkReader) SkipBytes(n int64) error {
+	if n <= 0 {
+		return nil
+	}
+	_, err := io.CopyN(io.Discard, cr, n)
+	return err
+}
+
 type ChunkReader struct {
 	chunkHashes []string
 	chunksPath  string

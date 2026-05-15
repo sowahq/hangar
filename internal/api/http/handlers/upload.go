@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"errors"
+
 	"github.com/gofiber/fiber/v2"
 	"github.com/phuslu/log"
 
@@ -28,15 +30,23 @@ func Upload(c *fiber.Ctx) error {
 	}
 
 	bodyStream := c.Request().BodyStream()
+	contentLength := int64(c.Request().Header.ContentLength())
 
 	req := &object.PutObjectRequest{
-		Bucket: bucketName,
-		Key:    key,
-		Body:   bodyStream,
+		Bucket:        bucketName,
+		Key:           key,
+		Body:          bodyStream,
+		ContentLength: contentLength,
 	}
 
 	result, err := object.PutObject(req)
 	if err != nil {
+		if errors.Is(err, object.ErrQuotaExceeded) {
+			return response.Error(c, fiber.StatusRequestEntityTooLarge, "Quota exceeded")
+		}
+		if errors.Is(err, object.ErrLengthRequired) {
+			return response.Error(c, fiber.StatusLengthRequired, "Content-Length required")
+		}
 		return response.ErrorWithLog(c, fiber.StatusInternalServerError, err.Error(), err, "Failed to upload file: "+key)
 	}
 

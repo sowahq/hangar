@@ -12,10 +12,12 @@ import (
 )
 
 type BucketInfo struct {
-	Name      string `json:"name"`
-	CreatedAt int64  `json:"created_at"`
-	UpdatedAt int64  `json:"updated_at"`
-	Public    bool   `json:"public"`
+	Name       string `json:"name"`
+	CreatedAt  int64  `json:"created_at"`
+	UpdatedAt  int64  `json:"updated_at"`
+	Public     bool   `json:"public"`
+	MaxBytes   int64  `json:"max_bytes"`
+	MaxObjects int64  `json:"max_objects"`
 }
 
 type CreateBucketRequest struct {

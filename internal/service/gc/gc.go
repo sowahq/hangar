@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/anhostfr/hangar/internal/config"
@@ -13,6 +14,23 @@ import (
 	dbutils "github.com/anhostfr/hangar/pkg/database"
 	"github.com/phuslu/log"
 )
+
+var (
+	lastTickMu sync.RWMutex
+	lastTick   time.Time
+)
+
+func LastTick() time.Time {
+	lastTickMu.RLock()
+	defer lastTickMu.RUnlock()
+	return lastTick
+}
+
+func setLastTick(t time.Time) {
+	lastTickMu.Lock()
+	lastTick = t
+	lastTickMu.Unlock()
+}
 
 type GCStats struct {
 	TotalChunks   int
@@ -128,6 +146,7 @@ func StartScheduledGC(ctx context.Context, done chan<- struct{}) {
 			log.Info().Msg("Stopping scheduled garbage collection")
 			return
 		case <-ticker.C:
+			setLastTick(time.Now())
 			log.Info().Msg("Running scheduled garbage collection")
 			stats, err := RunGarbageCollection(false)
 			if err != nil {

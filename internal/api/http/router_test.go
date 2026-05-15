@@ -73,6 +73,43 @@ func (s *testServer) createBucket(t *testing.T, name string) {
 	}
 }
 
+func (s *testServer) createToken(t *testing.T, bucket string, perms []string) string {
+	t.Helper()
+	body, _ := json.Marshal(map[string]any{"permissions": perms})
+	resp := s.do(t, http.MethodPost, "/admin/buckets/"+bucket+"/tokens", bytes.NewReader(body), "application/json")
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		b, _ := io.ReadAll(resp.Body)
+		t.Fatalf("createToken status=%d body=%s", resp.StatusCode, string(b))
+	}
+	var out struct {
+		Token string `json:"token"`
+	}
+	if err := json.Unmarshal(readBody(t, resp), &out); err != nil {
+		t.Fatalf("token unmarshal: %v", err)
+	}
+	return out.Token
+}
+
+func (s *testServer) doAuth(t *testing.T, method, path, token string, body io.Reader, contentType string) *http.Response {
+	t.Helper()
+	req, err := http.NewRequest(method, s.url+path, body)
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	if contentType != "" {
+		req.Header.Set("Content-Type", contentType)
+	}
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	resp, err := s.client.Do(req)
+	if err != nil {
+		t.Fatalf("do %s %s: %v", method, path, err)
+	}
+	return resp
+}
+
 func readBody(t *testing.T, resp *http.Response) []byte {
 	t.Helper()
 	b, err := io.ReadAll(resp.Body)
@@ -226,10 +263,11 @@ func TestListBucketsPopulated(t *testing.T) {
 func TestObjectRoundtrip(t *testing.T) {
 	s := newTestServer(t)
 	s.createBucket(t, "datas")
+	tok := s.createToken(t, "datas", []string{"read", "write", "delete"})
 
 	payload := []byte("hello hangar — content addressed storage test payload")
 
-	resp := s.do(t, http.MethodPut, "/datas/folder/file.txt", bytes.NewReader(payload), "application/octet-stream")
+	resp := s.doAuth(t, http.MethodPut, "/datas/folder/file.txt", tok, bytes.NewReader(payload), "application/octet-stream")
 	if resp.StatusCode != http.StatusOK {
 		b, _ := io.ReadAll(resp.Body)
 		t.Fatalf("PUT status=%d body=%s headers=%v", resp.StatusCode, string(b), resp.Header)
@@ -257,7 +295,7 @@ func TestObjectRoundtrip(t *testing.T) {
 		t.Errorf("etag not quoted: %s", putOut.ETag)
 	}
 
-	resp = s.do(t, http.MethodGet, "/datas/folder/file.txt", nil, "")
+	resp = s.doAuth(t, http.MethodGet, "/datas/folder/file.txt", tok, nil, "")
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("GET status=%d", resp.StatusCode)
 	}
@@ -270,8 +308,9 @@ func TestObjectRoundtrip(t *testing.T) {
 func TestObjectDownloadMissing(t *testing.T) {
 	s := newTestServer(t)
 	s.createBucket(t, "emptybucket")
+	tok := s.createToken(t, "emptybucket", []string{"read"})
 
-	resp := s.do(t, http.MethodGet, "/emptybucket/nope.txt", nil, "")
+	resp := s.doAuth(t, http.MethodGet, "/emptybucket/nope.txt", tok, nil, "")
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("status=%d want=404", resp.StatusCode)
@@ -283,34 +322,35 @@ func TestObjectUploadMissingBucket(t *testing.T) {
 
 	resp := s.do(t, http.MethodPut, "/nobucket/file.txt", bytes.NewReader([]byte("x")), "application/octet-stream")
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status=%d want=404", resp.StatusCode)
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("status=%d want=401", resp.StatusCode)
 	}
 }
 
 func TestObjectDelete(t *testing.T) {
 	s := newTestServer(t)
 	s.createBucket(t, "delbucket")
+	tok := s.createToken(t, "delbucket", []string{"read", "write", "delete"})
 
-	resp := s.do(t, http.MethodPut, "/delbucket/x.bin", bytes.NewReader([]byte("payload")), "application/octet-stream")
+	resp := s.doAuth(t, http.MethodPut, "/delbucket/x.bin", tok, bytes.NewReader([]byte("payload")), "application/octet-stream")
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("upload status=%d", resp.StatusCode)
 	}
 	resp.Body.Close()
 
-	resp = s.do(t, http.MethodDelete, "/delbucket/x.bin", nil, "")
+	resp = s.doAuth(t, http.MethodDelete, "/delbucket/x.bin", tok, nil, "")
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusNoContent {
 		t.Fatalf("delete status=%d want=204", resp.StatusCode)
 	}
 
-	resp = s.do(t, http.MethodDelete, "/delbucket/x.bin", nil, "")
+	resp = s.doAuth(t, http.MethodDelete, "/delbucket/x.bin", tok, nil, "")
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("second delete status=%d want=404", resp.StatusCode)
 	}
 
-	resp = s.do(t, http.MethodGet, "/delbucket/x.bin", nil, "")
+	resp = s.doAuth(t, http.MethodGet, "/delbucket/x.bin", tok, nil, "")
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("get after delete status=%d want=404", resp.StatusCode)
@@ -320,6 +360,7 @@ func TestObjectDelete(t *testing.T) {
 func TestObjectPathTraversalRejected(t *testing.T) {
 	s := newTestServer(t)
 	s.createBucket(t, "safebucket")
+	tok := s.createToken(t, "safebucket", []string{"write"})
 
 	req, err := http.NewRequest(http.MethodPut, s.url+"/safebucket/../etc/passwd", bytes.NewReader([]byte("x")))
 	if err != nil {
@@ -327,6 +368,7 @@ func TestObjectPathTraversalRejected(t *testing.T) {
 	}
 	req.URL.Opaque = "/safebucket/../etc/passwd"
 	req.Header.Set("Content-Type", "application/octet-stream")
+	req.Header.Set("Authorization", "Bearer "+tok)
 	resp, err := s.client.Do(req)
 	if err != nil {
 		t.Fatalf("do: %v", err)
@@ -340,9 +382,10 @@ func TestObjectPathTraversalRejected(t *testing.T) {
 func TestListObjects(t *testing.T) {
 	s := newTestServer(t)
 	s.createBucket(t, "lsbucket")
+	tok := s.createToken(t, "lsbucket", []string{"read", "write"})
 
 	for _, k := range []string{"a.txt", "b.txt", "sub/c.txt"} {
-		resp := s.do(t, http.MethodPut, "/lsbucket/"+k, bytes.NewReader([]byte("data-"+k)), "application/octet-stream")
+		resp := s.doAuth(t, http.MethodPut, "/lsbucket/"+k, tok, bytes.NewReader([]byte("data-"+k)), "application/octet-stream")
 		if resp.StatusCode != http.StatusOK {
 			b, _ := io.ReadAll(resp.Body)
 			t.Fatalf("upload %s status=%d body=%s", k, resp.StatusCode, string(b))
@@ -350,7 +393,7 @@ func TestListObjects(t *testing.T) {
 		resp.Body.Close()
 	}
 
-	resp := s.do(t, http.MethodGet, "/lsbucket", nil, "")
+	resp := s.doAuth(t, http.MethodGet, "/lsbucket", tok, nil, "")
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("list status=%d", resp.StatusCode)
 	}
@@ -367,7 +410,7 @@ func TestListObjectsBucketMissing(t *testing.T) {
 
 	resp := s.do(t, http.MethodGet, "/ghostbucket", nil, "")
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status=%d want=404", resp.StatusCode)
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("status=%d want=401", resp.StatusCode)
 	}
 }
