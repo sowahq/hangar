@@ -15,9 +15,11 @@ func adaptRequest(c *fiber.Ctx) *Request {
 	c.Request().Header.VisitAll(func(k, v []byte) {
 		h.Add(string(k), string(v))
 	})
+
 	if h.Get("Host") == "" {
 		h.Set("Host", string(c.Request().Host()))
 	}
+
 	return &Request{
 		Method:   string(c.Method()),
 		Path:     string(c.Request().URI().Path()),
@@ -34,16 +36,20 @@ func sigv4Middleware(now func() time.Time) fiber.Handler {
 		}
 		return k.SecretKey, nil
 	}
+
 	return func(c *fiber.Ctx) error {
 		req := adaptRequest(c)
+
 		ah, err := Verify(req, lookup, now())
 		if err != nil {
 			return s3AuthError(c, err)
 		}
+
 		k, err := auth.GetS3Key(ah.AccessKeyID)
 		if err != nil {
 			return writeError(c, fiber.StatusForbidden, "InvalidAccessKeyId", "unknown access key", c.Path())
 		}
+
 		c.Locals("s3_key", k)
 		c.Locals("s3_auth", ah)
 		return c.Next()

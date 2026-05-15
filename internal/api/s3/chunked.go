@@ -46,15 +46,19 @@ func (cr *chunkedReader) Read(p []byte) (int, error) {
 		cr.leftover = cr.leftover[n:]
 		return n, nil
 	}
+
 	if cr.eof {
 		return 0, io.EOF
 	}
+
 	if err := cr.readChunk(); err != nil {
 		return 0, err
 	}
+
 	if cr.eof && len(cr.leftover) == 0 {
 		return 0, io.EOF
 	}
+
 	n := copy(p, cr.leftover)
 	cr.leftover = cr.leftover[n:]
 	return n, nil
@@ -65,26 +69,20 @@ func (cr *chunkedReader) readChunk() error {
 	if err != nil {
 		return fmt.Errorf("%w: read header: %v", ErrChunkedMalformed, err)
 	}
+
 	line = strings.TrimRight(line, "\r\n")
 	if line == "" {
 		return fmt.Errorf("%w: empty header", ErrChunkedMalformed)
 	}
-	semi := strings.IndexByte(line, ';')
-	var sizeStr, sigPart string
-	if semi >= 0 {
-		sizeStr = line[:semi]
-		sigPart = line[semi+1:]
-	} else {
-		sizeStr = line
-	}
+
+	sizeStr, sigPart := splitChunkHeader(line)
+
 	size, err := strconv.ParseInt(sizeStr, 16, 64)
 	if err != nil || size < 0 {
 		return fmt.Errorf("%w: bad chunk size %q", ErrChunkedMalformed, sizeStr)
 	}
-	chunkSig := ""
-	if eq := strings.IndexByte(sigPart, '='); eq >= 0 && strings.HasPrefix(sigPart, "chunk-signature=") {
-		chunkSig = sigPart[eq+1:]
-	}
+
+	chunkSig := parseChunkSig(sigPart)
 
 	data := make([]byte, size)
 	if size > 0 {
@@ -92,6 +90,7 @@ func (cr *chunkedReader) readChunk() error {
 			return fmt.Errorf("%w: read chunk body: %v", ErrChunkedMalformed, err)
 		}
 	}
+
 	trailer := make([]byte, 2)
 	if _, err := io.ReadFull(cr.src, trailer); err != nil {
 		return fmt.Errorf("%w: read chunk crlf: %v", ErrChunkedMalformed, err)
@@ -101,16 +100,8 @@ func (cr *chunkedReader) readChunk() error {
 	}
 
 	if cr.verify && chunkSig != "" {
-		dataHash := sha256.Sum256(data)
-		sts := "AWS4-HMAC-SHA256-PAYLOAD\n" +
-			cr.amzDate + "\n" +
-			cr.scope + "\n" +
-			cr.prevSig + "\n" +
-			emptyStringSHA256 + "\n" +
-			hex.EncodeToString(dataHash[:])
-		expected := Sign(sts, cr.signingKey)
-		if subtle.ConstantTimeCompare([]byte(expected), []byte(chunkSig)) != 1 {
-			return ErrChunkedBadSignature
+		if err := cr.verifyChunkSig(data, chunkSig); err != nil {
+			return err
 		}
 		cr.prevSig = chunkSig
 	}
@@ -119,6 +110,41 @@ func (cr *chunkedReader) readChunk() error {
 		cr.eof = true
 		return nil
 	}
+
 	cr.leftover = data
+	return nil
+}
+
+func splitChunkHeader(line string) (sizeStr, sigPart string) {
+	semi := strings.IndexByte(line, ';')
+	if semi < 0 {
+		return line, ""
+	}
+	return line[:semi], line[semi+1:]
+}
+
+func parseChunkSig(sigPart string) string {
+	rest, ok := strings.CutPrefix(sigPart, "chunk-signature=")
+	if !ok {
+		return ""
+	}
+	return rest
+}
+
+func (cr *chunkedReader) verifyChunkSig(data []byte, chunkSig string) error {
+	dataHash := sha256.Sum256(data)
+
+	sts := "AWS4-HMAC-SHA256-PAYLOAD\n" +
+		cr.amzDate + "\n" +
+		cr.scope + "\n" +
+		cr.prevSig + "\n" +
+		emptyStringSHA256 + "\n" +
+		hex.EncodeToString(dataHash[:])
+
+	expected := Sign(sts, cr.signingKey)
+	if subtle.ConstantTimeCompare([]byte(expected), []byte(chunkSig)) != 1 {
+		return ErrChunkedBadSignature
+	}
+
 	return nil
 }

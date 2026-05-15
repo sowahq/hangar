@@ -25,9 +25,11 @@ const xmlContentType = "application/xml"
 func writeXML(c *fiber.Ctx, status int, v any) error {
 	c.Set(fiber.HeaderContentType, xmlContentType)
 	c.Status(status)
+
 	if _, err := c.Write([]byte(xml.Header)); err != nil {
 		return err
 	}
+
 	return xml.NewEncoder(c).Encode(v)
 }
 
@@ -52,9 +54,11 @@ func hasPerm(c *fiber.Ctx, perm string) bool {
 	if !ok || k == nil {
 		return false
 	}
+
 	if k.HasPermission(auth.PermAdmin) {
 		return true
 	}
+
 	return k.HasPermission(perm)
 }
 
@@ -70,31 +74,38 @@ func handleListBuckets(c *fiber.Ctx) error {
 	if !hasPerm(c, auth.PermRead) {
 		return writeError(c, fiber.StatusForbidden, "AccessDenied", "Access denied", "/")
 	}
+
 	res, err := bucket.ListBuckets()
 	if err != nil {
 		return writeError(c, fiber.StatusInternalServerError, "InternalError", err.Error(), "/")
 	}
+
 	out := ListAllMyBucketsResult{
 		Xmlns: xmlNamespace,
 		Owner: Owner{ID: currentKey(c), DisplayName: currentKey(c)},
 	}
+
 	for _, b := range res.Buckets {
 		if !keyAllowsBucket(c, b.Name) {
 			continue
 		}
+
 		out.Buckets = append(out.Buckets, BucketEntry{
 			Name:         b.Name,
 			CreationDate: formatS3Time(b.CreatedAt),
 		})
 	}
+
 	return writeXML(c, fiber.StatusOK, out)
 }
 
 func handleCreateBucket(c *fiber.Ctx) error {
 	name := c.Params("bucket")
+
 	if !hasPerm(c, auth.PermWrite) || !keyAllowsBucket(c, name) {
 		return writeError(c, fiber.StatusForbidden, "AccessDenied", "Access denied", "/"+name)
 	}
+
 	_, err := bucket.CreateBucket(&bucket.CreateBucketRequest{Name: name})
 	if err != nil {
 		if strings.Contains(err.Error(), "already exists") {
@@ -102,25 +113,31 @@ func handleCreateBucket(c *fiber.Ctx) error {
 		}
 		return writeError(c, fiber.StatusBadRequest, "InvalidBucketName", err.Error(), "/"+name)
 	}
+
 	c.Set("Location", "/"+name)
 	return c.SendStatus(fiber.StatusOK)
 }
 
 func handleDeleteBucket(c *fiber.Ctx) error {
 	name := c.Params("bucket")
+
 	if !hasPerm(c, auth.PermDelete) || !keyAllowsBucket(c, name) {
 		return writeError(c, fiber.StatusForbidden, "AccessDenied", "Access denied", "/"+name)
 	}
+
 	if err := bucket.DeleteBucket(&bucket.DeleteBucketRequest{Name: name}); err != nil {
 		msg := err.Error()
+
 		if strings.Contains(msg, "not found") {
 			return writeError(c, fiber.StatusNotFound, "NoSuchBucket", msg, "/"+name)
 		}
 		if strings.Contains(msg, "not empty") {
 			return writeError(c, fiber.StatusConflict, "BucketNotEmpty", msg, "/"+name)
 		}
+
 		return writeError(c, fiber.StatusInternalServerError, "InternalError", msg, "/"+name)
 	}
+
 	return c.SendStatus(fiber.StatusNoContent)
 }
 
@@ -141,12 +158,15 @@ func handleObjectPut(c *fiber.Ctx) error {
 func handleObjectPost(c *fiber.Ctx) error {
 	name := c.Params("bucket")
 	key := c.Params("*")
+
 	if c.Request().URI().QueryArgs().Has("uploads") {
 		return handleInitiateMultipart(c, name, key)
 	}
+
 	if uploadID := c.Query("uploadId"); uploadID != "" {
 		return handleCompleteMultipart(c, name, key, uploadID)
 	}
+
 	return writeError(c, fiber.StatusNotImplemented, "NotImplemented", "unsupported object POST", c.Path())
 }
 
@@ -161,13 +181,16 @@ func handleInitiateMultipart(c *fiber.Ctx, bucketName, key string) error {
 	if !hasPerm(c, auth.PermWrite) || !keyAllowsBucket(c, bucketName) {
 		return writeError(c, fiber.StatusForbidden, "AccessDenied", "Access denied", "/"+bucketName+"/"+key)
 	}
+
 	if _, err := bucket.GetBucket(bucketName); err != nil {
 		return writeError(c, fiber.StatusNotFound, "NoSuchBucket", err.Error(), "/"+bucketName)
 	}
+
 	res, err := object.InitiateMultipart(&object.InitiateMultipartRequest{Bucket: bucketName, Key: key})
 	if err != nil {
 		return writeError(c, fiber.StatusInternalServerError, "InternalError", err.Error(), "/"+bucketName+"/"+key)
 	}
+
 	return writeXML(c, fiber.StatusOK, InitiateMultipartUploadResult{
 		Xmlns:    xmlNamespace,
 		Bucket:   bucketName,
@@ -179,14 +202,18 @@ func handleInitiateMultipart(c *fiber.Ctx, bucketName, key string) error {
 func handleUploadPart(c *fiber.Ctx) error {
 	bucketName := c.Params("bucket")
 	key := c.Params("*")
+
 	if !hasPerm(c, auth.PermWrite) || !keyAllowsBucket(c, bucketName) {
 		return writeError(c, fiber.StatusForbidden, "AccessDenied", "Access denied", "/"+bucketName+"/"+key)
 	}
+
 	uploadID := c.Query("uploadId")
+
 	partNumber, err := strconv.Atoi(c.Query("partNumber"))
 	if err != nil {
 		return writeError(c, fiber.StatusBadRequest, "InvalidArgument", "invalid partNumber", "/"+bucketName+"/"+key)
 	}
+
 	partBody, _ := requestBody(c)
 	res, err := object.UploadPart(&object.UploadPartRequest{
 		Bucket:     bucketName,
@@ -202,8 +229,10 @@ func handleUploadPart(c *fiber.Ctx) error {
 		case errors.Is(err, object.ErrMultipartNotFound):
 			return writeError(c, fiber.StatusNotFound, "NoSuchUpload", err.Error(), "/"+bucketName+"/"+key)
 		}
+
 		return writeError(c, fiber.StatusInternalServerError, "InternalError", err.Error(), "/"+bucketName+"/"+key)
 	}
+
 	c.Set("ETag", res.ETag)
 	return c.SendStatus(fiber.StatusOK)
 }
@@ -212,17 +241,21 @@ func handleCompleteMultipart(c *fiber.Ctx, bucketName, key, uploadID string) err
 	if !hasPerm(c, auth.PermWrite) || !keyAllowsBucket(c, bucketName) {
 		return writeError(c, fiber.StatusForbidden, "AccessDenied", "Access denied", "/"+bucketName+"/"+key)
 	}
+
 	body := c.Body()
+
 	var parts []int
 	if len(body) > 0 {
 		var req CompleteMultipartUpload
 		if err := xml.Unmarshal(body, &req); err != nil {
 			return writeError(c, fiber.StatusBadRequest, "MalformedXML", err.Error(), "/"+bucketName+"/"+key)
 		}
+
 		for _, p := range req.Parts {
 			parts = append(parts, p.PartNumber)
 		}
 	}
+
 	res, err := object.CompleteMultipart(&object.CompleteMultipartRequest{
 		Bucket:   bucketName,
 		Key:      key,
@@ -240,11 +273,14 @@ func handleCompleteMultipart(c *fiber.Ctx, bucketName, key, uploadID string) err
 		case errors.Is(err, object.ErrCompleteQuotaFail):
 			return writeError(c, fiber.StatusRequestEntityTooLarge, "EntityTooLarge", "Quota exceeded", "/"+bucketName+"/"+key)
 		}
+
 		return writeError(c, fiber.StatusInternalServerError, "InternalError", err.Error(), "/"+bucketName+"/"+key)
 	}
+
 	if res.VersionID != "" {
 		c.Set("x-amz-version-id", res.VersionID)
 	}
+
 	return writeXML(c, fiber.StatusOK, CompleteMultipartUploadResult{
 		Xmlns:    xmlNamespace,
 		Location: "/" + bucketName + "/" + key,
@@ -257,15 +293,18 @@ func handleCompleteMultipart(c *fiber.Ctx, bucketName, key, uploadID string) err
 func handleAbortMultipart(c *fiber.Ctx, uploadID string) error {
 	bucketName := c.Params("bucket")
 	key := c.Params("*")
+
 	if !hasPerm(c, auth.PermDelete) || !keyAllowsBucket(c, bucketName) {
 		return writeError(c, fiber.StatusForbidden, "AccessDenied", "Access denied", "/"+bucketName+"/"+key)
 	}
+
 	if err := object.AbortMultipart(&object.AbortMultipartRequest{Bucket: bucketName, Key: key, UploadID: uploadID}); err != nil {
 		if errors.Is(err, object.ErrMultipartNotFound) {
 			return writeError(c, fiber.StatusNotFound, "NoSuchUpload", err.Error(), "/"+bucketName+"/"+key)
 		}
 		return writeError(c, fiber.StatusInternalServerError, "InternalError", err.Error(), "/"+bucketName+"/"+key)
 	}
+
 	return c.SendStatus(fiber.StatusNoContent)
 }
 
@@ -274,6 +313,7 @@ func handleListMultipartUploads(c *fiber.Ctx, bucketName string) error {
 	if err != nil {
 		return writeError(c, fiber.StatusInternalServerError, "InternalError", err.Error(), "/"+bucketName)
 	}
+
 	out := ListMultipartUploadsResult{Xmlns: xmlNamespace, Bucket: bucketName}
 	for _, h := range headers {
 		out.Uploads = append(out.Uploads, MultipartUploadEntry{
@@ -282,16 +322,20 @@ func handleListMultipartUploads(c *fiber.Ctx, bucketName string) error {
 			Initiated: time.UnixMilli(h.CreatedAt).UTC().Format(time.RFC3339),
 		})
 	}
+
 	return writeXML(c, fiber.StatusOK, out)
 }
 
 func handleListParts(c *fiber.Ctx) error {
 	bucketName := c.Params("bucket")
 	key := c.Params("*")
+
 	if !hasPerm(c, auth.PermRead) || !keyAllowsBucket(c, bucketName) {
 		return writeError(c, fiber.StatusForbidden, "AccessDenied", "Access denied", "/"+bucketName+"/"+key)
 	}
+
 	uploadID := c.Query("uploadId")
+
 	res, err := object.ListPartsService(bucketName, key, uploadID)
 	if err != nil {
 		if errors.Is(err, object.ErrMultipartNotFound) {
@@ -299,12 +343,14 @@ func handleListParts(c *fiber.Ctx) error {
 		}
 		return writeError(c, fiber.StatusInternalServerError, "InternalError", err.Error(), "/"+bucketName+"/"+key)
 	}
+
 	out := ListPartsResult{
 		Xmlns:    xmlNamespace,
 		Bucket:   bucketName,
 		Key:      key,
 		UploadID: uploadID,
 	}
+
 	for _, p := range res.Parts {
 		out.Parts = append(out.Parts, ListPart{
 			PartNumber:   p.PartNumber,
@@ -313,12 +359,14 @@ func handleListParts(c *fiber.Ctx) error {
 			Size:         p.Size,
 		})
 	}
+
 	return writeXML(c, fiber.StatusOK, out)
 }
 
 func requestBody(c *fiber.Ctx) (io.Reader, int64) {
 	stream := c.Request().BodyStream()
 	contentLength := int64(c.Request().Header.ContentLength())
+
 	if ah, ok := c.Locals("s3_auth").(*AuthHeader); ok && ah != nil && ah.Streaming {
 		decoded := int64(0)
 		if v := c.Get("x-amz-decoded-content-length"); v != "" {
@@ -326,8 +374,10 @@ func requestBody(c *fiber.Ctx) (io.Reader, int64) {
 				decoded = n
 			}
 		}
+
 		return newChunkedReader(stream, ah), decoded
 	}
+
 	return stream, contentLength
 }
 
@@ -335,28 +385,35 @@ func handleBucketPost(c *fiber.Ctx) error {
 	if c.Request().URI().QueryArgs().Has("delete") {
 		return handleDeleteObjects(c)
 	}
+
 	return writeError(c, fiber.StatusNotImplemented, "NotImplemented", "unsupported bucket POST", c.Path())
 }
 
 func handleDeleteObjects(c *fiber.Ctx) error {
 	name := c.Params("bucket")
+
 	if !hasPerm(c, auth.PermDelete) || !keyAllowsBucket(c, name) {
 		return writeError(c, fiber.StatusForbidden, "AccessDenied", "Access denied", "/"+name)
 	}
+
 	if _, err := bucket.GetBucket(name); err != nil {
 		return writeError(c, fiber.StatusNotFound, "NoSuchBucket", err.Error(), "/"+name)
 	}
+
 	body := c.Body()
 	if len(body) == 0 {
 		return writeError(c, fiber.StatusBadRequest, "MalformedXML", "empty delete body", "/"+name)
 	}
+
 	var req DeleteRequest
 	if err := xml.Unmarshal(body, &req); err != nil {
 		return writeError(c, fiber.StatusBadRequest, "MalformedXML", err.Error(), "/"+name)
 	}
+
 	if len(req.Objects) == 0 {
 		return writeError(c, fiber.StatusBadRequest, "MalformedXML", "no objects to delete", "/"+name)
 	}
+
 	out := DeleteResult{Xmlns: xmlNamespace}
 	for _, obj := range req.Objects {
 		res, err := object.DeleteObject(&object.DeleteObjectRequest{
@@ -372,9 +429,11 @@ func handleDeleteObjects(c *fiber.Ctx) error {
 			})
 			continue
 		}
+
 		if req.Quiet {
 			continue
 		}
+
 		entry := DeletedObject{Key: obj.Key, VersionID: obj.VersionID}
 		if res != nil {
 			if res.IsDeleteMarker {
@@ -384,30 +443,38 @@ func handleDeleteObjects(c *fiber.Ctx) error {
 				entry.VersionID = res.VersionID
 			}
 		}
+
 		out.Deleted = append(out.Deleted, entry)
 	}
+
 	return writeXML(c, fiber.StatusOK, out)
 }
 
 func handleHeadBucket(c *fiber.Ctx) error {
 	name := c.Params("bucket")
+
 	if !hasPerm(c, auth.PermRead) || !keyAllowsBucket(c, name) {
 		return c.SendStatus(fiber.StatusForbidden)
 	}
+
 	if _, err := bucket.GetBucket(name); err != nil {
 		return c.SendStatus(fiber.StatusNotFound)
 	}
+
 	return c.SendStatus(fiber.StatusOK)
 }
 
 func handleListObjectsV2(c *fiber.Ctx) error {
 	name := c.Params("bucket")
+
 	if !hasPerm(c, auth.PermRead) || !keyAllowsBucket(c, name) {
 		return writeError(c, fiber.StatusForbidden, "AccessDenied", "Access denied", "/"+name)
 	}
+
 	if _, err := bucket.GetBucket(name); err != nil {
 		return writeError(c, fiber.StatusNotFound, "NoSuchBucket", err.Error(), "/"+name)
 	}
+
 	if c.Request().URI().QueryArgs().Has("uploads") {
 		return handleListMultipartUploads(c, name)
 	}
@@ -416,6 +483,7 @@ func handleListObjectsV2(c *fiber.Ctx) error {
 	delim := c.Query("delimiter")
 	contToken := c.Query("continuation-token")
 	startAfter := c.Query("start-after")
+
 	maxKeys, _ := strconv.Atoi(c.Query("max-keys"))
 	if maxKeys <= 0 {
 		maxKeys = 1000
@@ -445,6 +513,7 @@ func handleListObjectsV2(c *fiber.Ctx) error {
 		StartAfter:            startAfter,
 		KeyCount:              res.KeyCount,
 	}
+
 	for _, o := range res.Objects {
 		out.Contents = append(out.Contents, Contents{
 			Key:          o.Key,
@@ -454,9 +523,11 @@ func handleListObjectsV2(c *fiber.Ctx) error {
 			StorageClass: "STANDARD",
 		})
 	}
+
 	for _, p := range res.CommonPrefixes {
 		out.CommonPrefixes = append(out.CommonPrefixes, CommonPrefix{Prefix: p})
 	}
+
 	return writeXML(c, fiber.StatusOK, out)
 }
 
@@ -465,6 +536,7 @@ func setObjectHeaders(c *fiber.Ctx, m *storage.Metadatas) {
 	c.Set("ETag", m.ETag)
 	c.Set("Last-Modified", time.UnixMilli(m.CreatedAt).UTC().Format(http.TimeFormat))
 	c.Set("Accept-Ranges", "bytes")
+
 	if m.VersionID != "" {
 		c.Set("x-amz-version-id", m.VersionID)
 	}
@@ -473,36 +545,46 @@ func setObjectHeaders(c *fiber.Ctx, m *storage.Metadatas) {
 func handleHeadObject(c *fiber.Ctx) error {
 	name := c.Params("bucket")
 	key := c.Params("*")
+
 	if !hasPerm(c, auth.PermRead) || !keyAllowsBucket(c, name) {
 		return c.SendStatus(fiber.StatusForbidden)
 	}
+
 	if _, err := bucket.GetBucket(name); err != nil {
 		return c.SendStatus(fiber.StatusNotFound)
 	}
+
 	m, err := object.GetMetadata(name, key)
 	if err != nil {
 		return c.SendStatus(fiber.StatusNotFound)
 	}
+
 	if m.IsDeleteMarker {
 		c.Set("x-amz-delete-marker", "true")
 		return c.SendStatus(fiber.StatusNotFound)
 	}
+
 	setObjectHeaders(c, m)
 	c.Status(fiber.StatusOK)
 	c.Response().Header.SetContentLength(int(m.Size))
+
 	return nil
 }
 
 func handleGetObject(c *fiber.Ctx) error {
 	name := c.Params("bucket")
 	key := c.Params("*")
+
 	if !hasPerm(c, auth.PermRead) || !keyAllowsBucket(c, name) {
 		return writeError(c, fiber.StatusForbidden, "AccessDenied", "Access denied", "/"+name+"/"+key)
 	}
+
 	if _, err := bucket.GetBucket(name); err != nil {
 		return writeError(c, fiber.StatusNotFound, "NoSuchBucket", err.Error(), "/"+name)
 	}
+
 	versionID := c.Query("versionId")
+
 	var m *storage.Metadatas
 	var err error
 	if versionID != "" {
@@ -513,12 +595,14 @@ func handleGetObject(c *fiber.Ctx) error {
 	if err != nil {
 		return writeError(c, fiber.StatusNotFound, "NoSuchKey", err.Error(), "/"+name+"/"+key)
 	}
+
 	if m.IsDeleteMarker {
 		c.Set("x-amz-delete-marker", "true")
 		return writeError(c, fiber.StatusNotFound, "NoSuchKey", "object not found", "/"+name+"/"+key)
 	}
 
 	setObjectHeaders(c, m)
+
 	rangeHeader := c.Get("Range")
 
 	if rangeHeader == "" {
@@ -532,18 +616,23 @@ func handleGetObject(c *fiber.Ctx) error {
 		c.Set("Content-Range", fmt.Sprintf("bytes */%d", m.Size))
 		return writeError(c, fiber.StatusRequestedRangeNotSatisfiable, "InvalidRange", parseErr.Error(), "/"+name+"/"+key)
 	}
+
 	chunkSize := int64(config.ChunkSize())
 	startIdx := int(start / chunkSize)
 	offsetInFirst := start % chunkSize
+
 	cr := object.NewChunkReaderAt(m, startIdx)
 	if err := cr.SkipBytes(offsetInFirst); err != nil {
 		_ = cr.Close()
 		return writeError(c, fiber.StatusInternalServerError, "InternalError", "seek failed", "/"+name+"/"+key)
 	}
+
 	length := end - start + 1
 	limited := io.LimitReader(cr, length)
+
 	c.Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", start, end, m.Size))
 	c.Status(fiber.StatusPartialContent)
+
 	ctx := c.Context()
 	return c.SendStream(ioutils.NewCancelableReader(ctx, readCloserWrap(limited, cr)), int(length))
 }
@@ -551,9 +640,11 @@ func handleGetObject(c *fiber.Ctx) error {
 func handlePutObject(c *fiber.Ctx) error {
 	name := c.Params("bucket")
 	key := c.Params("*")
+
 	if !hasPerm(c, auth.PermWrite) || !keyAllowsBucket(c, name) {
 		return writeError(c, fiber.StatusForbidden, "AccessDenied", "Access denied", "/"+name+"/"+key)
 	}
+
 	if _, err := bucket.GetBucket(name); err != nil {
 		return writeError(c, fiber.StatusNotFound, "NoSuchBucket", err.Error(), "/"+name)
 	}
@@ -578,12 +669,15 @@ func handlePutObject(c *fiber.Ctx) error {
 		if errors.Is(err, object.ErrLengthRequired) {
 			return writeError(c, fiber.StatusLengthRequired, "MissingContentLength", "Content-Length required", "/"+name+"/"+key)
 		}
+
 		return writeError(c, fiber.StatusInternalServerError, "InternalError", err.Error(), "/"+name+"/"+key)
 	}
+
 	c.Set("ETag", res.ETag)
 	if res.VersionID != "" {
 		c.Set("x-amz-version-id", res.VersionID)
 	}
+
 	return c.SendStatus(fiber.StatusOK)
 }
 
@@ -592,10 +686,13 @@ func handleCopyObject(c *fiber.Ctx, dstBucket, dstKey, source string) error {
 	if err != nil {
 		return writeError(c, fiber.StatusBadRequest, "InvalidArgument", err.Error(), "/"+dstBucket+"/"+dstKey)
 	}
+
 	if !keyAllowsBucket(c, srcBucket) {
 		return writeError(c, fiber.StatusForbidden, "AccessDenied", "Access denied to source bucket", "/"+srcBucket+"/"+srcKey)
 	}
+
 	directive := strings.ToUpper(c.Get("x-amz-metadata-directive"))
+
 	res, err := object.CopyObject(&object.CopyObjectRequest{
 		SrcBucket:         srcBucket,
 		SrcKey:            srcKey,
@@ -612,11 +709,14 @@ func handleCopyObject(c *fiber.Ctx, dstBucket, dstKey, source string) error {
 		if errors.Is(err, object.ErrQuotaExceeded) {
 			return writeError(c, fiber.StatusRequestEntityTooLarge, "EntityTooLarge", "Quota exceeded", "/"+dstBucket+"/"+dstKey)
 		}
+
 		return writeError(c, fiber.StatusInternalServerError, "InternalError", err.Error(), "/"+dstBucket+"/"+dstKey)
 	}
+
 	if res.VersionID != "" {
 		c.Set("x-amz-version-id", res.VersionID)
 	}
+
 	return writeXML(c, fiber.StatusOK, CopyObjectResult{
 		ETag:         res.ETag,
 		LastModified: time.UnixMilli(res.CreatedAt).UTC().Format(time.RFC3339),
@@ -624,29 +724,32 @@ func handleCopyObject(c *fiber.Ctx, dstBucket, dstKey, source string) error {
 }
 
 func parseCopySource(src string) (bucket, key, version string, err error) {
-	s := src
-	if strings.HasPrefix(s, "/") {
-		s = s[1:]
-	}
+	s := strings.TrimPrefix(src, "/")
+
 	if idx := strings.IndexByte(s, '?'); idx >= 0 {
 		q := s[idx+1:]
 		s = s[:idx]
+
 		for _, kv := range strings.Split(q, "&") {
-			if strings.HasPrefix(kv, "versionId=") {
-				version = strings.TrimPrefix(kv, "versionId=")
+			if rest, ok := strings.CutPrefix(kv, "versionId="); ok {
+				version = rest
 			}
 		}
 	}
+
 	slash := strings.IndexByte(s, '/')
 	if slash <= 0 || slash == len(s)-1 {
 		return "", "", "", fmt.Errorf("invalid copy source: %q", src)
 	}
+
 	bucket = s[:slash]
 	rawKey := s[slash+1:]
+
 	decoded, decErr := url.QueryUnescape(rawKey)
 	if decErr != nil {
 		return "", "", "", fmt.Errorf("invalid copy source key: %w", decErr)
 	}
+
 	key = decoded
 	return
 }
@@ -654,10 +757,13 @@ func parseCopySource(src string) (bucket, key, version string, err error) {
 func handleDeleteObject(c *fiber.Ctx) error {
 	name := c.Params("bucket")
 	key := c.Params("*")
+
 	if !hasPerm(c, auth.PermDelete) || !keyAllowsBucket(c, name) {
 		return writeError(c, fiber.StatusForbidden, "AccessDenied", "Access denied", "/"+name+"/"+key)
 	}
+
 	versionID := c.Query("versionId")
+
 	res, err := object.DeleteObject(&object.DeleteObjectRequest{
 		Bucket:    name,
 		Key:       key,
@@ -669,12 +775,14 @@ func handleDeleteObject(c *fiber.Ctx) error {
 		}
 		return writeError(c, fiber.StatusInternalServerError, "InternalError", err.Error(), "/"+name+"/"+key)
 	}
+
 	if res != nil && res.VersionID != "" {
 		c.Set("x-amz-version-id", res.VersionID)
 	}
 	if res != nil && res.IsDeleteMarker {
 		c.Set("x-amz-delete-marker", "true")
 	}
+
 	return c.SendStatus(fiber.StatusNoContent)
 }
 
@@ -682,33 +790,41 @@ func parseRange(h string, size int64) (int64, int64, error) {
 	if !strings.HasPrefix(h, "bytes=") {
 		return 0, 0, fmt.Errorf("invalid range")
 	}
+
 	spec := strings.TrimPrefix(h, "bytes=")
 	if strings.Contains(spec, ",") {
 		return 0, 0, fmt.Errorf("multiple ranges not supported")
 	}
+
 	dash := strings.IndexByte(spec, '-')
 	if dash < 0 {
 		return 0, 0, fmt.Errorf("invalid range")
 	}
+
 	startStr := strings.TrimSpace(spec[:dash])
 	endStr := strings.TrimSpace(spec[dash+1:])
+
 	if startStr == "" {
 		if endStr == "" {
 			return 0, 0, fmt.Errorf("invalid range")
 		}
+
 		suffix, err := strconv.ParseInt(endStr, 10, 64)
 		if err != nil || suffix <= 0 {
 			return 0, 0, fmt.Errorf("invalid range")
 		}
+
 		if suffix > size {
 			suffix = size
 		}
 		return size - suffix, size - 1, nil
 	}
+
 	start, err := strconv.ParseInt(startStr, 10, 64)
 	if err != nil || start < 0 {
 		return 0, 0, fmt.Errorf("invalid range")
 	}
+
 	var end int64
 	if endStr == "" {
 		end = size - 1
@@ -718,9 +834,11 @@ func parseRange(h string, size int64) (int64, int64, error) {
 			return 0, 0, fmt.Errorf("invalid range")
 		}
 	}
+
 	if start > end || start >= size || end >= size {
 		return 0, 0, fmt.Errorf("range not satisfiable")
 	}
+
 	return start, end, nil
 }
 
