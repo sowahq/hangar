@@ -112,7 +112,9 @@ func RunGarbageCollection(dryRun bool) (*GCStats, error) {
 	return stats, nil
 }
 
-func StartScheduledGC(ctx context.Context) {
+func StartScheduledGC(ctx context.Context, done chan<- struct{}) {
+	defer close(done)
+
 	interval := time.Duration(config.GCInterval()) * time.Hour
 
 	log.Info().Dur("interval", interval).Msg("Starting scheduled garbage collection")

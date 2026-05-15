@@ -30,3 +30,12 @@ func Init(dir string) error {
 func LocalStore() *PebbleDB {
 	return localStore
 }
+
+func Close() error {
+	if localStore == nil {
+		return nil
+	}
+	err := localStore.Close()
+	localStore = nil
+	return err
+}

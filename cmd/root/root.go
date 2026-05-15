@@ -6,15 +6,19 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/anhostfr/hangar/cmd/bucket"
-	"github.com/anhostfr/hangar/internal/config"
 	"github.com/anhostfr/hangar/internal/api/http"
+	"github.com/anhostfr/hangar/internal/config"
+	"github.com/anhostfr/hangar/internal/database"
 	gcService "github.com/anhostfr/hangar/internal/service/gc"
 	"github.com/anhostfr/hangar/internal/storage"
 	"github.com/phuslu/log"
 	"github.com/urfave/cli/v2"
 )
+
+const shutdownTimeout = 30 * time.Second
 
 func Execute() {
 	app := &cli.App{
@@ -63,24 +67,43 @@ func Execute() {
 					}
 
 					httpRouter := http.Router()
-					go httpRouter.Listen(config.ServerConfig().API.BindAddr)
+					httpErr := make(chan error, 1)
+					go func() {
+						httpErr <- httpRouter.Listen(config.ServerConfig().API.BindAddr)
+					}()
 
 					ctx, cancel := context.WithCancel(context.Background())
-					go gcService.StartScheduledGC(ctx)
+					gcDone := make(chan struct{})
+					go gcService.StartScheduledGC(ctx, gcDone)
 
 					osSignal := make(chan os.Signal, 1)
 					signal.Notify(osSignal, os.Interrupt, syscall.SIGTERM)
 
-					<-osSignal
-
-					log.Info().Msg("Shutting down Hangar...")
-
-					cancel()
-
-					if err := httpRouter.Shutdown(); err != nil {
-						log.Error().Err(err).Msg("Failed to shutdown HTTP server.")
+					select {
+					case sig := <-osSignal:
+						log.Info().Str("signal", sig.String()).Msg("Shutdown signal received")
+					case err := <-httpErr:
+						log.Error().Err(err).Msg("HTTP server exited unexpectedly")
 					}
 
+					log.Info().Dur("timeout", shutdownTimeout).Msg("Shutting down Hangar...")
+
+					if err := httpRouter.ShutdownWithTimeout(shutdownTimeout); err != nil {
+						log.Error().Err(err).Msg("HTTP server shutdown error")
+					}
+
+					cancel()
+					select {
+					case <-gcDone:
+					case <-time.After(shutdownTimeout):
+						log.Warn().Msg("GC goroutine did not exit within timeout")
+					}
+
+					if err := database.Close(); err != nil {
+						log.Error().Err(err).Msg("Failed to close database")
+					}
+
+					log.Info().Msg("Hangar stopped")
 					return nil
 				},
 			},
