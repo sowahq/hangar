@@ -112,6 +112,9 @@ func handleCreateBucket(c *fiber.Ctx) error {
 	if c.Request().URI().QueryArgs().Has("object-lock") {
 		return handlePutBucketObjectLock(c)
 	}
+	if c.Request().URI().QueryArgs().Has("versioning") {
+		return handlePutBucketVersioning(c)
+	}
 
 	name := c.Params("bucket")
 
@@ -570,6 +573,9 @@ func handleListObjectsV2(c *fiber.Ctx) error {
 	}
 	if c.Request().URI().QueryArgs().Has("versions") {
 		return handleListObjectVersions(c)
+	}
+	if c.Request().URI().QueryArgs().Has("versioning") {
+		return handleGetBucketVersioning(c)
 	}
 
 	name := c.Params("bucket")

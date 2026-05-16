@@ -35,7 +35,7 @@ Configure SDKs with `UsePathStyle: true` (Go SDK v2), `s3={"addressing_style":"p
 | `GetBucketLocation`                          | ❌     | Returns the server's configured `region` implicitly through SigV4 |
 | `GetBucketAcl` / `PutBucketAcl`              | ❌     |                                                      |
 | `GetBucketPolicy` / `PutBucketPolicy`        | ❌     |                                                      |
-| `GetBucketVersioning` / `PutBucketVersioning`| ❌     | Versioning is toggled via the native admin API       |
+| `GetBucketVersioning` / `PutBucketVersioning`| ✅     | `VersioningConfiguration` XML with `Status: Enabled` / `Suspended`     |
 | `GetBucketTagging` / `PutBucketTagging`      | ❌     |                                                      |
 | `GetBucketLogging` / `PutBucketLogging`      | ❌     |                                                      |
 | `GetBucketCors` / `PutBucketCors` / `DeleteBucketCors` | ✅ | See [CORS](/operations/cors/)                  |
