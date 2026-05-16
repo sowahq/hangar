@@ -40,4 +40,4 @@ make fmt         # format
 
 ## License
 
-Not yet specified.
+[AGPL-3.0](LICENSE)
