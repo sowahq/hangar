@@ -4,7 +4,7 @@ Self-hosted object storage in Go. Content-addressed chunks (blake3 + zstd) on Pe
 
 > Full documentation: **[hangar.mth.lc](https://hangar.mth.lc)**
 
-Pre-1.0, single-node. Distribution and erasure coding are planned but not built yet.
+v0.9.x, single-node. Distribution and erasure coding are planned but not built yet.
 
 ## Quickstart
 

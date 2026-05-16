@@ -49,4 +49,4 @@ The split exists because the native API was first and is convenient for CLI / sc
 
 ## Maturity
 
-Hangar is pre-1.0. The on-disk format may evolve. Backups are supported (`hangar backup create` + `restore`) but cross-version migrations are not guaranteed before 1.0 is tagged. The HTTP/S3 wire surface is stable for what is documented; anything not documented is not a stable contract.
+Current series: **v0.9.x** — feature-complete first cut, pre-1.0. The on-disk format may evolve. Backups are supported (`hangar backup create` + `restore`) but cross-version migrations are not guaranteed before 1.0 is tagged. The HTTP/S3 wire surface is stable for what is documented; anything not documented is not a stable contract. v1.0.0 lands once a real production deployment has lived on it long enough to commit to SemVer stability.
