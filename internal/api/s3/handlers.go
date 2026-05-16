@@ -564,6 +564,9 @@ func handleListObjectsV2(c *fiber.Ctx) error {
 	if c.Request().URI().QueryArgs().Has("object-lock") {
 		return handleGetBucketObjectLock(c)
 	}
+	if c.Request().URI().QueryArgs().Has("versions") {
+		return handleListObjectVersions(c)
+	}
 
 	name := c.Params("bucket")
 

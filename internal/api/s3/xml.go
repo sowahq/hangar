@@ -142,6 +142,48 @@ type CopyObjectResult struct {
 	LastModified string   `xml:"LastModified"`
 }
 
+type ObjectVersionXML struct {
+	Key          string   `xml:"Key"`
+	VersionID    string   `xml:"VersionId"`
+	IsLatest     bool     `xml:"IsLatest"`
+	LastModified string   `xml:"LastModified"`
+	ETag         string   `xml:"ETag"`
+	Size         int64    `xml:"Size"`
+	StorageClass string   `xml:"StorageClass"`
+	Owner        Owner    `xml:"Owner"`
+}
+
+type DeleteMarkerXML struct {
+	Key          string   `xml:"Key"`
+	VersionID    string   `xml:"VersionId"`
+	IsLatest     bool     `xml:"IsLatest"`
+	LastModified string   `xml:"LastModified"`
+	Owner        Owner    `xml:"Owner"`
+}
+
+type ListVersionsResult struct {
+	XMLName             xml.Name           `xml:"ListVersionsResult"`
+	Xmlns               string             `xml:"xmlns,attr"`
+	Name                string             `xml:"Name"`
+	Prefix              string             `xml:"Prefix"`
+	KeyMarker           string             `xml:"KeyMarker"`
+	VersionIDMarker     string             `xml:"VersionIdMarker"`
+	NextKeyMarker       string             `xml:"NextKeyMarker,omitempty"`
+	NextVersionIDMarker string             `xml:"NextVersionIdMarker,omitempty"`
+	MaxKeys             int                `xml:"MaxKeys"`
+	Delimiter           string             `xml:"Delimiter,omitempty"`
+	IsTruncated         bool               `xml:"IsTruncated"`
+	Versions            []ObjectVersionXML `xml:"Version"`
+	DeleteMarkers       []DeleteMarkerXML  `xml:"DeleteMarker"`
+	CommonPrefixes      []CommonPrefix     `xml:"CommonPrefixes"`
+}
+
+type VersioningConfigurationXML struct {
+	XMLName xml.Name `xml:"VersioningConfiguration"`
+	Xmlns   string   `xml:"xmlns,attr,omitempty"`
+	Status  string   `xml:"Status,omitempty"`
+}
+
 type ErrorXML struct {
 	XMLName   xml.Name `xml:"Error"`
 	Code      string   `xml:"Code"`

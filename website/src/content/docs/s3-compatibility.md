@@ -59,7 +59,7 @@ Configure SDKs with `UsePathStyle: true` (Go SDK v2), `s3={"addressing_style":"p
 | `CopyObject`                             | ✅     | Chunk-ref reuse when both sides unencrypted; full re-encrypt across SSE keys |
 | `ListObjectsV2`                          | ✅     | `prefix`, `delimiter`, `start-after`, `continuation-token`, `max-keys` |
 | `ListObjects` (v1)                       | ❌     | Use V2                                                      |
-| `ListObjectVersions`                     | ❌     | Native API exposes versions on `GET /:bucket/<key>?versions` |
+| `ListObjectVersions`                     | ✅     | `GET /:bucket?versions` with `prefix`, `delimiter`, `key-marker`, `version-id-marker`, `max-keys` |
 | `GetObjectAcl` / `PutObjectAcl`          | ❌     |                                                             |
 | `GetObjectTagging` / `PutObjectTagging`  | ❌     |                                                             |
 | `GetObjectAttributes`                    | ❌     | Use `HeadObject`                                            |
