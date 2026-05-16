@@ -39,3 +39,8 @@ hangar
 CLAUDE.md
 .claude/
 docs/
+bin/s3interop
+
+# MkDocs build output
+site/
+.cache/
