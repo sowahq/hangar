@@ -74,6 +74,8 @@ func Commands() []*cli.Command {
 			},
 			Action: deleteBucket,
 		},
+		encryptionCommand(),
+		objectLockCommand(),
 	}
 }
 
