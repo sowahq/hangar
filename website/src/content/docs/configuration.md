@@ -37,6 +37,11 @@ min_free_bytes  = 0         # absolute minimum free bytes on the data filesystem
 min_free_pct    = 0         # minimum free percentage of the data filesystem
 node_max_bytes  = 0         # cap on bytes used by this node's data directory
 
+# fsync every metadata write to Pebble. Default true (durable).
+# Set false to trade durability for throughput — recent writes may be lost
+# on power loss / hard kill. Safe on a UPS-backed host or for non-critical data.
+sync_writes = true
+
 [garbage_collection]
 # How often the GC sweeps unreferenced chunks (refcount == 0).
 interval_hours = 24

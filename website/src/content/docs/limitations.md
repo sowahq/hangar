@@ -50,7 +50,7 @@ See [S3 compatibility](/s3-compatibility/) for the full matrix. The main gaps:
 
 ## Performance caveats
 
-- Writes use `pebble.Sync` for metadata. This is durable but expensive on spinning disks. Hangar is built for SSDs.
+- Metadata writes default to `pebble.Sync` (one fsync per write) — durable but slow on spinning disks. Hangar is built for SSDs. Set `[storage] sync_writes = false` to use `pebble.NoSync` and trade durability for throughput; recent writes may be lost on power loss or hard kill.
 - The chunker pre-allocates a chunk-sized buffer per upload. Memory ≈ `chunk_size` × concurrent uploads. The default `chunk_size = 4 MiB` is intentionally modest.
 - `ListObjectsV2` paginates via Pebble's iterator. Listing a bucket with millions of objects is bounded by the page size but the underlying scan is linear in items returned.
 

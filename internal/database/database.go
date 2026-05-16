@@ -10,7 +10,7 @@ var (
 	dataDir    string
 )
 
-func Init(dir string) error {
+func Init(dir string, syncWrites bool) error {
 	dataDir = dir
 	path := filepath.Join(dataDir, "store")
 
@@ -18,7 +18,7 @@ func Init(dir string) error {
 		return err
 	}
 
-	db, err := NewPebbleDB(path)
+	db, err := NewPebbleDBWithSync(path, syncWrites)
 	if err != nil {
 		return err
 	}

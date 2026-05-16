@@ -28,6 +28,8 @@ type serverConfig struct {
 		MinFreeBytes int64 `toml:"min_free_bytes" validate:"min=0"`
 		MinFreePct   int   `toml:"min_free_pct" validate:"min=0,max=100"`
 		NodeMaxBytes int64 `toml:"node_max_bytes" validate:"min=0"`
+
+		SyncWrites *bool `toml:"sync_writes"`
 	} `toml:"storage"`
 
 	GarbageCollection struct {
@@ -117,6 +119,18 @@ func DefaultServerConfig() *serverConfig {
 	config.Lifecycle.IntervalHours = 24
 
 	return config
+}
+
+func SyncWrites() bool {
+	mu.RLock()
+	defer mu.RUnlock()
+	if c == nil {
+		c = DefaultServerConfig()
+	}
+	if c.Storage.SyncWrites == nil {
+		return true
+	}
+	return *c.Storage.SyncWrites
 }
 
 func LifecycleEnabled() bool {
@@ -325,7 +339,12 @@ func LoadServerConfig(path string) error {
 		return err
 	}
 
-	if err := database.Init(c.DataDirectory); err != nil {
+	syncWrites := true
+	if c.Storage.SyncWrites != nil {
+		syncWrites = *c.Storage.SyncWrites
+	}
+
+	if err := database.Init(c.DataDirectory, syncWrites); err != nil {
 		return err
 	}
 

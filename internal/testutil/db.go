@@ -11,7 +11,7 @@ import (
 
 func SetupDB(t *testing.T) {
 	t.Helper()
-	if err := database.Init(t.TempDir()); err != nil {
+	if err := database.Init(t.TempDir(), true); err != nil {
 		t.Fatalf("database.Init: %v", err)
 	}
 	t.Cleanup(func() {

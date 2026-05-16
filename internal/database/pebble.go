@@ -12,17 +12,26 @@ func (nopLogger) Fatalf(format string, args ...interface{}) {}
 func (nopLogger) Infof(format string, args ...interface{})  {}
 
 type PebbleDB struct {
-	db *pebble.DB
+	db        *pebble.DB
+	writeOpts *pebble.WriteOptions
 }
 
 func NewPebbleDB(path string) (*PebbleDB, error) {
+	return NewPebbleDBWithSync(path, true)
+}
+
+func NewPebbleDBWithSync(path string, syncWrites bool) (*PebbleDB, error) {
 	db, err := pebble.Open(path, &pebble.Options{
 		Logger: nopLogger{},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to open pebble db: %w", err)
 	}
-	return &PebbleDB{db: db}, nil
+	opts := pebble.Sync
+	if !syncWrites {
+		opts = pebble.NoSync
+	}
+	return &PebbleDB{db: db, writeOpts: opts}, nil
 }
 
 func (p *PebbleDB) Get(key []byte) ([]byte, error) {
@@ -38,11 +47,11 @@ func (p *PebbleDB) Get(key []byte) ([]byte, error) {
 }
 
 func (p *PebbleDB) Put(key, value []byte) error {
-	return p.db.Set(key, value, pebble.Sync)
+	return p.db.Set(key, value, p.writeOpts)
 }
 
 func (p *PebbleDB) Delete(key []byte) error {
-	return p.db.Delete(key, pebble.Sync)
+	return p.db.Delete(key, p.writeOpts)
 }
 
 func (p *PebbleDB) Exist(key []byte) (bool, error) {
@@ -71,7 +80,7 @@ func (p *PebbleDB) DeleteBatch(keys [][]byte) error {
 			return err
 		}
 	}
-	return batch.Commit(pebble.Sync)
+	return batch.Commit(p.writeOpts)
 }
 
 func (p *PebbleDB) Close() error {

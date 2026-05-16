@@ -3,7 +3,47 @@ package database
 import (
 	"bytes"
 	"testing"
+
+	"github.com/cockroachdb/pebble"
 )
+
+func TestNewPebbleDBWithSync(t *testing.T) {
+	tests := []struct {
+		name     string
+		sync     bool
+		wantOpts *pebble.WriteOptions
+	}{
+		{"sync writes use pebble.Sync", true, pebble.Sync},
+		{"async writes use pebble.NoSync", false, pebble.NoSync},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			db, err := NewPebbleDBWithSync(t.TempDir(), tc.sync)
+			if err != nil {
+				t.Fatalf("NewPebbleDBWithSync: %v", err)
+			}
+			t.Cleanup(func() { _ = db.Close() })
+
+			if db.writeOpts != tc.wantOpts {
+				t.Errorf("writeOpts: got=%v want=%v", db.writeOpts, tc.wantOpts)
+			}
+
+			if err := db.Put([]byte("k"), []byte("v")); err != nil {
+				t.Fatalf("Put: %v", err)
+			}
+			got, err := db.Get([]byte("k"))
+			if err != nil {
+				t.Fatalf("Get: %v", err)
+			}
+			if !bytes.Equal(got, []byte("v")) {
+				t.Errorf("Get: got=%q want=%q", got, "v")
+			}
+			if err := db.Delete([]byte("k")); err != nil {
+				t.Fatalf("Delete: %v", err)
+			}
+		})
+	}
+}
 
 func TestKeyUpperBound(t *testing.T) {
 	tests := []struct {
