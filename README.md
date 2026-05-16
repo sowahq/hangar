@@ -13,6 +13,17 @@ Self-hosted object storage in Go. Content-addressed chunks (blake3) + zstd compr
 - HTTP Range (RFC 7233), streaming I/O, graceful shutdown
 - Background GC of unreferenced chunks, deep healthcheck, optional rate limiting
 
+## Limitations
+
+- **Single-node**: no replication, no distribution, no erasure coding (yet).
+- **No SSE-KMS** and no key rotation; SSE breaks cross-object dedup (intra-object only).
+- **No bucket default encryption** (`PUT /:bucket?encryption`).
+- **CopyObject across different SSE keys** requires full decrypt + re-encrypt (inherent to AEAD: changing key or nonce produces different ciphertext, so chunks cannot be reused). Same-key copies stay cheap.
+- **No Prometheus metrics** yet (planned).
+- **Pre-1.0**: API surface and on-disk format may change.
+
+Full status on [hangar.mth.lc](https://hangar.mth.lc).
+
 ## Quickstart
 
 ```sh
@@ -20,7 +31,7 @@ make build
 ./bin/hangar server -c config.toml
 ```
 
-A default `config.toml` is generated on first start. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for design and [docs/ROADMAP.md](docs/ROADMAP.md) for status.
+A default `config.toml` is generated on first start. See [hangar.mth.lc](https://hangar.mth.lc) for design and status.
 
 ### Docker
 
