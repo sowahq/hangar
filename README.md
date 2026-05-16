@@ -15,11 +15,24 @@ make build
 
 A default `config.toml` is generated on first start. The HTTP API binds to `:8080`; the S3 API is disabled by default — enable it in `[s3]`.
 
+### Docker
+
+Pre-built multi-arch image on GHCR:
+
 ```sh
-# Docker
+docker run --rm -p 8080:8080 -v $(pwd)/data:/data ghcr.io/sowahq/hangar:latest
+```
+
+Or build locally:
+
+```sh
 make docker
 docker run --rm -p 8080:8080 -v $(pwd)/data:/data hangar:dev
 ```
+
+### Pre-built binaries
+
+Linux / macOS / Windows binaries for tagged releases: [github.com/sowahq/hangar/releases](https://github.com/sowahq/hangar/releases).
 
 ## Development
 

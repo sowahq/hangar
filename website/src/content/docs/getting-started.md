@@ -62,7 +62,21 @@ curl -H "Authorization: Bearer $TOKEN" \
      http://localhost:8080/photos/img.jpg
 ```
 
+## Pre-built binaries
+
+Linux / macOS / Windows tarballs (+ SHA256SUMS) for every tagged release: [github.com/sowahq/hangar/releases](https://github.com/sowahq/hangar/releases).
+
 ## Docker
+
+Pre-built multi-arch image (`linux/amd64`, `linux/arm64`) on GHCR:
+
+```sh
+docker run --rm -p 8080:8080 -v $(pwd)/data:/data ghcr.io/sowahq/hangar:latest
+# or pin to a tag
+docker run --rm -p 8080:8080 -v $(pwd)/data:/data ghcr.io/sowahq/hangar:v0.9.0
+```
+
+Or build locally:
 
 ```sh
 make docker
