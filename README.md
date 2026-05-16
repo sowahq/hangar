@@ -2,7 +2,7 @@
 
 Self-hosted object storage in Go. Content-addressed chunks (blake3) + zstd compression on Pebble, served via Fiber. Native HTTP API and S3-compatible API.
 
-> Full documentation: **[hangar docs site](#)** _(coming soon, GitHub Pages)_
+> Full documentation: **[hangar.mth.lc](https://hangar.mth.lc)**
 
 ## Features
 
