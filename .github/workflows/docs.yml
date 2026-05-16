@@ -5,36 +5,44 @@ on:
     branches: [main]
     paths:
       - "website/**"
-      - "mkdocs.yml"
       - ".github/workflows/docs.yml"
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
+  pages: write
+  id-token: write
 
 concurrency:
   group: docs
   cancel-in-progress: true
 
 jobs:
-  build-and-deploy:
+  build:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: website
     steps:
       - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
         with:
-          fetch-depth: 0
+          bun-version: latest
 
-      - uses: actions/setup-python@v5
+      - run: bun install --frozen-lockfile
+      - run: bun run build
+
+      - uses: actions/upload-pages-artifact@v3
         with:
-          python-version: "3.12"
-          cache: pip
-          cache-dependency-path: website/requirements.txt
+          path: website/dist
 
-      - name: Install MkDocs Material
-        run: pip install -r website/requirements.txt
-
-      - name: Build site
-        run: mkdocs build --strict
-
-      - name: Deploy to gh-pages
-        run: mkdocs gh-deploy --force --no-history
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
