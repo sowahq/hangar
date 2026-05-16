@@ -19,6 +19,7 @@ type BucketInfo struct {
 	MaxBytes          int64  `json:"max_bytes"`
 	MaxObjects        int64  `json:"max_objects"`
 	VersioningEnabled bool   `json:"versioning_enabled,omitempty"`
+	ObjectLockEnabled bool   `json:"object_lock_enabled,omitempty"`
 }
 
 type CreateBucketRequest struct {
@@ -246,6 +247,7 @@ func DeleteBucket(req *DeleteBucketRequest) error {
 	_ = DeleteCORS(req.Name)
 	_ = DeleteLifecycle(req.Name)
 	_ = DeleteEncryption(req.Name)
+	_ = DeleteObjectLockConfig(req.Name)
 
 	return db.Delete(bucketKey)
 }

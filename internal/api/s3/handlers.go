@@ -109,6 +109,9 @@ func handleCreateBucket(c *fiber.Ctx) error {
 	if c.Request().URI().QueryArgs().Has("encryption") {
 		return handlePutBucketEncryption(c)
 	}
+	if c.Request().URI().QueryArgs().Has("object-lock") {
+		return handlePutBucketObjectLock(c)
+	}
 
 	name := c.Params("bucket")
 
@@ -539,6 +542,9 @@ func handleListObjectsV2(c *fiber.Ctx) error {
 	}
 	if c.Request().URI().QueryArgs().Has("encryption") {
 		return handleGetBucketEncryption(c)
+	}
+	if c.Request().URI().QueryArgs().Has("object-lock") {
+		return handleGetBucketObjectLock(c)
 	}
 
 	name := c.Params("bucket")
