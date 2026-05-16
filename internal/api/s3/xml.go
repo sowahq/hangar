@@ -136,6 +136,13 @@ type ListMultipartUploadsResult struct {
 	Uploads []MultipartUploadEntry `xml:"Upload"`
 }
 
+type CopyPartResult struct {
+	XMLName      xml.Name `xml:"CopyPartResult"`
+	Xmlns        string   `xml:"xmlns,attr,omitempty"`
+	ETag         string   `xml:"ETag"`
+	LastModified string   `xml:"LastModified"`
+}
+
 type CopyObjectResult struct {
 	XMLName      xml.Name `xml:"CopyObjectResult"`
 	ETag         string   `xml:"ETag"`

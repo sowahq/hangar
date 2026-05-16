@@ -271,6 +271,10 @@ func handleUploadPart(c *fiber.Ctx) error {
 		return writeError(c, fiber.StatusBadRequest, "InvalidArgument", "invalid partNumber", "/"+bucketName+"/"+key)
 	}
 
+	if src := c.Get("x-amz-copy-source"); src != "" {
+		return handleUploadPartCopy(c, bucketName, key, uploadID, partNumber, src)
+	}
+
 	sseReq, sseErr := parseSSERequest(c)
 	if sseErr != nil {
 		if ok, r := sseErrorResponse(c, sseErr, "/"+bucketName+"/"+key); ok {

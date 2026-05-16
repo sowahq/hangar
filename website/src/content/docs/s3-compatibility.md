@@ -74,7 +74,7 @@ Configure SDKs with `UsePathStyle: true` (Go SDK v2), `s3={"addressing_style":"p
 |---------------------------------|--------|---------------------------------------------------------------|
 | `CreateMultipartUpload`         | ✅     | SSE config captured at init, inherited by every part          |
 | `UploadPart`                    | ✅     | SSE-C requires the customer key headers on every part         |
-| `UploadPartCopy`                | ❌     |                                                               |
+| `UploadPartCopy`                | ✅     | `x-amz-copy-source` with optional `x-amz-copy-source-range`. Re-encrypts when destination upload has SSE configured |
 | `CompleteMultipartUpload`       | ✅     | Writes a single `Metadatas` entry; for SSE objects, part boundaries are recorded so the reader can derive per-chunk nonces |
 | `AbortMultipartUpload`          | ✅     | Lifecycle `AbortIncompleteMultipartUpload` triggers this automatically |
 | `ListMultipartUploads`          | ✅     |                                                               |
