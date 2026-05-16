@@ -248,6 +248,7 @@ func DeleteBucket(req *DeleteBucketRequest) error {
 	_ = DeleteLifecycle(req.Name)
 	_ = DeleteEncryption(req.Name)
 	_ = DeleteObjectLockConfig(req.Name)
+	_ = DeleteBucketTagging(req.Name)
 
 	return db.Delete(bucketKey)
 }

@@ -115,6 +115,9 @@ func handleCreateBucket(c *fiber.Ctx) error {
 	if c.Request().URI().QueryArgs().Has("versioning") {
 		return handlePutBucketVersioning(c)
 	}
+	if c.Request().URI().QueryArgs().Has("tagging") {
+		return handlePutBucketTagging(c)
+	}
 
 	name := c.Params("bucket")
 
@@ -143,6 +146,9 @@ func handleDeleteBucket(c *fiber.Ctx) error {
 	}
 	if c.Request().URI().QueryArgs().Has("encryption") {
 		return handleDeleteBucketEncryption(c)
+	}
+	if c.Request().URI().QueryArgs().Has("tagging") {
+		return handleDeleteBucketTagging(c)
 	}
 
 	name := c.Params("bucket")
@@ -583,6 +589,9 @@ func handleListObjectsV2(c *fiber.Ctx) error {
 	}
 	if c.Request().URI().QueryArgs().Has("versioning") {
 		return handleGetBucketVersioning(c)
+	}
+	if c.Request().URI().QueryArgs().Has("tagging") {
+		return handleGetBucketTagging(c)
 	}
 
 	name := c.Params("bucket")

@@ -36,7 +36,7 @@ Configure SDKs with `UsePathStyle: true` (Go SDK v2), `s3={"addressing_style":"p
 | `GetBucketAcl` / `PutBucketAcl`              | ❌     |                                                      |
 | `GetBucketPolicy` / `PutBucketPolicy`        | ❌     |                                                      |
 | `GetBucketVersioning` / `PutBucketVersioning`| ✅     | `VersioningConfiguration` XML with `Status: Enabled` / `Suspended`     |
-| `GetBucketTagging` / `PutBucketTagging`      | ❌     |                                                      |
+| `GetBucketTagging` / `PutBucketTagging` / `DeleteBucketTagging` | ✅ | Max 10 tags. Key ≤ 128, Value ≤ 256                                                  |
 | `GetBucketLogging` / `PutBucketLogging`      | ❌     |                                                      |
 | `GetBucketCors` / `PutBucketCors` / `DeleteBucketCors` | ✅ | See [CORS](/operations/cors/)                  |
 | `GetBucketLifecycleConfiguration` / `PutBucketLifecycleConfiguration` / `DeleteBucketLifecycle` | ✅ | Expiration + AbortIncompleteMultipartUpload. See [Lifecycle](/operations/lifecycle/) |
