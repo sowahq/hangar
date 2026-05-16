@@ -22,8 +22,12 @@ type serverConfig struct {
 	} `toml:"api"`
 
 	Storage struct {
-		ChunkSize         int  `toml:"chunk_size" validate:"min=1024"` // Min 1KB
+		ChunkSize         int  `toml:"chunk_size" validate:"min=1024"`
 		EnableCompression bool `toml:"enable_compression"`
+
+		MinFreeBytes int64 `toml:"min_free_bytes" validate:"min=0"`
+		MinFreePct   int   `toml:"min_free_pct" validate:"min=0,max=100"`
+		NodeMaxBytes int64 `toml:"node_max_bytes" validate:"min=0"`
 	} `toml:"storage"`
 
 	GarbageCollection struct {
@@ -256,6 +260,52 @@ func ChunkSize() int {
 	}
 
 	return c.Storage.ChunkSize
+}
+
+func MinFreeBytes() int64 {
+	mu.RLock()
+	defer mu.RUnlock()
+
+	if c == nil {
+		c = DefaultServerConfig()
+	}
+
+	return c.Storage.MinFreeBytes
+}
+
+func MinFreePct() int {
+	mu.RLock()
+	defer mu.RUnlock()
+
+	if c == nil {
+		c = DefaultServerConfig()
+	}
+
+	return c.Storage.MinFreePct
+}
+
+func NodeMaxBytes() int64 {
+	mu.RLock()
+	defer mu.RUnlock()
+
+	if c == nil {
+		c = DefaultServerConfig()
+	}
+
+	return c.Storage.NodeMaxBytes
+}
+
+func SetDiskSafeguardForTest(minFreeBytes int64, minFreePct int, nodeMaxBytes int64) {
+	mu.Lock()
+	defer mu.Unlock()
+
+	if c == nil {
+		c = DefaultServerConfig()
+	}
+
+	c.Storage.MinFreeBytes = minFreeBytes
+	c.Storage.MinFreePct = minFreePct
+	c.Storage.NodeMaxBytes = nodeMaxBytes
 }
 
 func CompressionEnabled() bool {

@@ -11,6 +11,7 @@ import (
 
 	"github.com/anhostfr/hangar/internal/config"
 	"github.com/anhostfr/hangar/internal/service/bucket"
+	"github.com/anhostfr/hangar/internal/service/diskspace"
 	"github.com/anhostfr/hangar/internal/storage"
 	"github.com/anhostfr/hangar/pkg/pathutil"
 	"github.com/zeebo/blake3"
@@ -102,6 +103,11 @@ func UploadPart(req *UploadPartRequest) (*UploadPartResponse, error) {
 	if req.PartNumber < MinPartNumber || req.PartNumber > MaxPartNumber {
 		return nil, ErrInvalidPartNumber
 	}
+
+	if err := diskspace.Check(0); err != nil {
+		return nil, ErrInsufficientStorage
+	}
+
 	header, err := storage.GetMultipartHeader(req.Bucket, req.Key, req.UploadID)
 	if err != nil {
 		if errors.Is(err, storage.ErrMultipartNotFound) {

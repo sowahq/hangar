@@ -6,6 +6,7 @@ import (
 
 	"github.com/anhostfr/hangar/internal/config"
 	"github.com/anhostfr/hangar/internal/service/bucket"
+	"github.com/anhostfr/hangar/internal/service/diskspace"
 	"github.com/anhostfr/hangar/internal/storage"
 )
 
@@ -31,6 +32,15 @@ func CopyObject(req *CopyObjectRequest) (*PutObjectResponse, error) {
 	src, err := loadCopySource(req)
 	if err != nil {
 		return nil, err
+	}
+
+	srcEncryptedHint := src.SSEAlgorithm != SSEAlgoNone
+	dstWantsEncryptionHint := req.DstSSE != nil && req.DstSSE.Algorithm != SSEAlgoNone
+
+	if srcEncryptedHint || dstWantsEncryptionHint {
+		if dsErr := diskspace.Check(src.Size); dsErr != nil {
+			return nil, ErrInsufficientStorage
+		}
 	}
 
 	info, _ := bucket.GetBucket(req.DstBucket)

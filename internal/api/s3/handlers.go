@@ -257,6 +257,8 @@ func handleUploadPart(c *fiber.Ctx) error {
 			return writeError(c, fiber.StatusBadRequest, "InvalidArgument", err.Error(), "/"+bucketName+"/"+key)
 		case errors.Is(err, object.ErrMultipartNotFound):
 			return writeError(c, fiber.StatusNotFound, "NoSuchUpload", err.Error(), "/"+bucketName+"/"+key)
+		case errors.Is(err, object.ErrInsufficientStorage):
+			return writeError(c, fiber.StatusInsufficientStorage, "InsufficientStorage", "Insufficient storage on node", "/"+bucketName+"/"+key)
 		}
 		if ok, r := sseErrorResponse(c, err, "/"+bucketName+"/"+key); ok {
 			return r
@@ -743,6 +745,9 @@ func handlePutObject(c *fiber.Ctx) error {
 		if errors.Is(err, object.ErrQuotaExceeded) {
 			return writeError(c, fiber.StatusRequestEntityTooLarge, "EntityTooLarge", "Quota exceeded", "/"+name+"/"+key)
 		}
+		if errors.Is(err, object.ErrInsufficientStorage) {
+			return writeError(c, fiber.StatusInsufficientStorage, "InsufficientStorage", "Insufficient storage on node", "/"+name+"/"+key)
+		}
 		if errors.Is(err, object.ErrLengthRequired) {
 			return writeError(c, fiber.StatusLengthRequired, "MissingContentLength", "Content-Length required", "/"+name+"/"+key)
 		}
@@ -807,6 +812,9 @@ func handleCopyObject(c *fiber.Ctx, dstBucket, dstKey, source string) error {
 		}
 		if errors.Is(err, object.ErrQuotaExceeded) {
 			return writeError(c, fiber.StatusRequestEntityTooLarge, "EntityTooLarge", "Quota exceeded", "/"+dstBucket+"/"+dstKey)
+		}
+		if errors.Is(err, object.ErrInsufficientStorage) {
+			return writeError(c, fiber.StatusInsufficientStorage, "InsufficientStorage", "Insufficient storage on node", "/"+dstBucket+"/"+dstKey)
 		}
 		if ok, r := sseErrorResponse(c, err, "/"+dstBucket+"/"+dstKey); ok {
 			return r

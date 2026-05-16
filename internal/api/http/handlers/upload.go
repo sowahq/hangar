@@ -48,6 +48,9 @@ func Upload(c *fiber.Ctx) error {
 		if errors.Is(err, object.ErrQuotaExceeded) {
 			return response.Error(c, fiber.StatusRequestEntityTooLarge, "Quota exceeded")
 		}
+		if errors.Is(err, object.ErrInsufficientStorage) {
+			return response.Error(c, fiber.StatusInsufficientStorage, "Insufficient storage on node")
+		}
 		if errors.Is(err, object.ErrLengthRequired) {
 			return response.Error(c, fiber.StatusLengthRequired, "Content-Length required")
 		}

@@ -12,13 +12,15 @@ import (
 
 	"github.com/anhostfr/hangar/internal/config"
 	"github.com/anhostfr/hangar/internal/service/bucket"
+	"github.com/anhostfr/hangar/internal/service/diskspace"
 	"github.com/anhostfr/hangar/internal/storage"
 	"github.com/anhostfr/hangar/pkg/pathutil"
 )
 
 var (
-	ErrQuotaExceeded  = errors.New("quota exceeded")
-	ErrLengthRequired = errors.New("content-length required when quota enabled")
+	ErrQuotaExceeded       = errors.New("quota exceeded")
+	ErrLengthRequired      = errors.New("content-length required when quota enabled")
+	ErrInsufficientStorage = errors.New("insufficient storage")
 )
 
 type PutObjectRequest struct {
@@ -56,6 +58,10 @@ func nowMillis() int64 {
 }
 
 func PutObject(req *PutObjectRequest) (*PutObjectResponse, error) {
+	if err := diskspace.Check(req.ContentLength); err != nil {
+		return nil, ErrInsufficientStorage
+	}
+
 	info, _ := bucket.GetBucket(req.Bucket)
 	quotaEnabled := info != nil && (info.MaxBytes > 0 || info.MaxObjects > 0)
 	if quotaEnabled {
