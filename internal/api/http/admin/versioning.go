@@ -25,8 +25,12 @@ func UpdateVersioning(c *fiber.Ctx) error {
 	}
 
 	info, err := bucketService.UpdateVersioning(bucketName, req.Enabled)
+
+	recordAdmin(c, "bucket.versioning", "bucket", bucketName, err)
+
 	if err != nil {
 		return response.Error(c, fiber.StatusBadRequest, err.Error())
 	}
+
 	return response.JSON(c, info)
 }

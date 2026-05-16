@@ -61,6 +61,7 @@ func Router() *fiber.App {
 	adminGroup.Post("/s3keys", admin.CreateS3Key)
 	adminGroup.Get("/s3keys", admin.ListS3Keys)
 	adminGroup.Delete("/s3keys/:id", admin.DeleteS3Key)
+	adminGroup.Get("/audit", admin.TailAudit)
 
 	router.Get("/:bucket", middleware.RequireAuth(auth.PermRead), handlers.ListObjects)
 	router.Get("/:bucket/*", middleware.RequireAuth(auth.PermRead), handlers.Download)

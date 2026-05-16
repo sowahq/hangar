@@ -5,7 +5,6 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
-// ListBuckets handles GET /admin/buckets
 func ListBuckets(c *fiber.Ctx) error {
 	response, err := bucketService.ListBuckets()
 	if err != nil {
@@ -17,16 +16,18 @@ func ListBuckets(c *fiber.Ctx) error {
 	return c.JSON(response)
 }
 
-// CreateBucket handles PUT /admin/buckets/:bucket
 func CreateBucket(c *fiber.Ctx) error {
 	bucketName := c.Params("bucket")
 
 	req := &bucketService.CreateBucketRequest{
 		Name:   bucketName,
-		Public: false, // Default to private
+		Public: false,
 	}
 
 	response, err := bucketService.CreateBucket(req)
+
+	recordAdmin(c, "bucket.create", "bucket", bucketName, err)
+
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": err.Error(),
@@ -36,7 +37,6 @@ func CreateBucket(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusCreated).JSON(response)
 }
 
-// GetBucket handles GET /admin/buckets/:bucket
 func GetBucket(c *fiber.Ctx) error {
 	bucketName := c.Params("bucket")
 
@@ -50,16 +50,19 @@ func GetBucket(c *fiber.Ctx) error {
 	return c.JSON(bucketInfo)
 }
 
-// DeleteBucket handles DELETE /admin/buckets/:bucket
 func DeleteBucket(c *fiber.Ctx) error {
 	bucketName := c.Params("bucket")
 
 	req := &bucketService.DeleteBucketRequest{
 		Name:  bucketName,
-		Force: false, // Default to non-force delete
+		Force: false,
 	}
 
-	if err := bucketService.DeleteBucket(req); err != nil {
+	err := bucketService.DeleteBucket(req)
+
+	recordAdmin(c, "bucket.delete", "bucket", bucketName, err)
+
+	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": err.Error(),
 		})

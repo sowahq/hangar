@@ -59,6 +59,14 @@ type serverConfig struct {
 		Enabled  bool   `toml:"enabled"`
 		BindAddr string `toml:"bind_addr"`
 	} `toml:"metrics"`
+
+	Audit struct {
+		Enabled       bool   `toml:"enabled"`
+		Path          string `toml:"path"`
+		MaxSizeMB     int    `toml:"max_size_mb" validate:"min=0"`
+		MaxBackups    int    `toml:"max_backups" validate:"min=0"`
+		RetentionDays int    `toml:"retention_days" validate:"min=0"`
+	} `toml:"audit"`
 }
 
 var masterKey []byte
@@ -95,7 +103,86 @@ func DefaultServerConfig() *serverConfig {
 	config.Metrics.Enabled = false
 	config.Metrics.BindAddr = ":9100"
 
+	config.Audit.Enabled = false
+	config.Audit.MaxSizeMB = 100
+	config.Audit.MaxBackups = 5
+	config.Audit.RetentionDays = 30
+
 	return config
+}
+
+func AuditEnabled() bool {
+	mu.RLock()
+	defer mu.RUnlock()
+
+	if c == nil {
+		c = DefaultServerConfig()
+	}
+
+	return c.Audit.Enabled
+}
+
+func AuditPath() string {
+	mu.RLock()
+	defer mu.RUnlock()
+
+	if c == nil {
+		c = DefaultServerConfig()
+	}
+
+	if c.Audit.Path != "" {
+		return c.Audit.Path
+	}
+
+	return c.DataDirectory + "/audit.log"
+}
+
+func AuditMaxSizeBytes() int64 {
+	mu.RLock()
+	defer mu.RUnlock()
+
+	if c == nil {
+		c = DefaultServerConfig()
+	}
+
+	return int64(c.Audit.MaxSizeMB) * 1024 * 1024
+}
+
+func AuditMaxBackups() int {
+	mu.RLock()
+	defer mu.RUnlock()
+
+	if c == nil {
+		c = DefaultServerConfig()
+	}
+
+	return c.Audit.MaxBackups
+}
+
+func AuditRetentionDays() int {
+	mu.RLock()
+	defer mu.RUnlock()
+
+	if c == nil {
+		c = DefaultServerConfig()
+	}
+
+	return c.Audit.RetentionDays
+}
+
+func SetAuditForTest(enabled bool, path string, maxSizeMB, maxBackups, retentionDays int) {
+	mu.Lock()
+	defer mu.Unlock()
+
+	if c == nil {
+		c = DefaultServerConfig()
+	}
+
+	c.Audit.Enabled = enabled
+	c.Audit.Path = path
+	c.Audit.MaxSizeMB = maxSizeMB
+	c.Audit.MaxBackups = maxBackups
+	c.Audit.RetentionDays = retentionDays
 }
 
 func MetricsEnabled() bool {

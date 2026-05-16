@@ -35,6 +35,13 @@ func CreateS3Key(c *fiber.Ctx) error {
 	}
 
 	k, err := auth.CreateS3Key(req.Permissions, req.Buckets)
+
+	target := ""
+	if k != nil {
+		target = k.AccessKeyID
+	}
+	recordAdmin(c, "s3key.create", "s3key", target, err)
+
 	if err != nil {
 		return response.ErrorWithLog(c, fiber.StatusBadRequest, err.Error(), err, "Failed to create s3 key")
 	}
@@ -71,11 +78,16 @@ func DeleteS3Key(c *fiber.Ctx) error {
 	if id == "" {
 		return response.Error(c, fiber.StatusBadRequest, "Missing access key id")
 	}
-	if err := auth.RevokeS3Key(id); err != nil {
+	err := auth.RevokeS3Key(id)
+
+	recordAdmin(c, "s3key.delete", "s3key", id, err)
+
+	if err != nil {
 		if errors.Is(err, auth.ErrS3KeyNotFound) {
 			return response.Error(c, fiber.StatusNotFound, "S3 key not found")
 		}
 		return response.ErrorWithLog(c, fiber.StatusInternalServerError, "Failed to revoke s3 key", err, "revoke s3 key")
 	}
+
 	return c.SendStatus(fiber.StatusNoContent)
 }

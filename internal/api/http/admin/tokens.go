@@ -38,6 +38,9 @@ func CreateToken(c *fiber.Ctx) error {
 	}
 
 	raw, tok, err := auth.CreateToken(bucketName, req.Permissions)
+
+	recordAdmin(c, "token.create", "bucket", bucketName, err)
+
 	if err != nil {
 		return response.ErrorWithLog(c, fiber.StatusBadRequest, err.Error(), err, "Failed to create token")
 	}
@@ -80,8 +83,13 @@ func DeleteToken(c *fiber.Ctx) error {
 	if id == "" {
 		return response.Error(c, fiber.StatusBadRequest, "Missing token id")
 	}
-	if err := auth.RevokeToken(id); err != nil {
+	err := auth.RevokeToken(id)
+
+	recordAdmin(c, "token.delete", "token", id, err)
+
+	if err != nil {
 		return response.Error(c, fiber.StatusNotFound, "Token not found")
 	}
+
 	return c.SendStatus(fiber.StatusNoContent)
 }

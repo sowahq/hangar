@@ -26,8 +26,12 @@ func UpdateQuota(c *fiber.Ctx) error {
 	}
 
 	info, err := bucketService.UpdateQuota(bucketName, req.MaxBytes, req.MaxObjects)
+
+	recordAdmin(c, "bucket.quota", "bucket", bucketName, err)
+
 	if err != nil {
 		return response.Error(c, fiber.StatusBadRequest, err.Error())
 	}
+
 	return response.JSON(c, info)
 }

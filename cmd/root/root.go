@@ -17,6 +17,7 @@ import (
 	"github.com/anhostfr/hangar/internal/api/s3"
 	"github.com/anhostfr/hangar/internal/config"
 	"github.com/anhostfr/hangar/internal/database"
+	"github.com/anhostfr/hangar/internal/service/audit"
 	gcService "github.com/anhostfr/hangar/internal/service/gc"
 	metricsService "github.com/anhostfr/hangar/internal/service/metrics"
 	scrubService "github.com/anhostfr/hangar/internal/service/scrub"
@@ -87,6 +88,24 @@ func Execute() {
 					if err := storage.BootstrapChunkRefs(); err != nil {
 						log.Error().Err(err).Msg("Failed to bootstrap chunkref index.")
 						return err
+					}
+
+					if config.AuditEnabled() {
+						if err := audit.Init(audit.Options{
+							Enabled:       true,
+							Path:          config.AuditPath(),
+							MaxSizeBytes:  config.AuditMaxSizeBytes(),
+							MaxBackups:    config.AuditMaxBackups(),
+							RetentionDays: config.AuditRetentionDays(),
+						}); err != nil {
+							log.Error().Err(err).Msg("Failed to init audit log.")
+							return err
+						}
+
+						audit.Record(audit.Event{
+							ActorType: audit.ActorTypeSystem,
+							Action:    "server.start",
+						})
 					}
 
 					httpRouter := http.Router()
@@ -173,6 +192,17 @@ func Execute() {
 					case <-diskDone:
 					case <-time.After(shutdownTimeout):
 						log.Warn().Msg("Disk sampler did not exit within timeout")
+					}
+
+					if audit.Enabled() {
+						audit.Record(audit.Event{
+							ActorType: audit.ActorTypeSystem,
+							Action:    "server.stop",
+						})
+
+						if err := audit.Close(); err != nil {
+							log.Error().Err(err).Msg("Failed to close audit log")
+						}
 					}
 
 					if err := database.Close(); err != nil {
