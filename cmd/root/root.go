@@ -11,11 +11,13 @@ import (
 	"github.com/anhostfr/hangar/cmd/backup"
 	"github.com/anhostfr/hangar/cmd/bucket"
 	"github.com/anhostfr/hangar/cmd/s3keys"
+	scrubcmd "github.com/anhostfr/hangar/cmd/scrub"
 	"github.com/anhostfr/hangar/internal/api/http"
 	"github.com/anhostfr/hangar/internal/api/s3"
 	"github.com/anhostfr/hangar/internal/config"
 	"github.com/anhostfr/hangar/internal/database"
 	gcService "github.com/anhostfr/hangar/internal/service/gc"
+	scrubService "github.com/anhostfr/hangar/internal/service/scrub"
 	"github.com/anhostfr/hangar/internal/storage"
 	"github.com/gofiber/fiber/v2"
 	"github.com/phuslu/log"
@@ -43,6 +45,11 @@ func Execute() {
 				Name:        "backup",
 				Usage:       "Create and restore data backups",
 				Subcommands: backup.Commands(),
+			},
+			{
+				Name:        "scrub",
+				Usage:       "Verify chunk integrity (re-hash, quarantine corrupt)",
+				Subcommands: scrubcmd.Commands(),
 			},
 			{
 				Name:  "server",
@@ -99,6 +106,9 @@ func Execute() {
 					gcDone := make(chan struct{})
 					go gcService.StartScheduledGC(ctx, gcDone)
 
+					scrubDone := make(chan struct{})
+					go scrubService.StartScheduledScrub(ctx, scrubDone)
+
 					osSignal := make(chan os.Signal, 1)
 					signal.Notify(osSignal, os.Interrupt, syscall.SIGTERM)
 
@@ -127,6 +137,11 @@ func Execute() {
 					case <-gcDone:
 					case <-time.After(shutdownTimeout):
 						log.Warn().Msg("GC goroutine did not exit within timeout")
+					}
+					select {
+					case <-scrubDone:
+					case <-time.After(shutdownTimeout):
+						log.Warn().Msg("Scrub goroutine did not exit within timeout")
 					}
 
 					if err := database.Close(); err != nil {

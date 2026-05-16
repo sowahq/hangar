@@ -34,6 +34,11 @@ type serverConfig struct {
 		Interval int `toml:"interval_hours" validate:"min=1"` // Hours between GC runs
 	} `toml:"garbage_collection"`
 
+	Scrub struct {
+		IntervalHours   int   `toml:"interval_hours" validate:"min=0"`
+		RateBytesPerSec int64 `toml:"rate_bytes_per_sec" validate:"min=0"`
+	} `toml:"scrub"`
+
 	RateLimit struct {
 		Enabled   bool `toml:"enabled"`
 		Max       int  `toml:"max"`
@@ -70,6 +75,9 @@ func DefaultServerConfig() *serverConfig {
 
 	// GC defaults
 	config.GarbageCollection.Interval = 24 // 24 hours
+
+	config.Scrub.IntervalHours = 0
+	config.Scrub.RateBytesPerSec = 0
 
 	config.RateLimit.Enabled = false
 	config.RateLimit.Max = 100
@@ -328,6 +336,40 @@ func GCInterval() int {
 	}
 
 	return c.GarbageCollection.Interval
+}
+
+func ScrubIntervalHours() int {
+	mu.RLock()
+	defer mu.RUnlock()
+
+	if c == nil {
+		c = DefaultServerConfig()
+	}
+
+	return c.Scrub.IntervalHours
+}
+
+func ScrubRateBytesPerSec() int64 {
+	mu.RLock()
+	defer mu.RUnlock()
+
+	if c == nil {
+		c = DefaultServerConfig()
+	}
+
+	return c.Scrub.RateBytesPerSec
+}
+
+func SetScrubForTest(intervalHours int, rateBytesPerSec int64) {
+	mu.Lock()
+	defer mu.Unlock()
+
+	if c == nil {
+		c = DefaultServerConfig()
+	}
+
+	c.Scrub.IntervalHours = intervalHours
+	c.Scrub.RateBytesPerSec = rateBytesPerSec
 }
 
 func DataPath() string {

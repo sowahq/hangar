@@ -56,6 +56,9 @@ func RunGarbageCollection(dryRun bool) (*GCStats, error) {
 		}
 
 		if d.IsDir() {
+			if path != chunksPath && len(d.Name()) > 0 && d.Name()[0] == '.' {
+				return fs.SkipDir
+			}
 			return nil
 		}
 
