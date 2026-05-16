@@ -9,6 +9,39 @@ import (
 	"github.com/anhostfr/hangar/internal/service/bucket"
 )
 
+func TestS3GetObjectAttributesMultiHeader(t *testing.T) {
+	s := newS3TestServer(t)
+	if _, err := bucket.CreateBucket(&bucket.CreateBucketRequest{Name: "attrmh"}); err != nil {
+		t.Fatalf("bucket: %v", err)
+	}
+	resp := s.do(t, http.MethodPut, "/attrmh/k", "", []byte("hello"))
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("put: %d", resp.StatusCode)
+	}
+
+	req := s.sign(t, http.MethodGet, "/attrmh/k", "attributes=", nil)
+	req.Header.Add("x-amz-object-attributes", "ETag")
+	req.Header.Add("x-amz-object-attributes", "ObjectSize")
+	req.Header.Add("x-amz-object-attributes", "StorageClass")
+	r, err := s.client.Do(req)
+	if err != nil {
+		t.Fatalf("do: %v", err)
+	}
+	body, _ := io.ReadAll(r.Body)
+	r.Body.Close()
+	if r.StatusCode != http.StatusOK {
+		t.Fatalf("status=%d body=%s", r.StatusCode, body)
+	}
+	var out GetObjectAttributesOutput
+	if err := xml.Unmarshal(body, &out); err != nil {
+		t.Fatalf("decode: %v body=%s", err, body)
+	}
+	if out.ETag == "" || out.ObjectSize == nil || *out.ObjectSize != 5 || out.StorageClass == "" {
+		t.Fatalf("expected all 3 fields, got %+v size=%v", out, out.ObjectSize)
+	}
+}
+
 func TestS3GetObjectAttributes(t *testing.T) {
 	s := newS3TestServer(t)
 	if _, err := bucket.CreateBucket(&bucket.CreateBucketRequest{Name: "attrb"}); err != nil {

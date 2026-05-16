@@ -42,7 +42,7 @@ func handleGetObjectAttributes(c *fiber.Ctx) error {
 		return writeError(c, fiber.StatusNotFound, "NoSuchKey", "object not found", "/"+name+"/"+key)
 	}
 
-	wanted := parseAttributeList(c.Get("x-amz-object-attributes"))
+	wanted := parseAttributeHeader(c)
 
 	out := GetObjectAttributesOutput{Xmlns: xmlNamespace}
 
@@ -88,15 +88,23 @@ func handleGetObjectAttributes(c *fiber.Ctx) error {
 	return writeXML(c, fiber.StatusOK, out)
 }
 
-func parseAttributeList(h string) map[string]bool {
+func parseAttributeHeader(c *fiber.Ctx) map[string]bool {
 	out := map[string]bool{}
-	if h == "" {
+	values := c.Request().Header.PeekAll("x-amz-object-attributes")
+	combined := ""
+	for i, v := range values {
+		if i > 0 {
+			combined += ","
+		}
+		combined += string(v)
+	}
+	if combined == "" {
 		for _, k := range []string{"ETag", "Checksum", "ObjectParts", "StorageClass", "ObjectSize"} {
 			out[k] = true
 		}
 		return out
 	}
-	for _, p := range strings.Split(h, ",") {
+	for _, p := range strings.Split(combined, ",") {
 		p = strings.TrimSpace(p)
 		if p != "" {
 			out[p] = true
