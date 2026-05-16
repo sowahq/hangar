@@ -34,6 +34,28 @@ var zstdEncoderPool = sync.Pool{
 	},
 }
 
+var chunkBufPool = sync.Pool{
+	New: func() any {
+		b := make([]byte, 0)
+		return &b
+	},
+}
+
+func getChunkBuf(size int) *[]byte {
+	bp := chunkBufPool.Get().(*[]byte)
+	if cap(*bp) < size {
+		*bp = make([]byte, size)
+	} else {
+		*bp = (*bp)[:size]
+	}
+	return bp
+}
+
+func putChunkBuf(bp *[]byte) {
+	*bp = (*bp)[:0]
+	chunkBufPool.Put(bp)
+}
+
 var zstdDecoderPool = sync.Pool{
 	New: func() any {
 		dec, err := zstd.NewReader(nil)
@@ -62,7 +84,9 @@ func ChunkAndHashOpts(r io.Reader, chunkDir string, enc *EncryptParams) (returne
 	compressionEnabled := config.CompressionEnabled()
 
 	var chunkHashes []string
-	buf := make([]byte, chunkSize)
+	bufPtr := getChunkBuf(chunkSize)
+	defer putChunkBuf(bufPtr)
+	buf := *bufPtr
 	globalHasher := blake3.New()
 	var totalSize int64
 

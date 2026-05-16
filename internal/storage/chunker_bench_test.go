@@ -65,6 +65,20 @@ func BenchmarkChunkAndHashCompressed(b *testing.B) {
 	}
 }
 
+func BenchmarkChunkAndHashRaw(b *testing.B) {
+	setupBenchDB(b)
+	setupChunkerBench(b, false)
+	data := deterministicBytes(0x42, 64*1024)
+
+	b.ResetTimer()
+	b.SetBytes(int64(len(data)))
+	for i := 0; i < b.N; i++ {
+		if _, _, _, err := ChunkAndHash(bytes.NewReader(data), config.ChunksPath()); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
 func BenchmarkOpenChunkCompressed(b *testing.B) {
 	setupBenchDB(b)
 	setupChunkerBench(b, true)
