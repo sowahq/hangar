@@ -51,9 +51,9 @@ Configure SDKs with `UsePathStyle: true` (Go SDK v2), `s3={"addressing_style":"p
 
 | Operation                                | Status | Notes                                                       |
 |------------------------------------------|--------|-------------------------------------------------------------|
-| `PutObject`                              | ✅     | Including `aws-chunked` streaming. SSE-S3 + SSE-C honored   |
-| `GetObject`                              | ✅     | `Range`, `If-Modified-Since`, `If-None-Match`               |
-| `HeadObject`                             | ✅     |                                                             |
+| `PutObject`                              | ✅     | Including `aws-chunked` streaming. SSE-S3 + SSE-C honored. `If-Match` and `If-None-Match: *` preconditions |
+| `GetObject`                              | ✅     | `Range`, `If-Match`, `If-None-Match`, `If-Modified-Since`, `If-Unmodified-Since` |
+| `HeadObject`                             | ✅     | `If-Match`, `If-None-Match`, `If-Modified-Since`, `If-Unmodified-Since` |
 | `DeleteObject`                           | ✅     | Versioning-aware                                            |
 | `DeleteObjects` (batch)                  | ✅     | Up to S3 default batch size                                 |
 | `CopyObject`                             | ✅     | Chunk-ref reuse when both sides unencrypted; full re-encrypt across SSE keys |

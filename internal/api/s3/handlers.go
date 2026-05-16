@@ -671,6 +671,10 @@ func handleHeadObject(c *fiber.Ctx) error {
 		return c.SendStatus(fiber.StatusNotFound)
 	}
 
+	if st := checkConditionalRead(c, m); st != 0 {
+		return c.SendStatus(st)
+	}
+
 	if m.SSEAlgorithm == object.SSEAlgoC {
 		sseReq, sseErr := parseSSERequest(c)
 		if sseErr != nil || sseReq == nil || sseReq.Algorithm != object.SSEAlgoC {
@@ -716,6 +720,13 @@ func handleGetObject(c *fiber.Ctx) error {
 	if m.IsDeleteMarker {
 		c.Set("x-amz-delete-marker", "true")
 		return writeError(c, fiber.StatusNotFound, "NoSuchKey", "object not found", "/"+name+"/"+key)
+	}
+
+	if st := checkConditionalRead(c, m); st != 0 {
+		if st == fiber.StatusPreconditionFailed {
+			return writeError(c, st, "PreconditionFailed", "At least one of the preconditions you specified did not hold", "/"+name+"/"+key)
+		}
+		return c.SendStatus(st)
 	}
 
 	sseReq, sseParseErr := parseSSERequest(c)
@@ -788,6 +799,10 @@ func handlePutObject(c *fiber.Ctx) error {
 
 	if src := c.Get("x-amz-copy-source"); src != "" {
 		return handleCopyObject(c, name, key, src)
+	}
+
+	if st := checkConditionalWrite(c, name, key, object.GetMetadata); st != 0 {
+		return writeError(c, st, "PreconditionFailed", "At least one of the preconditions you specified did not hold", "/"+name+"/"+key)
 	}
 
 	sseReq, sseErr := parseSSERequest(c)
