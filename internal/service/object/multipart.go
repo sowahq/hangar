@@ -95,12 +95,18 @@ type UploadPartRequest struct {
 	PartNumber int
 	Body       io.Reader
 	SSE        *SSERequest
+
+	ChecksumAlgorithm string
+	ChecksumValue     string
 }
 
 type UploadPartResponse struct {
 	PartNumber int    `json:"part_number"`
 	ETag       string `json:"etag"`
 	Size       int64  `json:"size"`
+
+	ChecksumAlgorithm string `json:"checksum_algorithm,omitempty"`
+	ChecksumValue     string `json:"checksum_value,omitempty"`
 }
 
 func UploadPart(req *UploadPartRequest) (*UploadPartResponse, error) {
@@ -146,11 +152,13 @@ func UploadPart(req *UploadPartRequest) (*UploadPartResponse, error) {
 	}
 
 	part := &storage.MultipartPart{
-		PartNumber:  req.PartNumber,
-		Size:        size,
-		ETag:        etag,
-		ChunkHashes: chunks,
-		UploadedAt:  time.Now().UnixMilli(),
+		PartNumber:        req.PartNumber,
+		Size:              size,
+		ETag:              etag,
+		ChunkHashes:       chunks,
+		UploadedAt:        time.Now().UnixMilli(),
+		ChecksumAlgorithm: req.ChecksumAlgorithm,
+		ChecksumValue:     req.ChecksumValue,
 	}
 	if err := storage.StoreMultipartPart(req.Bucket, req.Key, req.UploadID, part); err != nil {
 		if rbErr := storage.DecrementChunkRefs(chunks); rbErr != nil {
@@ -159,7 +167,13 @@ func UploadPart(req *UploadPartRequest) (*UploadPartResponse, error) {
 		return nil, err
 	}
 
-	return &UploadPartResponse{PartNumber: req.PartNumber, ETag: etag, Size: size}, nil
+	return &UploadPartResponse{
+		PartNumber:        req.PartNumber,
+		ETag:              etag,
+		Size:              size,
+		ChecksumAlgorithm: req.ChecksumAlgorithm,
+		ChecksumValue:     req.ChecksumValue,
+	}, nil
 }
 
 type CompleteMultipartRequest struct {

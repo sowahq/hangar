@@ -243,13 +243,18 @@ func handleUploadPart(c *fiber.Ctx) error {
 	}
 
 	partBody, _ := requestBody(c)
+
+	checksumAlgo, checksumVal := parseChecksum(c)
+
 	res, err := object.UploadPart(&object.UploadPartRequest{
-		Bucket:     bucketName,
-		Key:        key,
-		UploadID:   uploadID,
-		PartNumber: partNumber,
-		Body:       partBody,
-		SSE:        sseReq,
+		Bucket:            bucketName,
+		Key:               key,
+		UploadID:          uploadID,
+		PartNumber:        partNumber,
+		Body:              partBody,
+		SSE:               sseReq,
+		ChecksumAlgorithm: checksumAlgo,
+		ChecksumValue:     checksumVal,
 	})
 	if err != nil {
 		switch {
@@ -271,6 +276,7 @@ func handleUploadPart(c *fiber.Ctx) error {
 	if sseReq != nil {
 		echoSSEResponse(c, sseReq.Algorithm, sseReq.CustomerKeyMD5)
 	}
+	writeChecksumHeaders(c, res.ChecksumAlgorithm, res.ChecksumValue)
 	return c.SendStatus(fiber.StatusOK)
 }
 
@@ -580,6 +586,7 @@ func setObjectHeaders(c *fiber.Ctx, m *storage.Metadatas) {
 	}
 
 	writeSSEHeaders(c, m)
+	writeChecksumHeaders(c, m.ChecksumAlgorithm, m.ChecksumValue)
 }
 
 func handleHeadObject(c *fiber.Ctx) error {
@@ -733,13 +740,17 @@ func handlePutObject(c *fiber.Ctx) error {
 
 	bodyStream, contentLength := requestBody(c)
 
+	checksumAlgo, checksumVal := parseChecksum(c)
+
 	res, err := object.PutObject(&object.PutObjectRequest{
-		Bucket:        name,
-		Key:           key,
-		Body:          bodyStream,
-		ContentLength: contentLength,
-		ContentType:   string(c.Request().Header.ContentType()),
-		SSE:           sseReq,
+		Bucket:            name,
+		Key:               key,
+		Body:              bodyStream,
+		ContentLength:     contentLength,
+		ContentType:       string(c.Request().Header.ContentType()),
+		SSE:               sseReq,
+		ChecksumAlgorithm: checksumAlgo,
+		ChecksumValue:     checksumVal,
 	})
 	if err != nil {
 		if errors.Is(err, object.ErrQuotaExceeded) {
@@ -763,6 +774,7 @@ func handlePutObject(c *fiber.Ctx) error {
 		c.Set("x-amz-version-id", res.VersionID)
 	}
 	echoSSEResponse(c, res.SSEAlgorithm, res.SSECustomerMD5)
+	writeChecksumHeaders(c, res.ChecksumAlgorithm, res.ChecksumValue)
 
 	return c.SendStatus(fiber.StatusOK)
 }
@@ -827,6 +839,7 @@ func handleCopyObject(c *fiber.Ctx, dstBucket, dstKey, source string) error {
 		c.Set("x-amz-version-id", res.VersionID)
 	}
 	echoSSEResponse(c, res.SSEAlgorithm, res.SSECustomerMD5)
+	writeChecksumHeaders(c, res.ChecksumAlgorithm, res.ChecksumValue)
 
 	return writeXML(c, fiber.StatusOK, CopyObjectResult{
 		ETag:         res.ETag,

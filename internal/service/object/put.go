@@ -30,6 +30,9 @@ type PutObjectRequest struct {
 	ContentLength int64
 	ContentType   string
 	SSE           *SSERequest
+
+	ChecksumAlgorithm string
+	ChecksumValue     string
 }
 
 type PutObjectResponse struct {
@@ -43,6 +46,9 @@ type PutObjectResponse struct {
 	VersionID      string `json:"version_id,omitempty"`
 	SSEAlgorithm   string `json:"sse_algorithm,omitempty"`
 	SSECustomerMD5 string `json:"sse_customer_md5,omitempty"`
+
+	ChecksumAlgorithm string `json:"checksum_algorithm,omitempty"`
+	ChecksumValue     string `json:"checksum_value,omitempty"`
 }
 
 var versionSeq uint64
@@ -127,6 +133,8 @@ func PutObject(req *PutObjectRequest) (*PutObjectResponse, error) {
 		SSECustomerKeyMD5: sse.customerKeyMD5,
 		SSESalt:           sse.salt,
 		SSENoncePrefix:    sse.noncePrefix,
+		ChecksumAlgorithm: req.ChecksumAlgorithm,
+		ChecksumValue:     req.ChecksumValue,
 	}
 
 	if err := storage.IncrementChunkRefs(chunks); err != nil {
@@ -161,7 +169,9 @@ func PutObject(req *PutObjectRequest) (*PutObjectResponse, error) {
 		CreatedAt:      createdAt,
 		ObjectHash:     fileHash,
 		VersionID:      versionID,
-		SSEAlgorithm:   sse.algo,
-		SSECustomerMD5: sse.customerKeyMD5,
+		SSEAlgorithm:      sse.algo,
+		SSECustomerMD5:    sse.customerKeyMD5,
+		ChecksumAlgorithm: req.ChecksumAlgorithm,
+		ChecksumValue:     req.ChecksumValue,
 	}, nil
 }

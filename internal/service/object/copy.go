@@ -74,14 +74,16 @@ func CopyObject(req *CopyObjectRequest) (*PutObjectResponse, error) {
 
 func fastCopy(req *CopyObjectRequest, src *storage.Metadatas, contentType string, createdAt int64, versionID string, versioning bool) (*PutObjectResponse, error) {
 	dst := &storage.Metadatas{
-		Key:         req.DstKey,
-		ETag:        src.ETag,
-		Size:        src.Size,
-		ContentType: contentType,
-		CreatedAt:   createdAt,
-		ObjectHash:  src.ObjectHash,
-		ChunkHashes: src.ChunkHashes,
-		VersionID:   versionID,
+		Key:               req.DstKey,
+		ETag:              src.ETag,
+		Size:              src.Size,
+		ContentType:       contentType,
+		CreatedAt:         createdAt,
+		ObjectHash:        src.ObjectHash,
+		ChunkHashes:       src.ChunkHashes,
+		VersionID:         versionID,
+		ChecksumAlgorithm: src.ChecksumAlgorithm,
+		ChecksumValue:     src.ChecksumValue,
 	}
 
 	if err := storage.IncrementChunkRefs(dst.ChunkHashes); err != nil {
@@ -105,13 +107,15 @@ func fastCopy(req *CopyObjectRequest, src *storage.Metadatas, contentType string
 	}
 
 	return &PutObjectResponse{
-		Key:         req.DstKey,
-		ETag:        src.ETag,
-		Size:        src.Size,
-		ContentType: contentType,
-		CreatedAt:   createdAt,
-		ObjectHash:  src.ObjectHash,
-		VersionID:   versionID,
+		Key:               req.DstKey,
+		ETag:              src.ETag,
+		Size:              src.Size,
+		ContentType:       contentType,
+		CreatedAt:         createdAt,
+		ObjectHash:        src.ObjectHash,
+		VersionID:         versionID,
+		ChecksumAlgorithm: src.ChecksumAlgorithm,
+		ChecksumValue:     src.ChecksumValue,
 	}, nil
 }
 
@@ -146,6 +150,8 @@ func reencryptCopy(req *CopyObjectRequest, src *storage.Metadatas, contentType s
 		SSECustomerKeyMD5: sse.customerKeyMD5,
 		SSESalt:           sse.salt,
 		SSENoncePrefix:    sse.noncePrefix,
+		ChecksumAlgorithm: src.ChecksumAlgorithm,
+		ChecksumValue:     src.ChecksumValue,
 	}
 
 	if err := storage.IncrementChunkRefs(chunks); err != nil {
@@ -179,8 +185,10 @@ func reencryptCopy(req *CopyObjectRequest, src *storage.Metadatas, contentType s
 		CreatedAt:      createdAt,
 		ObjectHash:     fileHash,
 		VersionID:      versionID,
-		SSEAlgorithm:   sse.algo,
-		SSECustomerMD5: sse.customerKeyMD5,
+		SSEAlgorithm:      sse.algo,
+		SSECustomerMD5:    sse.customerKeyMD5,
+		ChecksumAlgorithm: src.ChecksumAlgorithm,
+		ChecksumValue:     src.ChecksumValue,
 	}, nil
 }
 

@@ -41,6 +41,9 @@ type MultipartPart struct {
 	ETag        string   `json:"etag"`
 	ChunkHashes []string `json:"chunk_hashes"`
 	UploadedAt  int64    `json:"uploaded_at"`
+
+	ChecksumAlgorithm string `json:"checksum_algorithm,omitempty"`
+	ChecksumValue     string `json:"checksum_value,omitempty"`
 }
 
 func mpuKey(bucket, key, uploadID string) []byte {
