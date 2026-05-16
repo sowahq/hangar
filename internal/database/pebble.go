@@ -78,6 +78,10 @@ func (p *PebbleDB) Close() error {
 	return p.db.Close()
 }
 
+func (p *PebbleDB) Checkpoint(dest string) error {
+	return p.db.Checkpoint(dest)
+}
+
 func (p *PebbleDB) NewIteratorWithPrefix(prefix []byte) (*pebble.Iterator, error) {
 	return p.db.NewIter(&pebble.IterOptions{
 		LowerBound: prefix,
@@ -91,7 +95,7 @@ func keyUpperBound(prefix []byte) []byte {
 	for i := len(end) - 1; i >= 0; i-- {
 		end[i]++
 		if end[i] != 0 {
-			return end[: i+1]
+			return end[:i+1]
 		}
 	}
 	return nil

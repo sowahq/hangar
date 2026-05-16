@@ -8,6 +8,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/anhostfr/hangar/cmd/backup"
 	"github.com/anhostfr/hangar/cmd/bucket"
 	"github.com/anhostfr/hangar/cmd/s3keys"
 	"github.com/anhostfr/hangar/internal/api/http"
@@ -37,6 +38,11 @@ func Execute() {
 				Name:        "s3keys",
 				Usage:       "Manage S3 access keys",
 				Subcommands: s3keys.Commands(),
+			},
+			{
+				Name:        "backup",
+				Usage:       "Create and restore data backups",
+				Subcommands: backup.Commands(),
 			},
 			{
 				Name:  "server",
