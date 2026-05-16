@@ -33,6 +33,10 @@ type PutObjectRequest struct {
 
 	ChecksumAlgorithm string
 	ChecksumValue     string
+
+	ObjectLockMode             string
+	ObjectLockRetainUntilMilli int64
+	ObjectLockLegalHold        bool
 }
 
 type PutObjectResponse struct {
@@ -136,6 +140,10 @@ func PutObject(req *PutObjectRequest) (*PutObjectResponse, error) {
 		SSEKeyID:          sse.keyID,
 		ChecksumAlgorithm: req.ChecksumAlgorithm,
 		ChecksumValue:     req.ChecksumValue,
+
+		ObjectLockMode:             req.ObjectLockMode,
+		ObjectLockRetainUntilMilli: req.ObjectLockRetainUntilMilli,
+		ObjectLockLegalHold:        req.ObjectLockLegalHold,
 	}
 
 	if err := storage.IncrementChunkRefs(chunks); err != nil {

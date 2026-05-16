@@ -168,12 +168,24 @@ func handleObjectGet(c *fiber.Ctx) error {
 	if c.Query("uploadId") != "" {
 		return handleListParts(c)
 	}
+	if c.Request().URI().QueryArgs().Has("retention") {
+		return handleGetObjectRetention(c)
+	}
+	if c.Request().URI().QueryArgs().Has("legal-hold") {
+		return handleGetObjectLegalHold(c)
+	}
 	return handleGetObject(c)
 }
 
 func handleObjectPut(c *fiber.Ctx) error {
 	if c.Query("uploadId") != "" && c.Query("partNumber") != "" {
 		return handleUploadPart(c)
+	}
+	if c.Request().URI().QueryArgs().Has("retention") {
+		return handlePutObjectRetention(c)
+	}
+	if c.Request().URI().QueryArgs().Has("legal-hold") {
+		return handlePutObjectLegalHold(c)
 	}
 	return handlePutObject(c)
 }
@@ -625,6 +637,7 @@ func setObjectHeaders(c *fiber.Ctx, m *storage.Metadatas) {
 
 	writeSSEHeaders(c, m)
 	writeChecksumHeaders(c, m.ChecksumAlgorithm, m.ChecksumValue)
+	echoObjectLockHeaders(c, m)
 }
 
 func handleHeadObject(c *fiber.Ctx) error {
@@ -778,20 +791,41 @@ func handlePutObject(c *fiber.Ctx) error {
 
 	sseReq = applyBucketDefaultSSE(name, sseReq)
 
+	retention, legalHold, lockErr := parseObjectLockPutHeaders(c)
+	if lockErr != nil {
+		return writeError(c, fiber.StatusBadRequest, "InvalidArgument", lockErr.Error(), "/"+name+"/"+key)
+	}
+
+	binfo, _ := bucket.GetBucket(name)
+	if (retention != nil || legalHold) && (binfo == nil || !binfo.ObjectLockEnabled) {
+		return writeError(c, fiber.StatusBadRequest, "InvalidRequest", "Object Lock not enabled on bucket", "/"+name+"/"+key)
+	}
+	if binfo != nil && binfo.ObjectLockEnabled {
+		applied, _ := object.ApplyDefaultRetentionIfMissing(name, retention)
+		retention = applied
+	}
+
 	bodyStream, contentLength := requestBody(c)
 
 	checksumAlgo, checksumVal := parseChecksum(c)
 
-	res, err := object.PutObject(&object.PutObjectRequest{
-		Bucket:            name,
-		Key:               key,
-		Body:              bodyStream,
-		ContentLength:     contentLength,
-		ContentType:       string(c.Request().Header.ContentType()),
-		SSE:               sseReq,
-		ChecksumAlgorithm: checksumAlgo,
-		ChecksumValue:     checksumVal,
-	})
+	putReq := &object.PutObjectRequest{
+		Bucket:              name,
+		Key:                 key,
+		Body:                bodyStream,
+		ContentLength:       contentLength,
+		ContentType:         string(c.Request().Header.ContentType()),
+		SSE:                 sseReq,
+		ChecksumAlgorithm:   checksumAlgo,
+		ChecksumValue:       checksumVal,
+		ObjectLockLegalHold: legalHold,
+	}
+	if retention != nil {
+		putReq.ObjectLockMode = retention.Mode
+		putReq.ObjectLockRetainUntilMilli = retention.RetainUntilMilli
+	}
+
+	res, err := object.PutObject(putReq)
 	if err != nil {
 		if errors.Is(err, object.ErrQuotaExceeded) {
 			return writeError(c, fiber.StatusRequestEntityTooLarge, "EntityTooLarge", "Quota exceeded", "/"+name+"/"+key)

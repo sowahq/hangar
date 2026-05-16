@@ -29,6 +29,10 @@ type Metadatas struct {
 
 	ChecksumAlgorithm string `json:"checksum_algorithm,omitempty"`
 	ChecksumValue     string `json:"checksum_value,omitempty"`
+
+	ObjectLockMode             string `json:"object_lock_mode,omitempty"`
+	ObjectLockRetainUntilMilli int64  `json:"object_lock_retain_until_milli,omitempty"`
+	ObjectLockLegalHold        bool   `json:"object_lock_legal_hold,omitempty"`
 }
 
 func StoreMetadataInBucket(bucket string, metadata *Metadatas) error {
