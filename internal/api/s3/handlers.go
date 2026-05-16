@@ -106,6 +106,9 @@ func handleCreateBucket(c *fiber.Ctx) error {
 	if c.Request().URI().QueryArgs().Has("lifecycle") {
 		return handlePutBucketLifecycle(c)
 	}
+	if c.Request().URI().QueryArgs().Has("encryption") {
+		return handlePutBucketEncryption(c)
+	}
 
 	name := c.Params("bucket")
 
@@ -131,6 +134,9 @@ func handleDeleteBucket(c *fiber.Ctx) error {
 	}
 	if c.Request().URI().QueryArgs().Has("lifecycle") {
 		return handleDeleteBucketLifecycle(c)
+	}
+	if c.Request().URI().QueryArgs().Has("encryption") {
+		return handleDeleteBucketEncryption(c)
 	}
 
 	name := c.Params("bucket")
@@ -207,6 +213,8 @@ func handleInitiateMultipart(c *fiber.Ctx, bucketName, key string) error {
 		}
 		return writeError(c, fiber.StatusBadRequest, "InvalidArgument", sseErr.Error(), "/"+bucketName+"/"+key)
 	}
+
+	sseReq = applyBucketDefaultSSE(bucketName, sseReq)
 
 	res, err := object.InitiateMultipart(&object.InitiateMultipartRequest{
 		Bucket:      bucketName,
@@ -529,6 +537,9 @@ func handleListObjectsV2(c *fiber.Ctx) error {
 	if c.Request().URI().QueryArgs().Has("lifecycle") {
 		return handleGetBucketLifecycle(c)
 	}
+	if c.Request().URI().QueryArgs().Has("encryption") {
+		return handleGetBucketEncryption(c)
+	}
 
 	name := c.Params("bucket")
 
@@ -758,6 +769,8 @@ func handlePutObject(c *fiber.Ctx) error {
 		}
 		return writeError(c, fiber.StatusBadRequest, "InvalidArgument", sseErr.Error(), "/"+name+"/"+key)
 	}
+
+	sseReq = applyBucketDefaultSSE(name, sseReq)
 
 	bodyStream, contentLength := requestBody(c)
 
