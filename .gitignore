@@ -41,6 +41,8 @@ CLAUDE.md
 docs/
 bin/s3interop
 
-# MkDocs build output
-site/
-.cache/
+# Astro / Starlight
+website/node_modules/
+website/dist/
+website/.astro/
+website/.cache/
