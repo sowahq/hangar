@@ -205,6 +205,31 @@ type VersioningConfigurationXML struct {
 	Status  string   `xml:"Status,omitempty"`
 }
 
+type ChecksumXML struct {
+	XMLName       xml.Name `xml:"Checksum"`
+	ChecksumCRC32 string   `xml:"ChecksumCRC32,omitempty"`
+	ChecksumCRC32C string  `xml:"ChecksumCRC32C,omitempty"`
+	ChecksumSHA1   string  `xml:"ChecksumSHA1,omitempty"`
+	ChecksumSHA256 string  `xml:"ChecksumSHA256,omitempty"`
+	ChecksumCRC64NVME string `xml:"ChecksumCRC64NVME,omitempty"`
+	ChecksumType   string  `xml:"ChecksumType,omitempty"`
+}
+
+type ObjectPartsXML struct {
+	XMLName    xml.Name `xml:"ObjectParts"`
+	PartsCount int      `xml:"PartsCount"`
+}
+
+type GetObjectAttributesOutput struct {
+	XMLName      xml.Name        `xml:"GetObjectAttributesOutput"`
+	Xmlns        string          `xml:"xmlns,attr,omitempty"`
+	ETag         string          `xml:"ETag,omitempty"`
+	Checksum     *ChecksumXML    `xml:"Checksum,omitempty"`
+	ObjectParts  *ObjectPartsXML `xml:"ObjectParts,omitempty"`
+	StorageClass string          `xml:"StorageClass,omitempty"`
+	ObjectSize   *int64          `xml:"ObjectSize,omitempty"`
+}
+
 type ErrorXML struct {
 	XMLName   xml.Name `xml:"Error"`
 	Code      string   `xml:"Code"`

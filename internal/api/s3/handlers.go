@@ -177,6 +177,9 @@ func handleObjectGet(c *fiber.Ctx) error {
 	if c.Request().URI().QueryArgs().Has("legal-hold") {
 		return handleGetObjectLegalHold(c)
 	}
+	if c.Request().URI().QueryArgs().Has("attributes") {
+		return handleGetObjectAttributes(c)
+	}
 	return handleGetObject(c)
 }
 
