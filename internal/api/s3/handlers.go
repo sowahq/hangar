@@ -686,6 +686,7 @@ func setObjectHeaders(c *fiber.Ctx, m *storage.Metadatas) {
 	writeSSEHeaders(c, m)
 	writeChecksumHeaders(c, m.ChecksumAlgorithm, m.ChecksumValue)
 	echoObjectLockHeaders(c, m)
+	writeTaggingCount(c, m.Tags)
 }
 
 func handleHeadObject(c *fiber.Ctx) error {
@@ -872,6 +873,11 @@ func handlePutObject(c *fiber.Ctx) error {
 
 	checksumAlgo, checksumVal := parseChecksum(c)
 
+	tags, tagErr := parseTaggingHeader(c.Get("x-amz-tagging"))
+	if tagErr != nil {
+		return writeError(c, fiber.StatusBadRequest, "InvalidTag", tagErr.Error(), "/"+name+"/"+key)
+	}
+
 	putReq := &object.PutObjectRequest{
 		Bucket:              name,
 		Key:                 key,
@@ -882,6 +888,7 @@ func handlePutObject(c *fiber.Ctx) error {
 		ChecksumAlgorithm:   checksumAlgo,
 		ChecksumValue:       checksumVal,
 		ObjectLockLegalHold: legalHold,
+		Tags:                tags,
 	}
 	if retention != nil {
 		putReq.ObjectLockMode = retention.Mode

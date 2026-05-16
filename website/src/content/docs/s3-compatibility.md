@@ -115,6 +115,8 @@ Configure SDKs with `UsePathStyle: true` (Go SDK v2), `s3={"addressing_style":"p
 | `x-amz-checksum-sha1`                 | ✅                                                    |
 | `x-amz-checksum-sha256`               | ✅                                                    |
 | `x-amz-checksum-type: FULL_OBJECT`    | ✅ echoed                                             |
+| `x-amz-tagging` (PutObject)           | ✅ URL-encoded `k=v&k2=v2`, persisted alongside metadata |
+| `x-amz-tagging-count` (GET/HEAD)      | ✅ emitted when object has tags                       |
 
 Hangar trusts the client-provided value and echoes it. It does not recompute, so SDKs that compute and send checksums for integrity will see them round-trip; SDKs that expect Hangar to compute on its own do not get one.
 

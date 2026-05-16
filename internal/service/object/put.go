@@ -37,6 +37,8 @@ type PutObjectRequest struct {
 	ObjectLockMode             string
 	ObjectLockRetainUntilMilli int64
 	ObjectLockLegalHold        bool
+
+	Tags []storage.Tag
 }
 
 type PutObjectResponse struct {
@@ -153,6 +155,8 @@ func PutObject(req *PutObjectRequest) (*PutObjectResponse, error) {
 		ObjectLockMode:             req.ObjectLockMode,
 		ObjectLockRetainUntilMilli: req.ObjectLockRetainUntilMilli,
 		ObjectLockLegalHold:        req.ObjectLockLegalHold,
+
+		Tags: req.Tags,
 	}
 
 	if err := storage.IncrementChunkRefs(chunks); err != nil {

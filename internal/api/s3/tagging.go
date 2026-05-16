@@ -3,11 +3,42 @@ package s3
 import (
 	"encoding/xml"
 	"errors"
+	"net/url"
+	"strconv"
 
 	"github.com/anhostfr/hangar/internal/service/auth"
 	"github.com/anhostfr/hangar/internal/service/bucket"
+	"github.com/anhostfr/hangar/internal/storage"
 	"github.com/gofiber/fiber/v2"
 )
+
+func parseTaggingHeader(h string) ([]storage.Tag, error) {
+	if h == "" {
+		return nil, nil
+	}
+	vals, err := url.ParseQuery(h)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]storage.Tag, 0, len(vals))
+	for k, v := range vals {
+		val := ""
+		if len(v) > 0 {
+			val = v[0]
+		}
+		out = append(out, storage.Tag{Key: k, Value: val})
+	}
+	if err := bucket.ValidateTags(out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func writeTaggingCount(c *fiber.Ctx, tags []storage.Tag) {
+	if len(tags) > 0 {
+		c.Set("x-amz-tagging-count", strconv.Itoa(len(tags)))
+	}
+}
 
 type TagXML struct {
 	Key   string `xml:"Key"`
