@@ -477,6 +477,10 @@ func handleBucketPost(c *fiber.Ctx) error {
 		return handleDeleteObjects(c)
 	}
 
+	if ct := string(c.Request().Header.ContentType()); strings.HasPrefix(ct, "multipart/form-data") {
+		return handlePostPolicy(c)
+	}
+
 	return writeError(c, fiber.StatusNotImplemented, "NotImplemented", "unsupported bucket POST", c.Path())
 }
 

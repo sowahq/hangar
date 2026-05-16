@@ -86,7 +86,7 @@ Configure SDKs with `UsePathStyle: true` (Go SDK v2), `s3={"addressing_style":"p
 |-----------|--------|
 | GET       | ✅     |
 | PUT       | ✅     |
-| POST policy | ❌    |
+| POST policy | ✅     | Browser direct uploads via `POST /:bucket` multipart form. SigV4 signature on base64 policy. Conditions: `bucket`, `eq`/`starts-with` on `$key`, `content-length-range` |
 | Multipart presigned | ❌ |
 
 ## Headers honored

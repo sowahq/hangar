@@ -3,6 +3,7 @@ package s3
 import (
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/anhostfr/hangar/internal/config"
@@ -42,6 +43,13 @@ func sigv4Middleware(now func() time.Time) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		if c.Method() == fiber.MethodOptions {
 			return c.Next()
+		}
+
+		if c.Method() == fiber.MethodPost {
+			ct := string(c.Request().Header.ContentType())
+			if strings.HasPrefix(ct, "multipart/form-data") {
+				return c.Next()
+			}
 		}
 
 		req := adaptRequest(c)
