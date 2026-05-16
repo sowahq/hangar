@@ -49,6 +49,20 @@ type ListBucketResultV2 struct {
 	CommonPrefixes        []CommonPrefix `xml:"CommonPrefixes"`
 }
 
+type ListBucketResultV1 struct {
+	XMLName        xml.Name       `xml:"ListBucketResult"`
+	Xmlns          string         `xml:"xmlns,attr"`
+	Name           string         `xml:"Name"`
+	Prefix         string         `xml:"Prefix"`
+	Marker         string         `xml:"Marker"`
+	NextMarker     string         `xml:"NextMarker,omitempty"`
+	MaxKeys        int            `xml:"MaxKeys"`
+	Delimiter      string         `xml:"Delimiter,omitempty"`
+	IsTruncated    bool           `xml:"IsTruncated"`
+	Contents       []Contents     `xml:"Contents"`
+	CommonPrefixes []CommonPrefix `xml:"CommonPrefixes"`
+}
+
 type DeleteRequestObject struct {
 	Key       string `xml:"Key"`
 	VersionID string `xml:"VersionId,omitempty"`

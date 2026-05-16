@@ -58,7 +58,7 @@ Configure SDKs with `UsePathStyle: true` (Go SDK v2), `s3={"addressing_style":"p
 | `DeleteObjects` (batch)                  | ✅     | Up to S3 default batch size                                 |
 | `CopyObject`                             | ✅     | Chunk-ref reuse when both sides unencrypted; full re-encrypt across SSE keys |
 | `ListObjectsV2`                          | ✅     | `prefix`, `delimiter`, `start-after`, `continuation-token`, `max-keys` |
-| `ListObjects` (v1)                       | ❌     | Use V2                                                      |
+| `ListObjects` (v1)                       | ✅     | `marker`, `max-keys`, `prefix`, `delimiter`. `NextMarker` returned when truncated |
 | `ListObjectVersions`                     | ✅     | `GET /:bucket?versions` with `prefix`, `delimiter`, `key-marker`, `version-id-marker`, `max-keys` |
 | `GetObjectAcl` / `PutObjectAcl`          | ❌     |                                                             |
 | `GetObjectTagging` / `PutObjectTagging`  | ❌     |                                                             |

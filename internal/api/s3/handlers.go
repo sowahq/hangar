@@ -592,6 +592,10 @@ func handleListObjectsV2(c *fiber.Ctx) error {
 		return handleListMultipartUploads(c, name)
 	}
 
+	if c.Query("list-type") != "2" {
+		return handleListObjectsV1(c, name)
+	}
+
 	prefix := c.Query("prefix")
 	delim := c.Query("delimiter")
 	contToken := c.Query("continuation-token")
