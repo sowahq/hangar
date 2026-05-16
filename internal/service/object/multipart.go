@@ -12,6 +12,7 @@ import (
 	"github.com/anhostfr/hangar/internal/config"
 	"github.com/anhostfr/hangar/internal/service/bucket"
 	"github.com/anhostfr/hangar/internal/service/diskspace"
+	"github.com/anhostfr/hangar/internal/service/metrics"
 	"github.com/anhostfr/hangar/internal/storage"
 	"github.com/anhostfr/hangar/pkg/pathutil"
 	"github.com/zeebo/blake3"
@@ -81,6 +82,9 @@ func InitiateMultipart(req *InitiateMultipartRequest) (*InitiateMultipartRespons
 	if err := storage.StoreMultipartHeader(h); err != nil {
 		return nil, err
 	}
+
+	metrics.MultipartInflightInc()
+
 	return &InitiateMultipartResponse{Bucket: req.Bucket, Key: req.Key, UploadID: uploadID}, nil
 }
 
@@ -283,6 +287,8 @@ func CompleteMultipart(req *CompleteMultipartRequest) (*PutObjectResponse, error
 		return nil, fmt.Errorf("failed to cleanup multipart state: %w", err)
 	}
 
+	metrics.MultipartInflightDec()
+
 	return &PutObjectResponse{
 		Key:            req.Key,
 		Filename:       pathutil.ExtractFilename(req.Key),
@@ -326,6 +332,9 @@ func AbortMultipart(req *AbortMultipartRequest) error {
 	if _, err := storage.DeleteMultipart(req.Bucket, req.Key, req.UploadID); err != nil {
 		return err
 	}
+
+	metrics.MultipartInflightDec()
+
 	return nil
 }
 

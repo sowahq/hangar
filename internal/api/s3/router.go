@@ -5,7 +5,9 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/anhostfr/hangar/internal/config"
 	"github.com/anhostfr/hangar/internal/service/auth"
+	"github.com/anhostfr/hangar/internal/service/metrics"
 	"github.com/gofiber/fiber/v2"
 	"github.com/phuslu/log"
 )
@@ -86,6 +88,10 @@ func NewRouter(now func() time.Time) *fiber.App {
 		DisableStartupMessage:        true,
 		Network:                      "tcp",
 	})
+
+	if config.MetricsEnabled() {
+		app.Use(metrics.Middleware("s3"))
+	}
 
 	app.Use(sigv4Middleware(now))
 

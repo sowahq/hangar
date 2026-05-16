@@ -13,6 +13,7 @@ import (
 
 	"github.com/anhostfr/hangar/internal/config"
 	"github.com/anhostfr/hangar/internal/database"
+	"github.com/anhostfr/hangar/internal/service/metrics"
 	"github.com/anhostfr/hangar/internal/storage"
 	dbutils "github.com/anhostfr/hangar/pkg/database"
 	"github.com/klauspost/compress/zstd"
@@ -162,6 +163,8 @@ func Run(opts Opts) (*Stats, error) {
 		Int("dangling_refs", stats.DanglingRefs).
 		Dur("duration", stats.Duration).
 		Msg("Integrity scrub completed")
+
+	metrics.ObserveScrub(stats.Corrupted, stats.Quarantined, stats.BytesScanned, stats.MissingFiles, stats.DanglingRefs, time.Now())
 
 	return stats, nil
 }

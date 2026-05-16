@@ -13,10 +13,12 @@ import (
 	"github.com/anhostfr/hangar/cmd/s3keys"
 	scrubcmd "github.com/anhostfr/hangar/cmd/scrub"
 	"github.com/anhostfr/hangar/internal/api/http"
+	metricsRouter "github.com/anhostfr/hangar/internal/api/metrics"
 	"github.com/anhostfr/hangar/internal/api/s3"
 	"github.com/anhostfr/hangar/internal/config"
 	"github.com/anhostfr/hangar/internal/database"
 	gcService "github.com/anhostfr/hangar/internal/service/gc"
+	metricsService "github.com/anhostfr/hangar/internal/service/metrics"
 	scrubService "github.com/anhostfr/hangar/internal/service/scrub"
 	"github.com/anhostfr/hangar/internal/storage"
 	"github.com/gofiber/fiber/v2"
@@ -102,12 +104,29 @@ func Execute() {
 						}()
 					}
 
+					var metricsApp *fiber.App
+					metricsErr := make(chan error, 1)
+					if config.MetricsEnabled() {
+						metricsService.Init()
+						metricsApp = metricsRouter.Router()
+						go func() {
+							metricsErr <- metricsApp.Listen(config.MetricsBindAddr())
+						}()
+					}
+
 					ctx, cancel := context.WithCancel(context.Background())
 					gcDone := make(chan struct{})
 					go gcService.StartScheduledGC(ctx, gcDone)
 
 					scrubDone := make(chan struct{})
 					go scrubService.StartScheduledScrub(ctx, scrubDone)
+
+					diskDone := make(chan struct{})
+					if config.MetricsEnabled() {
+						go metricsService.StartDiskSampler(ctx, diskDone)
+					} else {
+						close(diskDone)
+					}
 
 					osSignal := make(chan os.Signal, 1)
 					signal.Notify(osSignal, os.Interrupt, syscall.SIGTERM)
@@ -119,6 +138,8 @@ func Execute() {
 						log.Error().Err(err).Msg("HTTP server exited unexpectedly")
 					case err := <-s3Err:
 						log.Error().Err(err).Msg("S3 server exited unexpectedly")
+					case err := <-metricsErr:
+						log.Error().Err(err).Msg("Metrics server exited unexpectedly")
 					}
 
 					log.Info().Dur("timeout", shutdownTimeout).Msg("Shutting down Hangar...")
@@ -129,6 +150,11 @@ func Execute() {
 					if s3Router != nil {
 						if err := s3Router.ShutdownWithTimeout(shutdownTimeout); err != nil {
 							log.Error().Err(err).Msg("S3 server shutdown error")
+						}
+					}
+					if metricsApp != nil {
+						if err := metricsApp.ShutdownWithTimeout(shutdownTimeout); err != nil {
+							log.Error().Err(err).Msg("Metrics server shutdown error")
 						}
 					}
 
@@ -142,6 +168,11 @@ func Execute() {
 					case <-scrubDone:
 					case <-time.After(shutdownTimeout):
 						log.Warn().Msg("Scrub goroutine did not exit within timeout")
+					}
+					select {
+					case <-diskDone:
+					case <-time.After(shutdownTimeout):
+						log.Warn().Msg("Disk sampler did not exit within timeout")
 					}
 
 					if err := database.Close(); err != nil {

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/anhostfr/hangar/internal/config"
+	"github.com/anhostfr/hangar/internal/service/metrics"
 	"github.com/anhostfr/hangar/internal/storage"
 	dbutils "github.com/anhostfr/hangar/pkg/database"
 	"github.com/phuslu/log"
@@ -134,6 +135,8 @@ func RunGarbageCollection(dryRun bool) (*GCStats, error) {
 		Int("deleted_chunks", stats.DeletedChunks).
 		Int64("freed_space", stats.FreedSpace).
 		Msg("Garbage collection completed")
+
+	metrics.ObserveGC(stats.TotalChunks, stats.OrphanChunks, stats.DeletedChunks, stats.FreedSpace, time.Now())
 
 	return stats, nil
 }

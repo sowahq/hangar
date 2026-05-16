@@ -54,6 +54,11 @@ type serverConfig struct {
 	Security struct {
 		MasterKeyB64 string `toml:"master_key_b64"`
 	} `toml:"security"`
+
+	Metrics struct {
+		Enabled  bool   `toml:"enabled"`
+		BindAddr string `toml:"bind_addr"`
+	} `toml:"metrics"`
 }
 
 var masterKey []byte
@@ -87,7 +92,38 @@ func DefaultServerConfig() *serverConfig {
 	config.S3.BindAddr = ":9000"
 	config.S3.Region = "us-east-1"
 
+	config.Metrics.Enabled = false
+	config.Metrics.BindAddr = ":9100"
+
 	return config
+}
+
+func MetricsEnabled() bool {
+	mu.RLock()
+	defer mu.RUnlock()
+	if c == nil {
+		c = DefaultServerConfig()
+	}
+	return c.Metrics.Enabled
+}
+
+func MetricsBindAddr() string {
+	mu.RLock()
+	defer mu.RUnlock()
+	if c == nil {
+		c = DefaultServerConfig()
+	}
+	return c.Metrics.BindAddr
+}
+
+func SetMetricsForTest(enabled bool, addr string) {
+	mu.Lock()
+	defer mu.Unlock()
+	if c == nil {
+		c = DefaultServerConfig()
+	}
+	c.Metrics.Enabled = enabled
+	c.Metrics.BindAddr = addr
 }
 
 func S3Enabled() bool {

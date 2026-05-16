@@ -9,6 +9,7 @@ import (
 	"github.com/anhostfr/hangar/internal/api/http/response"
 	"github.com/anhostfr/hangar/internal/config"
 	"github.com/anhostfr/hangar/internal/service/auth"
+	"github.com/anhostfr/hangar/internal/service/metrics"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/limiter"
 	"github.com/phuslu/log"
@@ -24,6 +25,10 @@ func Router() *fiber.App {
 		Network:                      "tcp",
 		ErrorHandler:                 response.ErrorHandler,
 	})
+
+	if config.MetricsEnabled() {
+		router.Use(metrics.Middleware("http"))
+	}
 
 	if config.RateLimitEnabled() {
 		router.Use(limiter.New(limiter.Config{
