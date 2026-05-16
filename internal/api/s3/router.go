@@ -40,6 +40,10 @@ func sigv4Middleware(now func() time.Time) fiber.Handler {
 	}
 
 	return func(c *fiber.Ctx) error {
+		if c.Method() == fiber.MethodOptions {
+			return c.Next()
+		}
+
 		req := adaptRequest(c)
 
 		ah, err := Verify(req, lookup, now())
@@ -94,6 +98,10 @@ func NewRouter(now func() time.Time) *fiber.App {
 	}
 
 	app.Use(sigv4Middleware(now))
+	app.Use(corsResponseMiddleware)
+
+	app.Options("/:bucket", handleCORSPreflight)
+	app.Options("/:bucket/*", handleCORSPreflight)
 
 	app.Get("/", handleListBuckets)
 	app.Put("/:bucket", handleCreateBucket)

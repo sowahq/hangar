@@ -100,6 +100,10 @@ func handleListBuckets(c *fiber.Ctx) error {
 }
 
 func handleCreateBucket(c *fiber.Ctx) error {
+	if c.Request().URI().QueryArgs().Has("cors") {
+		return handlePutBucketCORS(c)
+	}
+
 	name := c.Params("bucket")
 
 	if !hasPerm(c, auth.PermWrite) || !keyAllowsBucket(c, name) {
@@ -119,6 +123,10 @@ func handleCreateBucket(c *fiber.Ctx) error {
 }
 
 func handleDeleteBucket(c *fiber.Ctx) error {
+	if c.Request().URI().QueryArgs().Has("cors") {
+		return handleDeleteBucketCORS(c)
+	}
+
 	name := c.Params("bucket")
 
 	if !hasPerm(c, auth.PermDelete) || !keyAllowsBucket(c, name) {
@@ -509,6 +517,10 @@ func handleHeadBucket(c *fiber.Ctx) error {
 }
 
 func handleListObjectsV2(c *fiber.Ctx) error {
+	if c.Request().URI().QueryArgs().Has("cors") {
+		return handleGetBucketCORS(c)
+	}
+
 	name := c.Params("bucket")
 
 	if !hasPerm(c, auth.PermRead) || !keyAllowsBucket(c, name) {

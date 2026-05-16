@@ -243,5 +243,7 @@ func DeleteBucket(req *DeleteBucketRequest) error {
 		}
 	}
 
+	_ = DeleteCORS(req.Name)
+
 	return db.Delete(bucketKey)
 }
