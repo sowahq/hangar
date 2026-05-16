@@ -38,7 +38,7 @@ hangar
 # Ignore files related to Claude
 CLAUDE.md
 .claude/
-docs/
+/docs/
 bin/s3interop
 
 # Astro / Starlight
