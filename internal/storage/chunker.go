@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"encoding/hex"
 	"fmt"
 	"io"
 	"os"
@@ -31,6 +32,25 @@ var zstdEncoderPool = sync.Pool{
 		}
 		return enc
 	},
+}
+
+var zstdDecoderPool = sync.Pool{
+	New: func() any {
+		dec, err := zstd.NewReader(nil)
+		if err != nil {
+			panic(fmt.Errorf("zstd decoder init: %w", err))
+		}
+		return dec
+	},
+}
+
+func GetZstdDecoder() *zstd.Decoder {
+	return zstdDecoderPool.Get().(*zstd.Decoder)
+}
+
+func PutZstdDecoder(dec *zstd.Decoder) {
+	_ = dec.Reset(nil)
+	zstdDecoderPool.Put(dec)
 }
 
 func ChunkAndHash(r io.Reader, chunkDir string) ([]string, string, int64, error) {
@@ -88,10 +108,10 @@ func ChunkAndHashOpts(r io.Reader, chunkDir string, enc *EncryptParams) (returne
 
 			payload = sealed
 			h := blake3.Sum256(sealed)
-			hashStr = fmt.Sprintf("%x", h[:])
+			hashStr = hex.EncodeToString(h[:])
 		} else {
 			hash := blake3.Sum256(buf[:n])
-			hashStr = fmt.Sprintf("%x", hash[:])
+			hashStr = hex.EncodeToString(hash[:])
 		}
 
 		chunkPath := config.ChunkHashToPath(hashStr)
@@ -118,7 +138,7 @@ func ChunkAndHashOpts(r io.Reader, chunkDir string, enc *EncryptParams) (returne
 		}
 	}
 
-	globalHash := fmt.Sprintf("%x", globalHasher.Sum(nil))
+	globalHash := hex.EncodeToString(globalHasher.Sum(nil))
 	return chunkHashes, globalHash, totalSize, nil
 }
 
@@ -211,12 +231,9 @@ func OpenChunkEncrypted(chunkPath string, key, nonce []byte) (io.ReadCloser, err
 	}
 
 	if config.CompressionEnabled() {
-		decoder, dErr := zstd.NewReader(nil)
-		if dErr != nil {
-			return nil, fmt.Errorf("zstd reader: %w", dErr)
-		}
+		decoder := GetZstdDecoder()
 		decoded, dErr := decoder.DecodeAll(plain, nil)
-		decoder.Close()
+		PutZstdDecoder(decoder)
 		if dErr != nil {
 			return nil, fmt.Errorf("zstd decode chunk: %w", dErr)
 		}
@@ -249,10 +266,11 @@ func OpenChunk(chunkPath string) (io.ReadCloser, error) {
 	}
 
 	if config.CompressionEnabled() {
-		decoder, err := zstd.NewReader(file)
-		if err != nil {
+		decoder := GetZstdDecoder()
+		if err := decoder.Reset(file); err != nil {
+			PutZstdDecoder(decoder)
 			file.Close()
-			return nil, fmt.Errorf("failed to create zstd decoder for %s: %w", chunkPath, err)
+			return nil, fmt.Errorf("failed to reset zstd decoder for %s: %w", chunkPath, err)
 		}
 
 		return &chunkReader{
@@ -274,6 +292,6 @@ func (cr *chunkReader) Read(p []byte) (int, error) {
 }
 
 func (cr *chunkReader) Close() error {
-	cr.decoder.Close()
+	PutZstdDecoder(cr.decoder)
 	return cr.file.Close()
 }

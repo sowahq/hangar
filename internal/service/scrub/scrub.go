@@ -16,9 +16,9 @@ import (
 	"github.com/anhostfr/hangar/internal/service/metrics"
 	"github.com/anhostfr/hangar/internal/storage"
 	dbutils "github.com/anhostfr/hangar/pkg/database"
-	"github.com/klauspost/compress/zstd"
 	"github.com/phuslu/log"
 	"github.com/zeebo/blake3"
+	"encoding/hex"
 )
 
 const (
@@ -170,7 +170,8 @@ func Run(opts Opts) (*Stats, error) {
 }
 
 func verifyChunk(data []byte, expectedHash string) bool {
-	rawHash := fmt.Sprintf("%x", blake3.Sum256(data))
+	rawSum := blake3.Sum256(data)
+	rawHash := hex.EncodeToString(rawSum[:])
 	if rawHash == expectedHash {
 		return true
 	}
@@ -179,19 +180,15 @@ func verifyChunk(data []byte, expectedHash string) bool {
 		return false
 	}
 
-	decoder, err := zstd.NewReader(nil)
-	if err != nil {
-		return false
-	}
-	defer decoder.Close()
-
+	decoder := storage.GetZstdDecoder()
 	plain, err := decoder.DecodeAll(data, nil)
+	storage.PutZstdDecoder(decoder)
 	if err != nil {
 		return false
 	}
 
-	plainHash := fmt.Sprintf("%x", blake3.Sum256(plain))
-	return plainHash == expectedHash
+	plainSum := blake3.Sum256(plain)
+	return hex.EncodeToString(plainSum[:]) == expectedHash
 }
 
 func quarantine(srcPath, hash, quarantineDir string) error {
