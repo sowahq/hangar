@@ -14,7 +14,27 @@ var (
 	ErrObjectLockInvalidArgs    = errors.New("invalid object lock arguments")
 	ErrObjectLockShortenDenied  = errors.New("compliance retention cannot be shortened or removed")
 	ErrObjectLockModeDowngrade  = errors.New("compliance mode cannot be downgraded to governance")
+	ErrObjectLockHeld           = errors.New("object retention or legal hold prevents this action")
 )
+
+func RetentionBlocks(m *storage.Metadatas, bypassGovernance bool, now int64) error {
+	if m == nil {
+		return nil
+	}
+	if m.ObjectLockLegalHold {
+		return ErrObjectLockHeld
+	}
+	if m.ObjectLockMode == "" || m.ObjectLockRetainUntilMilli <= now {
+		return nil
+	}
+	if m.ObjectLockMode == bucket.ObjectLockModeCompliance {
+		return ErrObjectLockHeld
+	}
+	if m.ObjectLockMode == bucket.ObjectLockModeGovernance && !bypassGovernance {
+		return ErrObjectLockHeld
+	}
+	return nil
+}
 
 type RetentionInput struct {
 	Mode             string

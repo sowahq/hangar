@@ -3,6 +3,7 @@ package object
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/cockroachdb/pebble"
 
@@ -11,9 +12,10 @@ import (
 )
 
 type DeleteObjectRequest struct {
-	Bucket    string
-	Key       string
-	VersionID string
+	Bucket           string
+	Key              string
+	VersionID        string
+	BypassGovernance bool
 }
 
 type DeleteObjectResponse struct {
@@ -28,6 +30,13 @@ func DeleteObject(req *DeleteObjectRequest) (*DeleteObjectResponse, error) {
 	versioning := info != nil && info.VersioningEnabled
 
 	if req.VersionID != "" {
+		existing, getErr := storage.GetObjectVersion(req.Bucket, req.Key, req.VersionID)
+		if getErr == nil {
+			if blocked := RetentionBlocks(existing, req.BypassGovernance, time.Now().UnixMilli()); blocked != nil {
+				return nil, blocked
+			}
+		}
+
 		v, err := storage.DeleteObjectVersion(req.Bucket, req.Key, req.VersionID)
 		if err != nil {
 			if errors.Is(err, storage.ErrVersionNotFound) {
@@ -71,6 +80,12 @@ func DeleteObject(req *DeleteObjectRequest) (*DeleteObjectResponse, error) {
 			return nil, fmt.Errorf("failed to update current pointer: %w", err)
 		}
 		return &DeleteObjectResponse{VersionID: marker.VersionID, IsDeleteMarker: true}, nil
+	}
+
+	if existing, getErr := storage.GetMetadataFromBucket(req.Bucket, req.Key); getErr == nil {
+		if blocked := RetentionBlocks(existing, req.BypassGovernance, time.Now().UnixMilli()); blocked != nil {
+			return nil, blocked
+		}
 	}
 
 	meta, err := storage.DeleteMetadataFromBucket(req.Bucket, req.Key)

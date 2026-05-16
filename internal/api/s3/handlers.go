@@ -495,17 +495,23 @@ func handleDeleteObjects(c *fiber.Ctx) error {
 		return writeError(c, fiber.StatusBadRequest, "MalformedXML", "no objects to delete", "/"+name)
 	}
 
+	bypass := bypassGovernance(c)
 	out := DeleteResult{Xmlns: xmlNamespace}
 	for _, obj := range req.Objects {
 		res, err := object.DeleteObject(&object.DeleteObjectRequest{
-			Bucket:    name,
-			Key:       obj.Key,
-			VersionID: obj.VersionID,
+			Bucket:           name,
+			Key:              obj.Key,
+			VersionID:        obj.VersionID,
+			BypassGovernance: bypass,
 		})
 		if err != nil && !errors.Is(err, object.ErrObjectNotFound) {
+			code := "InternalError"
+			if errors.Is(err, object.ErrObjectLockHeld) {
+				code = "AccessDenied"
+			}
 			out.Errors = append(out.Errors, DeleteErrorObject{
 				Key:     obj.Key,
-				Code:    "InternalError",
+				Code:    code,
 				Message: err.Error(),
 			})
 			continue
@@ -836,6 +842,9 @@ func handlePutObject(c *fiber.Ctx) error {
 		if errors.Is(err, object.ErrLengthRequired) {
 			return writeError(c, fiber.StatusLengthRequired, "MissingContentLength", "Content-Length required", "/"+name+"/"+key)
 		}
+		if errors.Is(err, object.ErrObjectLockHeld) {
+			return writeError(c, fiber.StatusForbidden, "AccessDenied", err.Error(), "/"+name+"/"+key)
+		}
 		if ok, r := sseErrorResponse(c, err, "/"+name+"/"+key); ok {
 			return r
 		}
@@ -963,13 +972,17 @@ func handleDeleteObject(c *fiber.Ctx) error {
 	versionID := c.Query("versionId")
 
 	res, err := object.DeleteObject(&object.DeleteObjectRequest{
-		Bucket:    name,
-		Key:       key,
-		VersionID: versionID,
+		Bucket:           name,
+		Key:              key,
+		VersionID:        versionID,
+		BypassGovernance: bypassGovernance(c),
 	})
 	if err != nil {
 		if errors.Is(err, object.ErrObjectNotFound) {
 			return c.SendStatus(fiber.StatusNoContent)
+		}
+		if errors.Is(err, object.ErrObjectLockHeld) {
+			return writeError(c, fiber.StatusForbidden, "AccessDenied", err.Error(), "/"+name+"/"+key)
 		}
 		return writeError(c, fiber.StatusInternalServerError, "InternalError", err.Error(), "/"+name+"/"+key)
 	}

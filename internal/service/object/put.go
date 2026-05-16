@@ -73,6 +73,15 @@ func PutObject(req *PutObjectRequest) (*PutObjectResponse, error) {
 	}
 
 	info, _ := bucket.GetBucket(req.Bucket)
+
+	if info != nil && info.ObjectLockEnabled && !info.VersioningEnabled {
+		if existing, getErr := storage.GetMetadataFromBucket(req.Bucket, req.Key); getErr == nil {
+			if blocked := RetentionBlocks(existing, false, time.Now().UnixMilli()); blocked != nil {
+				return nil, blocked
+			}
+		}
+	}
+
 	quotaEnabled := info != nil && (info.MaxBytes > 0 || info.MaxObjects > 0)
 	if quotaEnabled {
 		if req.ContentLength <= 0 {
