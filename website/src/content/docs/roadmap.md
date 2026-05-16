@@ -1,37 +1,59 @@
 ---
 title: Roadmap
-description: What's done, what's next, and the bigger arcs.
+description: What's done, what's next, what's planned but not built.
 ---
 
-Hangar is pre-1.0. The roadmap below tracks themes — features marked _Done_ are merged to `main`.
+Hangar is pre-1.0. This page tracks themes; check the [git log](https://github.com/sowahq/hangar/commits/main) for granular history.
 
 ## Done
 
-- HTTP API: buckets, objects, tokens, quotas, versioning, public-read buckets
-- S3-compatible API: SigV4 (header + presigned + aws-chunked), path-style routing
-- S3 operations: `PutObject`, `GetObject` (+ Range), `HeadObject`, `DeleteObject`, `DeleteObjects` (batch), `CopyObject`, `ListObjectsV2`, multipart upload
-- Server-side encryption: SSE-S3 (master key + HKDF) and SSE-C (customer key)
-- Per-bucket auth, S3 access keys with bucket scoping
-- Content-addressed chunks (blake3) with zstd compression
-- Background GC of unreferenced chunks
-- Deep healthcheck (`/status`)
+### S3 surface
+- SigV4 (`Authorization`, presigned, `aws-chunked`), path-style routing
+- `PutObject`, `GetObject` (+ Range, conditional), `HeadObject`, `DeleteObject`, `DeleteObjects`, `CopyObject`, `ListObjectsV2`, `HeadBucket`, `ListBuckets`, `CreateBucket`, `DeleteBucket`
+- Multipart upload (`Create` / `Upload` / `Complete` / `Abort` / `List`)
+- `?cors` subresource (PUT/GET/DELETE + preflight)
+- `?lifecycle` subresource (PUT/GET/DELETE) with scheduled expiration + abort-stale-multipart
+- `x-amz-checksum-*` response echo
 
-## Next up (one of these per sprint)
+### Storage & security
+- Server-side encryption: SSE-S3 (HKDF + AES-256-GCM) and SSE-C
+- SSE-S3 keyring with rotation (`POST /admin/sse/keys/rotate`)
+- Per-bucket auth (argon2id tokens), S3 access keys with bucket scoping
+- Content-addressed chunks (blake3), zstd compression, pending-chunk tracker against GC races
+- Versioning, quotas, public-read buckets
 
-- **Object Lock / WORM** — retention periods, legal hold. Compliance-oriented, self-contained.
-- **Lifecycle rules** — prefix + age expiration, hooks into GC.
+### Operations
+- `hangar backup create` / `restore` (Pebble checkpoint + chunk tree)
+- `hangar scrub run` + scheduled scrub (re-hash, quarantine corrupt, dangling-ref report)
+- Disk safeguards: min free bytes / pct / node cap
+- Rate limit, deep healthcheck (`/status`), graceful shutdown
+- JSONL audit log with rotation (`/admin/audit`)
+- Prometheus metrics on a separate port
+
+## Next up
+
+Pre-1.0 polish and the next round of S3 surface:
+
+- **Object Lock / WORM** — retention periods, legal hold.
+- **Bucket default encryption** (`PUT /:bucket?encryption`).
 - **Bucket policy / ACL** — JSON policy doc, evaluated per request.
-- **S3 polish** — virtual-host-style routing, `x-amz-checksum-*` response echo, object tagging.
+- **Object tagging.**
+- **Virtual-host-style addressing.**
+- **`UploadPartCopy`.**
+- **Admin UI.**
 
-## Bigger arcs
+## Planned (not built)
 
-- **Distribution + erasure coding** — Raft control plane, EC chunk placement, consistent hashing. Multi-sprint. Single-node-only is the current line in the sand.
-- **SSE-KMS** — requires a KMS provider integration.
-- **Metrics** — Prometheus exposition. Currently deferred; deep healthcheck covers most needs.
+These are committed-to directions, not "maybe":
+
+- **Distribution + erasure coding.** Multi-node cluster on top of the per-node Pebble engine. Likely Raft for control plane, content-addressed chunks placed via consistent hashing + EC across nodes. Unlocks `PutBucketReplication`, multi-AZ durability, online repair.
+- **SSE-KMS.** Provider integration so master keys can live outside the server.
+- **Online / hot backup.** Streaming snapshots without stopping the server.
 
 ## Known gaps
 
 - `aws-chunked` PUT without `x-amz-decoded-content-length` defaults to `0` instead of failing — minor.
-- SDK `Response has no supported checksum` warning — Hangar does not yet echo `x-amz-checksum-*` headers. ETag still validates body integrity.
+- No `If-Match` / `If-Unmodified-Since` on object GET yet.
+- `ListObjectsV2` scan cost is linear in items returned; very large prefixes pay for it.
 
 Open an [issue](https://github.com/sowahq/hangar/issues) if your workflow needs something not listed.

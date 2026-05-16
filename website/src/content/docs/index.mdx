@@ -1,15 +1,18 @@
 ---
 title: Hangar
-description: Self-hosted object storage in Go. Content-addressed, S3-compatible, simple to run.
+description: Self-hosted object storage in Go. Content-addressed, S3-compatible, single-binary.
 template: splash
 hero:
-  tagline: Self-hosted object storage in Go. Content-addressed, S3-compatible, simple to run.
+  tagline: Self-hosted object storage in Go. Content-addressed, S3-compatible, single-binary.
   actions:
     - text: Get Started
       link: /getting-started/
       icon: right-arrow
       variant: primary
-    - text: View on GitHub
+    - text: Why Hangar
+      link: /introduction/
+      icon: information
+    - text: GitHub
       link: https://github.com/sowahq/hangar
       icon: external
 ---
@@ -20,24 +23,28 @@ import { Card, CardGrid } from '@astrojs/starlight/components';
 
 <CardGrid>
   <Card title="Content-addressed chunks" icon="seti:db">
-    Blake3 hashes, zstd compression on Pebble. Dedup across uploads, immutable storage layout.
+    Blake3-hashed, zstd-compressed chunks on Pebble. Same bytes uploaded twice cost the disk once.
   </Card>
-  <Card title="S3-compatible" icon="cloud-download">
-    Path-style routing, SigV4 (header + presigned + aws-chunked), multipart, CopyObject, DeleteObjects. Drop-in for most SDKs.
+  <Card title="S3-compatible API" icon="cloud-download">
+    SigV4 (header + presigned + `aws-chunked`), path-style, multipart, `CopyObject`, `DeleteObjects`, `ListObjectsV2`, lifecycle, CORS, checksum echo. Drop-in for most SDKs.
   </Card>
-  <Card title="Server-side encryption" icon="seti:lock">
-    SSE-S3 (AES-256-GCM, server master key) and SSE-C (customer-provided key). AEAD with per-chunk nonces.
+  <Card title="Encryption at rest" icon="seti:lock">
+    SSE-S3 (AES-256-GCM, server master key, HKDF per object, rotatable keyring) and SSE-C (customer-supplied key, server stores only MD5).
   </Card>
   <Card title="Per-bucket auth" icon="approve-check-circle">
-    Argon2id tokens with `read` / `write` / `delete` / `admin` scopes. Bucket-restricted S3 keys.
+    Argon2id tokens with `read` / `write` / `delete` / `admin` scopes. SigV4 over `S3Key` credentials with optional per-bucket restriction.
   </Card>
-  <Card title="Quotas, versioning, public buckets" icon="setting">
-    Hard quotas on bytes/objects, opt-in object versioning, public-read mode for static assets.
+  <Card title="Operations built in" icon="setting">
+    Consistent backup/restore CLI, integrity scrub, background GC, disk safeguards, lifecycle expiration, JSONL audit log with rotation.
   </Card>
-  <Card title="Background GC, healthcheck" icon="rocket">
-    Scheduled reclaim of unreferenced chunks. Deep `/status` probe (DB + disk + GC liveness).
+  <Card title="Observability" icon="rocket">
+    Opt-in Prometheus on a separate port (requests, GC, scrub, disk, multipart). Deep `/status` probe.
   </Card>
 </CardGrid>
+
+## Honest status
+
+Pre-1.0. **Single-node today** — distribution, replication, and erasure coding are [planned](/roadmap/) but not built. Read [Limitations](/limitations/) before adopting.
 
 ## In 30 seconds
 
@@ -62,4 +69,4 @@ See [Getting Started](/getting-started/) for the full walkthrough.
 
 ## Stack
 
-Go 1.25 · [Fiber](https://gofiber.io) · [Pebble](https://github.com/cockroachdb/pebble) · [blake3](https://github.com/zeebo/blake3) · [zstd](https://github.com/klauspost/compress)
+Go · [Fiber](https://gofiber.io) · [Pebble](https://github.com/cockroachdb/pebble) · [blake3](https://github.com/zeebo/blake3) · [zstd](https://github.com/klauspost/compress)

@@ -19,8 +19,11 @@ export default defineConfig({
       pagination: true,
       sidebar: [
         { label: "Home", link: "/" },
+        { label: "Introduction", link: "/introduction/" },
         { label: "Getting Started", link: "/getting-started/" },
         { label: "Configuration", link: "/configuration/" },
+        { label: "Limitations", link: "/limitations/" },
+        { label: "S3 compatibility", link: "/s3-compatibility/" },
         {
           label: "API",
           items: [
@@ -29,6 +32,24 @@ export default defineConfig({
           ],
         },
         { label: "Encryption (SSE)", link: "/sse/" },
+        {
+          label: "Operations",
+          items: [
+            { label: "Backup & restore", link: "/operations/backup-restore/" },
+            { label: "Integrity scrub", link: "/operations/scrub/" },
+            { label: "Lifecycle", link: "/operations/lifecycle/" },
+            { label: "CORS", link: "/operations/cors/" },
+            { label: "SSE key rotation", link: "/operations/sse-key-rotation/" },
+            { label: "Disk safeguards", link: "/operations/disk-safeguards/" },
+            { label: "Audit log", link: "/operations/audit/" },
+          ],
+        },
+        {
+          label: "Observability",
+          items: [
+            { label: "Metrics (Prometheus)", link: "/observability/metrics/" },
+          ],
+        },
         { label: "Architecture", link: "/architecture/" },
         { label: "Roadmap", link: "/roadmap/" },
       ],

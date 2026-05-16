@@ -1,11 +1,13 @@
 ---
 title: S3 API
-description: S3-compatible endpoint setup, SDK examples, supported operations, encryption headers.
+description: S3-compatible endpoint setup and SDK examples. For the full operation matrix, see /s3-compatibility/.
 ---
 
 import { Tabs, TabItem } from '@astrojs/starlight/components';
 
 Hangar exposes a SigV4-authenticated S3-compatible API on a separate port. Most AWS SDKs work out of the box with `path-style` addressing.
+
+> For the canonical "what is and is not implemented" table, see [S3 compatibility](/s3-compatibility/).
 
 Enable it in `config.toml`:
 
@@ -18,7 +20,7 @@ region    = "us-east-1"
 
 ## Credentials
 
-Create an S3 access key through the admin API:
+Create an S3 access key through the admin API (or `hangar s3keys create -p admin`):
 
 ```sh
 curl -X POST http://localhost:8080/admin/s3keys \
@@ -37,7 +39,7 @@ Response:
 }
 ```
 
-Restrict to specific buckets by passing `"buckets": ["photos","logs"]`.
+`secret_key` is shown **only once**. Restrict to specific buckets with `"buckets": ["photos","logs"]`.
 
 ## SDK setup
 
@@ -77,44 +79,69 @@ Restrict to specific buckets by passing `"buckets": ["photos","logs"]`.
     )
     ```
   </TabItem>
+  <TabItem label="rclone">
+    ```ini
+    [hangar]
+    type = s3
+    provider = Other
+    access_key_id = GRYGVH4K6YYNKMUEUXG5
+    secret_access_key = DRSOnIeyYoCy+xuFBUVI6u6mBOJxdz0i9coWhNb0
+    endpoint = http://localhost:9000
+    region = us-east-1
+    force_path_style = true
+    ```
+  </TabItem>
 </Tabs>
 
-## Supported operations
+## Summary of supported surface
 
-| Operation                | Notes                                                  |
-|--------------------------|--------------------------------------------------------|
-| `ListBuckets`            |                                                        |
-| `CreateBucket` (`PUT /:bucket`)         |                                         |
-| `DeleteBucket`           | Must be empty                                          |
-| `HeadBucket`             |                                                        |
-| `PutObject`              | Including `aws-chunked` streaming payload              |
-| `GetObject`              | Supports `Range`, `If-Modified-Since`                  |
-| `HeadObject`             |                                                        |
-| `DeleteObject`           |                                                        |
-| `DeleteObjects` (batch)  |                                                        |
-| `CopyObject`             | Chunk-ref reuse when unencrypted, re-encrypt on SSE    |
-| `ListObjectsV2`          | `prefix`, `delimiter`, `start-after`, `continuation-token` |
-| `CreateMultipartUpload` / `UploadPart` / `CompleteMultipartUpload` / `AbortMultipartUpload` / `ListMultipartUploads` / `ListParts` |  |
-| Presigned URLs (`X-Amz-*` query)        | GET and PUT                              |
+A short overview — full matrix in [S3 compatibility](/s3-compatibility/):
 
-## Encryption headers
+- **Buckets** — `ListBuckets`, `CreateBucket`, `DeleteBucket`, `HeadBucket`
+- **Objects** — `PutObject` (incl. `aws-chunked`), `GetObject` (incl. `Range`, conditional), `HeadObject`, `DeleteObject`, `DeleteObjects`, `CopyObject`
+- **Listing** — `ListObjectsV2` (`prefix`, `delimiter`, `start-after`, `continuation-token`, `max-keys`)
+- **Multipart** — `CreateMultipartUpload`, `UploadPart`, `CompleteMultipartUpload`, `AbortMultipartUpload`, `ListMultipartUploads`, `ListParts`
+- **Subresources** — `?cors` (PUT/GET/DELETE + preflight), `?lifecycle` (PUT/GET/DELETE)
+- **SSE headers** — `x-amz-server-side-encryption: AES256` and the SSE-C trio (algorithm/key/key-MD5), including copy-source variants
+- **Checksums** — `x-amz-checksum-{crc32,crc32c,crc64nvme,sha1,sha256}` parsed, persisted, echoed on responses
+- **Presigned URLs** — GET and PUT
+- **Auth** — SigV4 over `S3Key` credentials, with optional per-bucket scoping
 
-Standard SSE headers are honored:
+### Not supported
 
-- `x-amz-server-side-encryption: AES256` → SSE-S3 (requires master key configured)
-- `x-amz-server-side-encryption-customer-algorithm` + `-customer-key` + `-customer-key-MD5` → SSE-C
+ACLs, bucket policies, Object Lock / WORM, tagging, notifications, replication, SSE-KMS, bucket default encryption, virtual-host-style addressing, `UploadPartCopy`, POST policy presigning, `SelectObjectContent`, storage tiers.
 
-See [Encryption](../sse.md) for details and the error matrix.
+## Server-side encryption
+
+Standard SSE headers are honored. Quickstart:
+
+```sh
+# SSE-S3 (requires [security] master_key_b64 configured)
+aws --endpoint-url http://localhost:9000 \
+    s3 cp ./file.bin s3://photos/file.bin --sse AES256
+```
+
+See [Encryption](/sse/) for the per-header reference, error matrix, and key-rotation flow.
+
+## CORS
+
+```sh
+aws --endpoint-url http://localhost:9000 \
+    s3api put-bucket-cors --bucket photos --cors-configuration file://cors.json
+```
+
+See [CORS](/operations/cors/).
+
+## Lifecycle
+
+```sh
+aws --endpoint-url http://localhost:9000 \
+    s3api put-bucket-lifecycle-configuration \
+    --bucket photos --lifecycle-configuration file://lifecycle.json
+```
+
+Supports prefix-based expiration and abort of stale multipart uploads. See [Lifecycle](/operations/lifecycle/).
 
 ## Addressing
 
-Path-style only today (`http://host:9000/bucket/key`). Virtual-host style (`http://bucket.host:9000/key`) is not yet supported — configure your SDK with `UsePathStyle: true` or the equivalent.
-
-## Not yet supported
-
-- ACLs / bucket policies
-- Object Lock / WORM
-- Lifecycle rules
-- SSE-KMS
-- Bucket default encryption config
-- `x-amz-checksum-*` response echo (AWS SDK may emit a "no supported checksum" warning — payload integrity still validated via ETag)
+Path-style only today (`http://host:9000/bucket/key`). Virtual-host style (`http://bucket.host:9000/key`) is not implemented — configure your SDK with `UsePathStyle: true` (or the equivalent).
