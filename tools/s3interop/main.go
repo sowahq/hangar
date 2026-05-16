@@ -10,6 +10,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"os"
 	"time"
@@ -364,6 +365,10 @@ func runSSETests(ctx context.Context, cli *s3.Client, bucket string, fails *int,
 	}
 }
 
+func multipartNew(buf *bytes.Buffer) *multipart.Writer {
+	return multipart.NewWriter(buf)
+}
+
 func runNewFeatureTests(ctx context.Context, cli *s3.Client, bucket, ak, sk, endpoint string, fails *int, step func(string, error, string)) {
 	// Bucket versioning XML
 	_, err := cli.PutBucketVersioning(ctx, &s3.PutBucketVersioningInput{
@@ -513,6 +518,37 @@ func runNewFeatureTests(ctx context.Context, cli *s3.Client, bucket, ak, sk, end
 			step("UploadPartCopy(init)", cerr, "")
 		}
 		_, _ = cli.DeleteObject(ctx, &s3.DeleteObjectInput{Bucket: &bucket, Key: &srcKey})
+	}
+
+	// POST policy via SDK presigner
+	postKey := "interop/post-${filename}"
+	pc := s3.NewPresignClient(cli)
+	pp, err := pc.PresignPostObject(ctx, &s3.PutObjectInput{Bucket: &bucket, Key: &postKey})
+	if err == nil {
+		var buf bytes.Buffer
+		mw := multipartNew(&buf)
+		for k, v := range pp.Values {
+			_ = mw.WriteField(k, v)
+		}
+		fw, _ := mw.CreateFormFile("file", "post-upload.bin")
+		_, _ = fw.Write([]byte("via POST"))
+		mw.Close()
+		req, _ := http.NewRequest("POST", pp.URL, &buf)
+		req.Header.Set("Content-Type", mw.FormDataContentType())
+		resp, perr := http.DefaultClient.Do(req)
+		if perr != nil {
+			step("POST policy (SDK presigner)", perr, "")
+		} else {
+			rb, _ := io.ReadAll(resp.Body)
+			_ = resp.Body.Close()
+			if resp.StatusCode/100 != 2 {
+				step("POST policy (SDK presigner)", fmt.Errorf("status=%d body=%s", resp.StatusCode, rb), "")
+			} else {
+				step("POST policy (SDK presigner)", nil, fmt.Sprintf("status=%d", resp.StatusCode))
+			}
+		}
+	} else {
+		step("POST policy (SDK presigner)", err, "")
 	}
 
 	// cleanup
