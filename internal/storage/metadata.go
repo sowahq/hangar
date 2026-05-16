@@ -33,6 +33,13 @@ type Metadatas struct {
 	ObjectLockMode             string `json:"object_lock_mode,omitempty"`
 	ObjectLockRetainUntilMilli int64  `json:"object_lock_retain_until_milli,omitempty"`
 	ObjectLockLegalHold        bool   `json:"object_lock_legal_hold,omitempty"`
+
+	Tags []Tag `json:"tags,omitempty"`
+}
+
+type Tag struct {
+	Key   string `json:"key"`
+	Value string `json:"value"`
 }
 
 func StoreMetadataInBucket(bucket string, metadata *Metadatas) error {

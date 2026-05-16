@@ -8,7 +8,10 @@ import (
 	"github.com/cockroachdb/pebble"
 
 	"github.com/anhostfr/hangar/internal/database"
+	"github.com/anhostfr/hangar/internal/storage"
 )
+
+type Tag = storage.Tag
 
 var ErrTaggingNotFound = errors.New("tagging configuration not found")
 
@@ -17,11 +20,6 @@ const (
 	MaxTagKeyLen    = 128
 	MaxTagValueLen  = 256
 )
-
-type Tag struct {
-	Key   string `json:"key"`
-	Value string `json:"value"`
-}
 
 func taggingKey(bucket string) []byte {
 	return []byte(fmt.Sprintf("tagging:%s", bucket))

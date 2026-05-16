@@ -186,6 +186,9 @@ func handleObjectGet(c *fiber.Ctx) error {
 	if c.Request().URI().QueryArgs().Has("attributes") {
 		return handleGetObjectAttributes(c)
 	}
+	if c.Request().URI().QueryArgs().Has("tagging") {
+		return handleGetObjectTagging(c)
+	}
 	return handleGetObject(c)
 }
 
@@ -198,6 +201,9 @@ func handleObjectPut(c *fiber.Ctx) error {
 	}
 	if c.Request().URI().QueryArgs().Has("legal-hold") {
 		return handlePutObjectLegalHold(c)
+	}
+	if c.Request().URI().QueryArgs().Has("tagging") {
+		return handlePutObjectTagging(c)
 	}
 	return handlePutObject(c)
 }
@@ -220,6 +226,9 @@ func handleObjectPost(c *fiber.Ctx) error {
 func handleObjectDelete(c *fiber.Ctx) error {
 	if uploadID := c.Query("uploadId"); uploadID != "" {
 		return handleAbortMultipart(c, uploadID)
+	}
+	if c.Request().URI().QueryArgs().Has("tagging") {
+		return handleDeleteObjectTagging(c)
 	}
 	return handleDeleteObject(c)
 }

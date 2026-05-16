@@ -61,7 +61,7 @@ Configure SDKs with `UsePathStyle: true` (Go SDK v2), `s3={"addressing_style":"p
 | `ListObjects` (v1)                       | ✅     | `marker`, `max-keys`, `prefix`, `delimiter`. `NextMarker` returned when truncated |
 | `ListObjectVersions`                     | ✅     | `GET /:bucket?versions` with `prefix`, `delimiter`, `key-marker`, `version-id-marker`, `max-keys` |
 | `GetObjectAcl` / `PutObjectAcl`          | ❌     |                                                             |
-| `GetObjectTagging` / `PutObjectTagging`  | ❌     |                                                             |
+| `GetObjectTagging` / `PutObjectTagging` / `DeleteObjectTagging` | ✅ | Versioned objects tagged per-version via `versionId`. Same limits as bucket tagging                                     |
 | `GetObjectAttributes`                    | ✅     | `x-amz-object-attributes` filters: `ETag`, `Checksum`, `ObjectParts`, `StorageClass`, `ObjectSize` |
 | `RestoreObject`                          | ❌     | No tiers                                                    |
 | `SelectObjectContent`                    | ❌     |                                                             |
