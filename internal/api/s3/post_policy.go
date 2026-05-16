@@ -30,11 +30,13 @@ func handlePostPolicy(c *fiber.Ctx) error {
 		return writeError(c, fiber.StatusBadRequest, "MalformedPOSTRequest", err.Error(), "/"+bucketName)
 	}
 
+	formLower := make(map[string][]string, len(form.Value))
+	for k, v := range form.Value {
+		formLower[strings.ToLower(k)] = v
+	}
+
 	get := func(k string) string {
-		if v := form.Value[k]; len(v) > 0 {
-			return v[0]
-		}
-		if v := form.Value[strings.ToLower(k)]; len(v) > 0 {
+		if v := formLower[strings.ToLower(k)]; len(v) > 0 {
 			return v[0]
 		}
 		return ""
@@ -101,7 +103,7 @@ func handlePostPolicy(c *fiber.Ctx) error {
 
 	objectKey := strings.ReplaceAll(keyTpl, "${filename}", fileHdr.Filename)
 
-	if err := validatePolicyConditions(doc.Conditions, bucketName, objectKey, fileHdr.Size, form.Value); err != nil {
+	if err := validatePolicyConditions(doc.Conditions, bucketName, objectKey, fileHdr.Size, formLower); err != nil {
 		return writeError(c, fiber.StatusForbidden, "AccessDenied", err.Error(), "/"+bucketName+"/"+objectKey)
 	}
 
@@ -223,14 +225,14 @@ func validatePolicyConditions(conditions []json.RawMessage, bucketName, objectKe
 }
 
 func lookupFormValue(form map[string][]string, field, bucketName, objectKey string) string {
-	switch field {
-	case "bucket":
+	if field == "bucket" {
 		return bucketName
-	case "key":
-		return objectKey
 	}
 	if v, ok := form[field]; ok && len(v) > 0 {
 		return v[0]
+	}
+	if field == "key" {
+		return objectKey
 	}
 	return ""
 }
