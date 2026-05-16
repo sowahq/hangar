@@ -259,6 +259,7 @@ func main() {
 	}
 
 	runSSETests(ctx, cli, bucket, &fails, step)
+	runNewFeatureTests(ctx, cli, bucket, ak, sk, endpoint, &fails, step)
 
 	if fails > 0 {
 		fmt.Printf("\n%d FAIL\n", fails)
@@ -361,6 +362,162 @@ func runSSETests(ctx context.Context, cli *s3.Client, bucket string, fails *int,
 
 		_, _ = cli.DeleteObject(ctx, &s3.DeleteObjectInput{Bucket: &bucket, Key: &scKey})
 	}
+}
+
+func runNewFeatureTests(ctx context.Context, cli *s3.Client, bucket, ak, sk, endpoint string, fails *int, step func(string, error, string)) {
+	// Bucket versioning XML
+	_, err := cli.PutBucketVersioning(ctx, &s3.PutBucketVersioningInput{
+		Bucket:                  &bucket,
+		VersioningConfiguration: &types.VersioningConfiguration{Status: types.BucketVersioningStatusEnabled},
+	})
+	step("PutBucketVersioning", err, "")
+	gv, err := cli.GetBucketVersioning(ctx, &s3.GetBucketVersioningInput{Bucket: &bucket})
+	if err == nil {
+		step("GetBucketVersioning", nil, fmt.Sprintf("status=%s", string(gv.Status)))
+	} else {
+		step("GetBucketVersioning", err, "")
+	}
+
+	// Conditional headers
+	condKey := "interop/cond.bin"
+	pr, err := cli.PutObject(ctx, &s3.PutObjectInput{Bucket: &bucket, Key: &condKey, Body: bytes.NewReader([]byte("v1"))})
+	if err == nil {
+		etag := aws.ToString(pr.ETag)
+		_, gErr := cli.GetObject(ctx, &s3.GetObjectInput{Bucket: &bucket, Key: &condKey, IfMatch: &etag})
+		step("GetObject(If-Match ok)", gErr, "")
+		bogus := `"deadbeef"`
+		_, gErr = cli.GetObject(ctx, &s3.GetObjectInput{Bucket: &bucket, Key: &condKey, IfMatch: &bogus})
+		if gErr != nil {
+			step("GetObject(If-Match fail)", nil, "412 as expected")
+		} else {
+			step("GetObject(If-Match fail)", fmt.Errorf("accepted bad If-Match"), "")
+		}
+		star := "*"
+		_, pErr := cli.PutObject(ctx, &s3.PutObjectInput{Bucket: &bucket, Key: &condKey, Body: bytes.NewReader([]byte("v2")), IfNoneMatch: &star})
+		if pErr != nil {
+			step("PutObject(If-None-Match: *)", nil, "412 as expected (object exists)")
+		} else {
+			step("PutObject(If-None-Match: *)", fmt.Errorf("overwrote existing"), "")
+		}
+	}
+
+	// Bucket tagging
+	_, err = cli.PutBucketTagging(ctx, &s3.PutBucketTaggingInput{
+		Bucket: &bucket,
+		Tagging: &types.Tagging{
+			TagSet: []types.Tag{
+				{Key: aws.String("env"), Value: aws.String("prod")},
+				{Key: aws.String("team"), Value: aws.String("platform")},
+			},
+		},
+	})
+	step("PutBucketTagging", err, "")
+	bt, err := cli.GetBucketTagging(ctx, &s3.GetBucketTaggingInput{Bucket: &bucket})
+	if err == nil {
+		step("GetBucketTagging", nil, fmt.Sprintf("tags=%d", len(bt.TagSet)))
+	} else {
+		step("GetBucketTagging", err, "")
+	}
+	_, err = cli.DeleteBucketTagging(ctx, &s3.DeleteBucketTaggingInput{Bucket: &bucket})
+	step("DeleteBucketTagging", err, "")
+
+	// Object tagging via x-amz-tagging header
+	tagKey := "interop/tagged.bin"
+	_, err = cli.PutObject(ctx, &s3.PutObjectInput{
+		Bucket:  &bucket,
+		Key:     &tagKey,
+		Body:    bytes.NewReader([]byte("tagged")),
+		Tagging: aws.String("a=1&b=2"),
+	})
+	step("PutObject(x-amz-tagging)", err, "")
+	ot, err := cli.GetObjectTagging(ctx, &s3.GetObjectTaggingInput{Bucket: &bucket, Key: &tagKey})
+	if err == nil {
+		step("GetObjectTagging", nil, fmt.Sprintf("tags=%d", len(ot.TagSet)))
+	} else {
+		step("GetObjectTagging", err, "")
+	}
+	hot, err := cli.HeadObject(ctx, &s3.HeadObjectInput{Bucket: &bucket, Key: &tagKey})
+	if err == nil {
+		step("HeadObject(tagging-count)", nil, fmt.Sprintf("count=%d", aws.ToInt32(hot.TagCount)))
+	} else {
+		step("HeadObject(tagging-count)", err, "")
+	}
+	_, err = cli.PutObjectTagging(ctx, &s3.PutObjectTaggingInput{
+		Bucket: &bucket, Key: &tagKey,
+		Tagging: &types.Tagging{TagSet: []types.Tag{{Key: aws.String("only"), Value: aws.String("one")}}},
+	})
+	step("PutObjectTagging", err, "")
+	ot2, err := cli.GetObjectTagging(ctx, &s3.GetObjectTaggingInput{Bucket: &bucket, Key: &tagKey})
+	if err == nil {
+		got := "none"
+		if len(ot2.TagSet) > 0 {
+			got = aws.ToString(ot2.TagSet[0].Key)
+		}
+		step("GetObjectTagging(after replace)", nil, fmt.Sprintf("tags=%d first=%s", len(ot2.TagSet), got))
+	} else {
+		step("GetObjectTagging(after replace)", err, "")
+	}
+	_, err = cli.DeleteObjectTagging(ctx, &s3.DeleteObjectTaggingInput{Bucket: &bucket, Key: &tagKey})
+	step("DeleteObjectTagging", err, "")
+
+	// ListObjectVersions
+	lov, err := cli.ListObjectVersions(ctx, &s3.ListObjectVersionsInput{Bucket: &bucket, Prefix: aws.String("interop/cond")})
+	if err == nil {
+		step("ListObjectVersions", nil, fmt.Sprintf("versions=%d markers=%d", len(lov.Versions), len(lov.DeleteMarkers)))
+	} else {
+		step("ListObjectVersions", err, "")
+	}
+
+	// ListObjects v1
+	lo1, err := cli.ListObjects(ctx, &s3.ListObjectsInput{Bucket: &bucket, Prefix: aws.String("interop/")})
+	if err == nil {
+		step("ListObjects (v1)", nil, fmt.Sprintf("contents=%d", len(lo1.Contents)))
+	} else {
+		step("ListObjects (v1)", err, "")
+	}
+
+	// GetObjectAttributes
+	attr, err := cli.GetObjectAttributes(ctx, &s3.GetObjectAttributesInput{
+		Bucket:           &bucket,
+		Key:              &tagKey,
+		ObjectAttributes: []types.ObjectAttributes{types.ObjectAttributesEtag, types.ObjectAttributesObjectSize, types.ObjectAttributesStorageClass},
+	})
+	if err == nil {
+		step("GetObjectAttributes", nil, fmt.Sprintf("size=%d storage=%s", aws.ToInt64(attr.ObjectSize), string(attr.StorageClass)))
+	} else {
+		step("GetObjectAttributes", err, "")
+	}
+
+	// UploadPartCopy
+	srcKey := "interop/upc-src.bin"
+	srcData := make([]byte, 6*1024*1024)
+	_, _ = rand.Read(srcData)
+	_, err = cli.PutObject(ctx, &s3.PutObjectInput{Bucket: &bucket, Key: &srcKey, Body: bytes.NewReader(srcData)})
+	if err == nil {
+		dstKey := "interop/upc-dst.bin"
+		cmu, cerr := cli.CreateMultipartUpload(ctx, &s3.CreateMultipartUploadInput{Bucket: &bucket, Key: &dstKey})
+		if cerr == nil {
+			copySrc := bucket + "/" + srcKey
+			rng := "bytes=0-1048575"
+			_, upErr := cli.UploadPartCopy(ctx, &s3.UploadPartCopyInput{
+				Bucket:          &bucket,
+				Key:             &dstKey,
+				PartNumber:      aws.Int32(1),
+				UploadId:        cmu.UploadId,
+				CopySource:      &copySrc,
+				CopySourceRange: &rng,
+			})
+			step("UploadPartCopy(ranged)", upErr, "")
+			_, _ = cli.AbortMultipartUpload(ctx, &s3.AbortMultipartUploadInput{Bucket: &bucket, Key: &dstKey, UploadId: cmu.UploadId})
+		} else {
+			step("UploadPartCopy(init)", cerr, "")
+		}
+		_, _ = cli.DeleteObject(ctx, &s3.DeleteObjectInput{Bucket: &bucket, Key: &srcKey})
+	}
+
+	// cleanup
+	_, _ = cli.DeleteObject(ctx, &s3.DeleteObjectInput{Bucket: &bucket, Key: &condKey})
+	_, _ = cli.DeleteObject(ctx, &s3.DeleteObjectInput{Bucket: &bucket, Key: &tagKey})
 }
 
 func rawHeadRaw(ctx context.Context, endpoint, bucket, key, ak, sk string) {
