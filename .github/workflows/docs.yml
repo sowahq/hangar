@@ -33,6 +33,9 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun run build
 
+      - name: List dist contents
+        run: ls -la dist && echo --- && find dist -name 'index.html' -maxdepth 3
+
       - uses: actions/upload-pages-artifact@v3
         with:
           path: website/dist
