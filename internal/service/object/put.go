@@ -133,6 +133,7 @@ func PutObject(req *PutObjectRequest) (*PutObjectResponse, error) {
 		SSECustomerKeyMD5: sse.customerKeyMD5,
 		SSESalt:           sse.salt,
 		SSENoncePrefix:    sse.noncePrefix,
+		SSEKeyID:          sse.keyID,
 		ChecksumAlgorithm: req.ChecksumAlgorithm,
 		ChecksumValue:     req.ChecksumValue,
 	}

@@ -25,6 +25,7 @@ type Metadatas struct {
 	SSENoncePrefix      []byte  `json:"sse_nonce_prefix,omitempty"`
 	SSEPartNumbers      []int   `json:"sse_part_numbers,omitempty"`
 	SSEPartChunkCounts  []int   `json:"sse_part_chunk_counts,omitempty"`
+	SSEKeyID            string  `json:"sse_key_id,omitempty"`
 
 	ChecksumAlgorithm string `json:"checksum_algorithm,omitempty"`
 	ChecksumValue     string `json:"checksum_value,omitempty"`

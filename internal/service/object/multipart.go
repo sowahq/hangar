@@ -69,14 +69,15 @@ func InitiateMultipart(req *InitiateMultipartRequest) (*InitiateMultipartRespons
 	}
 
 	if req.SSE != nil && req.SSE.Algorithm != SSEAlgoNone {
-		_, salt, np, md5sum, sErr := NewSSEParams(req.SSE)
+		setup, sErr := setupSSEWrite(req.SSE)
 		if sErr != nil {
 			return nil, sErr
 		}
 		h.SSEAlgorithm = req.SSE.Algorithm
-		h.SSESalt = salt
-		h.SSENoncePrefix = np
-		h.SSECustomerKeyMD5 = md5sum
+		h.SSESalt = setup.salt
+		h.SSENoncePrefix = setup.noncePrefix
+		h.SSECustomerKeyMD5 = setup.customerKeyMD5
+		h.SSEKeyID = setup.keyID
 	}
 
 	if err := storage.StoreMultipartHeader(h); err != nil {
@@ -281,6 +282,7 @@ func CompleteMultipart(req *CompleteMultipartRequest) (*PutObjectResponse, error
 		SSECustomerKeyMD5: header.SSECustomerKeyMD5,
 		SSESalt:           header.SSESalt,
 		SSENoncePrefix:    header.SSENoncePrefix,
+		SSEKeyID:          header.SSEKeyID,
 	}
 
 	if header.SSEAlgorithm != SSEAlgoNone {

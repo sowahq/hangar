@@ -150,6 +150,7 @@ func reencryptCopy(req *CopyObjectRequest, src *storage.Metadatas, contentType s
 		SSECustomerKeyMD5: sse.customerKeyMD5,
 		SSESalt:           sse.salt,
 		SSENoncePrefix:    sse.noncePrefix,
+		SSEKeyID:          sse.keyID,
 		ChecksumAlgorithm: src.ChecksumAlgorithm,
 		ChecksumValue:     src.ChecksumValue,
 	}

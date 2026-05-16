@@ -21,6 +21,7 @@ import (
 	gcService "github.com/anhostfr/hangar/internal/service/gc"
 	metricsService "github.com/anhostfr/hangar/internal/service/metrics"
 	scrubService "github.com/anhostfr/hangar/internal/service/scrub"
+	"github.com/anhostfr/hangar/internal/service/sse"
 	"github.com/anhostfr/hangar/internal/storage"
 	"github.com/gofiber/fiber/v2"
 	"github.com/phuslu/log"
@@ -87,6 +88,11 @@ func Execute() {
 
 					if err := storage.BootstrapChunkRefs(); err != nil {
 						log.Error().Err(err).Msg("Failed to bootstrap chunkref index.")
+						return err
+					}
+
+					if err := sse.Bootstrap(config.MasterKey()); err != nil {
+						log.Error().Err(err).Msg("Failed to bootstrap sse keyring.")
 						return err
 					}
 

@@ -33,6 +33,7 @@ type MultipartHeader struct {
 	SSECustomerKeyMD5 string `json:"sse_customer_key_md5,omitempty"`
 	SSESalt           []byte `json:"sse_salt,omitempty"`
 	SSENoncePrefix    []byte `json:"sse_nonce_prefix,omitempty"`
+	SSEKeyID          string `json:"sse_key_id,omitempty"`
 }
 
 type MultipartPart struct {

@@ -8,6 +8,7 @@ import (
 	"fmt"
 
 	"github.com/anhostfr/hangar/internal/config"
+	"github.com/anhostfr/hangar/internal/service/sse"
 	"github.com/anhostfr/hangar/internal/storage"
 	"github.com/anhostfr/hangar/pkg/crypto"
 )
@@ -55,33 +56,69 @@ func ParseCustomerKey(b64Key, md5Header string) ([]byte, string, error) {
 	return key, md5Header, nil
 }
 
+func resolveSSEKey(id string) ([]byte, error) {
+	master, err := sse.KeyBytes(id)
+	if err != nil || len(master) == 0 {
+		if bsErr := sse.Bootstrap(config.MasterKey()); bsErr != nil {
+			return nil, ErrSSEMasterKeyMissing
+		}
+		master, err = sse.KeyBytes(id)
+		if err != nil || len(master) == 0 {
+			return nil, ErrSSEMasterKeyMissing
+		}
+	}
+	return master, nil
+}
+
+type sseS3Params struct {
+	key, salt, noncePrefix []byte
+	keyID                  string
+}
+
+func newSSES3Params() (*sseS3Params, error) {
+	id, master, err := sse.ActiveKey()
+	if err != nil {
+		if bsErr := sse.Bootstrap(config.MasterKey()); bsErr != nil {
+			return nil, ErrSSEMasterKeyMissing
+		}
+		id, master, err = sse.ActiveKey()
+		if err != nil || len(master) == 0 {
+			return nil, ErrSSEMasterKeyMissing
+		}
+	}
+	if len(master) == 0 {
+		return nil, ErrSSEMasterKeyMissing
+	}
+
+	salt := make([]byte, crypto.SaltSize)
+	if _, err := rand.Read(salt); err != nil {
+		return nil, fmt.Errorf("salt rand: %w", err)
+	}
+
+	noncePrefix := make([]byte, crypto.NoncePrefixLen)
+	if _, err := rand.Read(noncePrefix); err != nil {
+		return nil, fmt.Errorf("nonce rand: %w", err)
+	}
+
+	key, err := crypto.DeriveKey(master, salt, []byte(hkdfInfoS3))
+	if err != nil {
+		return nil, fmt.Errorf("derive: %w", err)
+	}
+
+	return &sseS3Params{key: key, salt: salt, noncePrefix: noncePrefix, keyID: id}, nil
+}
+
 func NewSSEParams(req *SSERequest) (key []byte, salt, noncePrefix []byte, customerMD5 string, err error) {
 	switch req.Algorithm {
 	case SSEAlgoNone:
 		return nil, nil, nil, "", nil
 
 	case SSEAlgoS3:
-		master := config.MasterKey()
-		if len(master) == 0 {
-			return nil, nil, nil, "", ErrSSEMasterKeyMissing
-		}
-
-		salt = make([]byte, crypto.SaltSize)
-		if _, err = rand.Read(salt); err != nil {
-			return nil, nil, nil, "", fmt.Errorf("salt rand: %w", err)
-		}
-
-		noncePrefix = make([]byte, crypto.NoncePrefixLen)
-		if _, err = rand.Read(noncePrefix); err != nil {
-			return nil, nil, nil, "", fmt.Errorf("nonce rand: %w", err)
-		}
-
-		key, err = crypto.DeriveKey(master, salt, []byte(hkdfInfoS3))
+		p, err := newSSES3Params()
 		if err != nil {
-			return nil, nil, nil, "", fmt.Errorf("derive: %w", err)
+			return nil, nil, nil, "", err
 		}
-
-		return key, salt, noncePrefix, "", nil
+		return p.key, p.salt, p.noncePrefix, "", nil
 
 	case SSEAlgoC:
 		if len(req.CustomerKey) != crypto.KeySize {
@@ -107,6 +144,7 @@ type ssePutCtx struct {
 	salt           []byte
 	noncePrefix    []byte
 	customerKeyMD5 string
+	keyID          string
 	encParams      *storage.EncryptParams
 }
 
@@ -115,18 +153,34 @@ func setupSSEWrite(req *SSERequest) (*ssePutCtx, error) {
 		return &ssePutCtx{algo: SSEAlgoNone}, nil
 	}
 
-	key, salt, np, md5sum, err := NewSSEParams(req)
-	if err != nil {
-		return nil, err
+	switch req.Algorithm {
+	case SSEAlgoS3:
+		p, err := newSSES3Params()
+		if err != nil {
+			return nil, err
+		}
+		return &ssePutCtx{
+			algo:        SSEAlgoS3,
+			salt:        p.salt,
+			noncePrefix: p.noncePrefix,
+			keyID:       p.keyID,
+			encParams:   &storage.EncryptParams{Key: p.key, NoncePrefix: p.noncePrefix, PartNumber: 1},
+		}, nil
+
+	case SSEAlgoC:
+		key, _, np, md5sum, err := NewSSEParams(req)
+		if err != nil {
+			return nil, err
+		}
+		return &ssePutCtx{
+			algo:           SSEAlgoC,
+			noncePrefix:    np,
+			customerKeyMD5: md5sum,
+			encParams:      &storage.EncryptParams{Key: key, NoncePrefix: np, PartNumber: 1},
+		}, nil
 	}
 
-	return &ssePutCtx{
-		algo:           req.Algorithm,
-		salt:           salt,
-		noncePrefix:    np,
-		customerKeyMD5: md5sum,
-		encParams:      &storage.EncryptParams{Key: key, NoncePrefix: np, PartNumber: 1},
-	}, nil
+	return nil, ErrSSEAlgorithmInvalid
 }
 
 func ResolveReadKey(m *storage.Metadatas, req *SSERequest) ([]byte, error) {
@@ -142,9 +196,9 @@ func ResolveReadKey(m *storage.Metadatas, req *SSERequest) ([]byte, error) {
 			return nil, ErrSSECustomerForS3Object
 		}
 
-		master := config.MasterKey()
-		if len(master) == 0 {
-			return nil, ErrSSEMasterKeyMissing
+		master, err := resolveSSEKey(m.SSEKeyID)
+		if err != nil {
+			return nil, err
 		}
 
 		return crypto.DeriveKey(master, m.SSESalt, []byte(hkdfInfoS3))
@@ -174,9 +228,9 @@ func uploadPartEncryptParams(h *storage.MultipartHeader, req *UploadPartRequest)
 		return nil, nil
 
 	case SSEAlgoS3:
-		master := config.MasterKey()
-		if len(master) == 0 {
-			return nil, ErrSSEMasterKeyMissing
+		master, err := resolveSSEKey(h.SSEKeyID)
+		if err != nil {
+			return nil, err
 		}
 		key, err := crypto.DeriveKey(master, h.SSESalt, []byte(hkdfInfoS3))
 		if err != nil {
