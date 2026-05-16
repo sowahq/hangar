@@ -39,6 +39,8 @@ export default defineConfig({
             { label: "Integrity scrub", link: "/operations/scrub/" },
             { label: "Lifecycle", link: "/operations/lifecycle/" },
             { label: "CORS", link: "/operations/cors/" },
+            { label: "Bucket default encryption", link: "/operations/bucket-encryption/" },
+            { label: "Object Lock", link: "/operations/object-lock/" },
             { label: "SSE key rotation", link: "/operations/sse-key-rotation/" },
             { label: "Disk safeguards", link: "/operations/disk-safeguards/" },
             { label: "Audit log", link: "/operations/audit/" },

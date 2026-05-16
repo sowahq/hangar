@@ -40,12 +40,12 @@ Configure SDKs with `UsePathStyle: true` (Go SDK v2), `s3={"addressing_style":"p
 | `GetBucketLogging` / `PutBucketLogging`      | ❌     |                                                      |
 | `GetBucketCors` / `PutBucketCors` / `DeleteBucketCors` | ✅ | See [CORS](/operations/cors/)                  |
 | `GetBucketLifecycleConfiguration` / `PutBucketLifecycleConfiguration` / `DeleteBucketLifecycle` | ✅ | Expiration + AbortIncompleteMultipartUpload. See [Lifecycle](/operations/lifecycle/) |
-| `GetBucketEncryption` / `PutBucketEncryption`| ❌     | No bucket default SSE                                |
+| `GetBucketEncryption` / `PutBucketEncryption` / `DeleteBucketEncryption` | ✅ | AES256 (SSE-S3) only. See [Bucket default encryption](/operations/bucket-encryption/) |
 | `GetBucketNotificationConfiguration` / `Put…`| ❌     | No event hooks                                       |
 | `PutBucketReplication` / `Get…` / `Delete…`  | ❌     | Planned with the upcoming distribution work          |
 | `GetBucketWebsite` / `PutBucketWebsite`      | ❌     |                                                      |
 | `GetBucketRequestPayment` / `PutBucketRequestPayment` | ❌ |                                              |
-| `GetObjectLockConfiguration` / `Put…`        | ❌     | No object lock                                       |
+| `GetObjectLockConfiguration` / `PutObjectLockConfiguration` | ✅ | Requires versioning. GOVERNANCE / COMPLIANCE modes. See [Object Lock](/operations/object-lock/) |
 
 ## Object operations
 
@@ -65,8 +65,8 @@ Configure SDKs with `UsePathStyle: true` (Go SDK v2), `s3={"addressing_style":"p
 | `GetObjectAttributes`                    | ❌     | Use `HeadObject`                                            |
 | `RestoreObject`                          | ❌     | No tiers                                                    |
 | `SelectObjectContent`                    | ❌     |                                                             |
-| `GetObjectLegalHold` / `Put…`            | ❌     |                                                             |
-| `GetObjectRetention` / `Put…`            | ❌     |                                                             |
+| `GetObjectLegalHold` / `PutObjectLegalHold` | ✅  | `Status: ON/OFF`. See [Object Lock](/operations/object-lock/)  |
+| `GetObjectRetention` / `PutObjectRetention` | ✅  | GOVERNANCE bypassable with admin key + `x-amz-bypass-governance-retention: true`. COMPLIANCE never bypassable |
 
 ## Multipart upload
 
@@ -135,6 +135,49 @@ Hangar trusts the client-provided value and echoes it. It does not recompute, so
 | `If-None-Match`     | ✅     |
 | `If-Match`          | ❌     |
 | `If-Unmodified-Since` | ❌   |
+
+### Object lock headers
+
+| Header                                       | On      |
+|----------------------------------------------|---------|
+| `x-amz-object-lock-mode`                     | PUT object / GET / HEAD (echoed) |
+| `x-amz-object-lock-retain-until-date`        | PUT object (RFC3339) / GET / HEAD (echoed) |
+| `x-amz-object-lock-legal-hold`               | PUT object (`ON`/`OFF`) / GET / HEAD (echoed when `ON`) |
+| `x-amz-bypass-governance-retention`          | DELETE object / DeleteObjects — requires admin key; never bypasses COMPLIANCE |
+
+### Bucket encryption XML
+
+`PUT /:bucket?encryption` accepts:
+
+```xml
+<ServerSideEncryptionConfiguration>
+  <Rule>
+    <ApplyServerSideEncryptionByDefault>
+      <SSEAlgorithm>AES256</SSEAlgorithm>
+    </ApplyServerSideEncryptionByDefault>
+  </Rule>
+</ServerSideEncryptionConfiguration>
+```
+
+Only `AES256` is supported. `aws:kms` is rejected. When configured, `PutObject` and `CreateMultipartUpload` without an explicit `x-amz-server-side-encryption` header inherit the bucket default. Explicit SSE headers (including SSE-C) on the request are not overridden.
+
+### Object lock XML
+
+`PUT /:bucket?object-lock` accepts:
+
+```xml
+<ObjectLockConfiguration>
+  <ObjectLockEnabled>Enabled</ObjectLockEnabled>
+  <Rule>
+    <DefaultRetention>
+      <Mode>GOVERNANCE</Mode>
+      <Days>30</Days>
+    </DefaultRetention>
+  </Rule>
+</ObjectLockConfiguration>
+```
+
+Versioning must be enabled on the bucket first (returns `409 InvalidBucketState` otherwise). Once enabled, object lock cannot be disabled. `PUT /:bucket/:key?retention` and `PUT /:bucket/:key?legal-hold` apply per-object retention.
 
 ### Lifecycle XML
 
