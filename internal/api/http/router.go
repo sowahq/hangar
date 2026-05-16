@@ -65,6 +65,7 @@ func Router() *fiber.App {
 	adminGroup.Get("/sse/keys", admin.ListSSEKeys)
 	adminGroup.Post("/sse/keys/rotate", admin.RotateSSEKey)
 	adminGroup.Put("/sse/keys/:id/activate", admin.ActivateSSEKey)
+	adminGroup.Post("/lifecycle/run", admin.RunLifecycle)
 
 	router.Get("/:bucket", middleware.RequireAuth(auth.PermRead), handlers.ListObjects)
 	router.Get("/:bucket/*", middleware.RequireAuth(auth.PermRead), handlers.Download)

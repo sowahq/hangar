@@ -67,6 +67,11 @@ type serverConfig struct {
 		MaxBackups    int    `toml:"max_backups" validate:"min=0"`
 		RetentionDays int    `toml:"retention_days" validate:"min=0"`
 	} `toml:"audit"`
+
+	Lifecycle struct {
+		Enabled       bool `toml:"enabled"`
+		IntervalHours int  `toml:"interval_hours" validate:"min=0"`
+	} `toml:"lifecycle"`
 }
 
 var masterKey []byte
@@ -108,7 +113,28 @@ func DefaultServerConfig() *serverConfig {
 	config.Audit.MaxBackups = 5
 	config.Audit.RetentionDays = 30
 
+	config.Lifecycle.Enabled = false
+	config.Lifecycle.IntervalHours = 24
+
 	return config
+}
+
+func LifecycleEnabled() bool {
+	mu.RLock()
+	defer mu.RUnlock()
+	if c == nil {
+		c = DefaultServerConfig()
+	}
+	return c.Lifecycle.Enabled
+}
+
+func LifecycleIntervalHours() int {
+	mu.RLock()
+	defer mu.RUnlock()
+	if c == nil {
+		c = DefaultServerConfig()
+	}
+	return c.Lifecycle.IntervalHours
 }
 
 func AuditEnabled() bool {

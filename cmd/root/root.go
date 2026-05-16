@@ -19,6 +19,7 @@ import (
 	"github.com/anhostfr/hangar/internal/database"
 	"github.com/anhostfr/hangar/internal/service/audit"
 	gcService "github.com/anhostfr/hangar/internal/service/gc"
+	lifecycleService "github.com/anhostfr/hangar/internal/service/lifecycle"
 	metricsService "github.com/anhostfr/hangar/internal/service/metrics"
 	scrubService "github.com/anhostfr/hangar/internal/service/scrub"
 	"github.com/anhostfr/hangar/internal/service/sse"
@@ -146,6 +147,9 @@ func Execute() {
 					scrubDone := make(chan struct{})
 					go scrubService.StartScheduledScrub(ctx, scrubDone)
 
+					lifecycleDone := make(chan struct{})
+					go lifecycleService.StartScheduled(ctx, lifecycleDone)
+
 					diskDone := make(chan struct{})
 					if config.MetricsEnabled() {
 						go metricsService.StartDiskSampler(ctx, diskDone)
@@ -193,6 +197,11 @@ func Execute() {
 					case <-scrubDone:
 					case <-time.After(shutdownTimeout):
 						log.Warn().Msg("Scrub goroutine did not exit within timeout")
+					}
+					select {
+					case <-lifecycleDone:
+					case <-time.After(shutdownTimeout):
+						log.Warn().Msg("Lifecycle goroutine did not exit within timeout")
 					}
 					select {
 					case <-diskDone:

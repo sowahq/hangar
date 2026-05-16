@@ -103,6 +103,9 @@ func handleCreateBucket(c *fiber.Ctx) error {
 	if c.Request().URI().QueryArgs().Has("cors") {
 		return handlePutBucketCORS(c)
 	}
+	if c.Request().URI().QueryArgs().Has("lifecycle") {
+		return handlePutBucketLifecycle(c)
+	}
 
 	name := c.Params("bucket")
 
@@ -125,6 +128,9 @@ func handleCreateBucket(c *fiber.Ctx) error {
 func handleDeleteBucket(c *fiber.Ctx) error {
 	if c.Request().URI().QueryArgs().Has("cors") {
 		return handleDeleteBucketCORS(c)
+	}
+	if c.Request().URI().QueryArgs().Has("lifecycle") {
+		return handleDeleteBucketLifecycle(c)
 	}
 
 	name := c.Params("bucket")
@@ -519,6 +525,9 @@ func handleHeadBucket(c *fiber.Ctx) error {
 func handleListObjectsV2(c *fiber.Ctx) error {
 	if c.Request().URI().QueryArgs().Has("cors") {
 		return handleGetBucketCORS(c)
+	}
+	if c.Request().URI().QueryArgs().Has("lifecycle") {
+		return handleGetBucketLifecycle(c)
 	}
 
 	name := c.Params("bucket")
