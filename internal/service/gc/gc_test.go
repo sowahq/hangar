@@ -138,6 +138,29 @@ func TestRunGarbageCollectionDryRunDeletesNothing(t *testing.T) {
 	}
 }
 
+func TestRunGarbageCollectionSkipsPendingChunk(t *testing.T) {
+	testutil.SetupServer(t)
+
+	const hash = "deadbeefcafebabe1234567890abcdefdeadbeefcafebabe1234567890abcdef"
+	path := writeChunkFile(t, hash, 2*time.Hour)
+
+	storage.MarkChunkPending(hash)
+	defer storage.UnmarkChunkPending(hash)
+
+	stats, err := RunGarbageCollection(false)
+	if err != nil {
+		t.Fatalf("RunGarbageCollection: %v", err)
+	}
+
+	if stats.DeletedChunks != 0 {
+		t.Errorf("DeletedChunks: got=%d want=0 (pending chunk should be skipped)", stats.DeletedChunks)
+	}
+
+	if !fileExists(t, path) {
+		t.Error("pending chunk was removed by GC")
+	}
+}
+
 func TestRunGarbageCollectionReclaimsStaleTmpFile(t *testing.T) {
 	testutil.SetupServer(t)
 

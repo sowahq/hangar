@@ -121,8 +121,11 @@ func UploadPart(req *UploadPartRequest) (*UploadPartResponse, error) {
 	}
 
 	if err := storage.IncrementChunkRefs(chunks); err != nil {
+		storage.UnmarkChunksPending(chunks)
 		return nil, fmt.Errorf("failed to increment chunk refs: %w", err)
 	}
+
+	storage.UnmarkChunksPending(chunks)
 
 	etag := fmt.Sprintf("%q", partHash)
 

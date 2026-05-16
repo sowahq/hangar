@@ -37,7 +37,7 @@ func ChunkAndHash(r io.Reader, chunkDir string) ([]string, string, int64, error)
 	return ChunkAndHashOpts(r, chunkDir, nil)
 }
 
-func ChunkAndHashOpts(r io.Reader, chunkDir string, enc *EncryptParams) ([]string, string, int64, error) {
+func ChunkAndHashOpts(r io.Reader, chunkDir string, enc *EncryptParams) (returnedHashes []string, returnedFileHash string, returnedSize int64, returnedErr error) {
 	chunkSize := config.ChunkSize()
 	compressionEnabled := config.CompressionEnabled()
 
@@ -45,6 +45,12 @@ func ChunkAndHashOpts(r io.Reader, chunkDir string, enc *EncryptParams) ([]strin
 	buf := make([]byte, chunkSize)
 	globalHasher := blake3.New()
 	var totalSize int64
+
+	defer func() {
+		if returnedErr != nil {
+			UnmarkChunksPending(chunkHashes)
+		}
+	}()
 
 	var localIdx uint64
 	for {
@@ -90,6 +96,9 @@ func ChunkAndHashOpts(r io.Reader, chunkDir string, enc *EncryptParams) ([]strin
 
 		chunkPath := config.ChunkHashToPath(hashStr)
 
+		MarkChunkPending(hashStr)
+		chunkHashes = append(chunkHashes, hashStr)
+
 		if _, err := os.Stat(chunkPath); os.IsNotExist(err) {
 			if enc != nil {
 				if err := writeChunkRaw(chunkPath, payload); err != nil {
@@ -102,7 +111,6 @@ func ChunkAndHashOpts(r io.Reader, chunkDir string, enc *EncryptParams) ([]strin
 			}
 		}
 
-		chunkHashes = append(chunkHashes, hashStr)
 		localIdx++
 
 		if err == io.EOF {

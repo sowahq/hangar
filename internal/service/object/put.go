@@ -124,8 +124,11 @@ func PutObject(req *PutObjectRequest) (*PutObjectResponse, error) {
 	}
 
 	if err := storage.IncrementChunkRefs(chunks); err != nil {
+		storage.UnmarkChunksPending(chunks)
 		return nil, fmt.Errorf("failed to increment chunk refs: %w", err)
 	}
+
+	storage.UnmarkChunksPending(chunks)
 
 	if versioning {
 		if err := storage.StoreObjectVersion(req.Bucket, metadata); err != nil {

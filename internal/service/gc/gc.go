@@ -78,6 +78,11 @@ func RunGarbageCollection(dryRun bool) (*GCStats, error) {
 
 		stats.TotalChunks++
 
+		if storage.IsChunkPending(chunkHash) {
+			log.Debug().Str("chunk", chunkHash).Msg("Skipping pending in-flight chunk")
+			return nil
+		}
+
 		referenced, refErr := storage.IsChunkReferenced(chunkHash)
 		if refErr != nil {
 			log.Warn().Err(refErr).Str("chunk", chunkHash).Msg("Failed to check chunkref; skipping")
