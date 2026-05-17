@@ -66,6 +66,7 @@ func Router() *fiber.App {
 	adminGroup.Post("/sse/keys/rotate", admin.RotateSSEKey)
 	adminGroup.Put("/sse/keys/:id/activate", admin.ActivateSSEKey)
 	adminGroup.Post("/lifecycle/run", admin.RunLifecycle)
+	adminGroup.Get("/cluster/status", admin.ClusterStatus)
 	adminGroup.Put("/buckets/:bucket/encryption", admin.PutBucketEncryption)
 	adminGroup.Get("/buckets/:bucket/encryption", admin.GetBucketEncryption)
 	adminGroup.Delete("/buckets/:bucket/encryption", admin.DeleteBucketEncryption)

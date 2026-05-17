@@ -15,6 +15,7 @@ import (
 	"github.com/anhostfr/hangar/internal/api/http"
 	metricsRouter "github.com/anhostfr/hangar/internal/api/metrics"
 	"github.com/anhostfr/hangar/internal/api/s3"
+	"github.com/anhostfr/hangar/internal/cluster"
 	"github.com/anhostfr/hangar/internal/config"
 	"github.com/anhostfr/hangar/internal/database"
 	"github.com/anhostfr/hangar/internal/service/accesslog"
@@ -142,6 +143,36 @@ func Execute() {
 					}
 
 					ctx, cancel := context.WithCancel(context.Background())
+
+					var clusterRuntime *cluster.Runtime
+					if config.ClusterEnabled() {
+						peers, err := cluster.ParsePeers(config.ClusterPeers())
+						if err != nil {
+							log.Error().Err(err).Msg("Failed to parse cluster peers.")
+							cancel()
+							return err
+						}
+
+						clusterRuntime, err = cluster.Start(ctx, cluster.Config{
+							NodeID:      cluster.NodeID(config.ClusterNodeID()),
+							Listen:      config.ClusterListen(),
+							Peers:       peers,
+							Secret:      config.ClusterSharedSecret(),
+							HeartbeatMS: config.HeartbeatMS(),
+						})
+						if err != nil {
+							log.Error().Err(err).Msg("Failed to start cluster runtime.")
+							cancel()
+							return err
+						}
+
+						log.Info().
+							Str("node_id", config.ClusterNodeID()).
+							Str("listen", clusterRuntime.Addr()).
+							Int("peers", len(peers)).
+							Msg("Cluster runtime started")
+					}
+
 					accesslog.Start()
 					gcDone := make(chan struct{})
 					go gcService.StartScheduledGC(ctx, gcDone)
@@ -190,6 +221,11 @@ func Execute() {
 					}
 
 					cancel()
+
+					if clusterRuntime != nil {
+						clusterRuntime.Stop()
+					}
+
 					accesslog.Stop()
 					select {
 					case <-gcDone:
