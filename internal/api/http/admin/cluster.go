@@ -39,12 +39,18 @@ func ClusterStatus(c *fiber.Ctx) error {
 		})
 	}
 
+	rebalances := uint64(0)
+	if rt := cluster.GlobalRuntime(); rt != nil {
+		rebalances = rt.RebalanceCount()
+	}
+
 	return response.JSON(c, fiber.Map{
-		"self":           string(cl.Self()),
-		"view_version":   v.Version,
-		"layout_version": cl.LayoutVersion(),
-		"heartbeat_ms":   int(cl.HeartbeatInterval().Milliseconds()),
-		"nodes":          nodes,
+		"self":             string(cl.Self()),
+		"view_version":     v.Version,
+		"layout_version":   cl.LayoutVersion(),
+		"heartbeat_ms":     int(cl.HeartbeatInterval().Milliseconds()),
+		"nodes":            nodes,
+		"eager_rebalances": rebalances,
 	})
 }
 

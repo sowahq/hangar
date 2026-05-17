@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"storj.io/drpc/drpcmux"
@@ -33,6 +34,11 @@ type Runtime struct {
 	peersMu sync.Mutex
 	peers   map[NodeID]*peerSession
 	peerWG  sync.WaitGroup
+
+	rebalanceMu       sync.Mutex
+	rebalanceRunning  atomic.Bool
+	rebalanceCount    atomic.Uint64
+	rebalanceDisabled atomic.Bool
 }
 
 func Start(ctx context.Context, cfg Config) (*Runtime, error) {
@@ -84,7 +90,10 @@ func Start(ctx context.Context, cfg Config) (*Runtime, error) {
 
 	dsrv := drpcserver.New(mux)
 
-	cl.SetLayoutCallback(rt.reconcilePeers)
+	cl.SetLayoutCallback(func() {
+		rt.reconcilePeers()
+		rt.triggerEagerRebalance()
+	})
 
 	if db := database.LocalStore(); db != nil {
 		db.SetHook(newKVReplicator(cl, pool))
@@ -318,4 +327,53 @@ func (r *Runtime) Addr() string {
 		return ""
 	}
 	return r.listener.Addr().String()
+}
+
+func (r *Runtime) triggerEagerRebalance() {
+	if r == nil || r.ctx == nil || r.ctx.Err() != nil {
+		return
+	}
+	if r.rebalanceDisabled.Load() {
+		return
+	}
+	if !r.rebalanceRunning.CompareAndSwap(false, true) {
+		return
+	}
+	r.wg.Add(1)
+	go func() {
+		defer r.wg.Done()
+		defer r.rebalanceRunning.Store(false)
+		r.rebalanceMu.Lock()
+		defer r.rebalanceMu.Unlock()
+		r.rebalanceCount.Add(1)
+		_, _ = r.RunAntiEntropy(r.ctx)
+	}()
+}
+
+func (r *Runtime) RebalanceCount() uint64 {
+	if r == nil {
+		return 0
+	}
+	return r.rebalanceCount.Load()
+}
+
+func (r *Runtime) WaitEagerRebalance(timeout time.Duration) bool {
+	if r == nil {
+		return false
+	}
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if !r.rebalanceRunning.Load() {
+			return true
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	return !r.rebalanceRunning.Load()
+}
+
+func (r *Runtime) SetEagerRebalanceEnabled(enabled bool) {
+	if r == nil {
+		return
+	}
+	r.rebalanceDisabled.Store(!enabled)
 }
