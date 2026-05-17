@@ -118,6 +118,30 @@ func ClusterAntiEntropyRun(c *fiber.Ctx) error {
 	})
 }
 
+func ClusterDeepScrubRun(c *fiber.Ctx) error {
+	rt := cluster.GlobalRuntime()
+	if rt == nil {
+		return response.Error(c, fiber.StatusServiceUnavailable, "cluster mode disabled")
+	}
+	cl := cluster.Global()
+	if cl == nil || !cl.ECEnabled() {
+		return response.Error(c, fiber.StatusBadRequest, "deep-scrub requires erasure coding")
+	}
+	stats, err := rt.RunDeepScrub(c.UserContext())
+	if err != nil {
+		return response.Error(c, fiber.StatusInternalServerError, err.Error())
+	}
+	return response.JSON(c, fiber.Map{
+		"scanned":     stats.Scanned,
+		"verified":    stats.Verified,
+		"corrupt":     stats.Corrupt,
+		"repaired":    stats.Repaired,
+		"skipped":     stats.Skipped,
+		"errors":      stats.Errors,
+		"duration_ms": stats.EndedAt.Sub(stats.StartedAt).Milliseconds(),
+	})
+}
+
 func ClusterSecretStatus(c *fiber.Ctx) error {
 	cl := cluster.Global()
 	if cl == nil {
