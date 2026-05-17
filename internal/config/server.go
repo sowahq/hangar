@@ -143,8 +143,8 @@ func DefaultServerConfig() *serverConfig {
 	config.Lifecycle.IntervalHours = 24
 
 	config.Cluster.Enabled = false
-	config.Cluster.ECDataShards = 4
-	config.Cluster.ECParityShards = 2
+	config.Cluster.ECDataShards = 0
+	config.Cluster.ECParityShards = 0
 	config.Cluster.MetaShards = 256
 	config.Cluster.HeartbeatMS = 500
 
@@ -378,12 +378,6 @@ func LoadServerConfig(path string) error {
 		return err
 	}
 
-	if c.Cluster.ECDataShards == 0 {
-		c.Cluster.ECDataShards = 4
-	}
-	if c.Cluster.ECParityShards == 0 {
-		c.Cluster.ECParityShards = 2
-	}
 	if c.Cluster.MetaShards == 0 {
 		c.Cluster.MetaShards = 256
 	}

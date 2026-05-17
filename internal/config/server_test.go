@@ -118,11 +118,11 @@ interval_hours = 24
 				if ClusterEnabled() {
 					t.Errorf("ClusterEnabled: want false")
 				}
-				if got := ECDataShards(); got != 4 {
-					t.Errorf("ECDataShards: got=%d want=4", got)
+				if got := ECDataShards(); got != 0 {
+					t.Errorf("ECDataShards: got=%d want=0", got)
 				}
-				if got := ECParityShards(); got != 2 {
-					t.Errorf("ECParityShards: got=%d want=2", got)
+				if got := ECParityShards(); got != 0 {
+					t.Errorf("ECParityShards: got=%d want=0", got)
 				}
 				if got := MetaShards(); got != 256 {
 					t.Errorf("MetaShards: got=%d want=256", got)
