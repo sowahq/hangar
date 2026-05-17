@@ -26,24 +26,24 @@ import (
 )
 
 type clusterHarness struct {
-	binary    string
-	root      string
-	secret    string
-	nodes     map[string]*harnessNode
-	portBase  int
+	binary   string
+	root     string
+	secret   string
+	nodes    map[string]*harnessNode
+	portBase int
 }
 
 var globalPortBase int64
 
 type harnessNode struct {
-	id       string
-	api      int
-	s3       int
-	rpc      int
-	dataDir  string
-	cfgPath  string
-	logPath  string
-	proc     *nodeProc
+	id      string
+	api     int
+	s3      int
+	rpc     int
+	dataDir string
+	cfgPath string
+	logPath string
+	proc    *nodeProc
 }
 
 func newHarness(label string) *clusterHarness {
@@ -950,23 +950,40 @@ func runScenarioSoak() {
 		}
 	}
 
+	ecMode := os.Getenv("SOAK_EC") == "1"
+
 	h := newHarness("soak")
 	defer h.cleanup()
-	h.addNode("a", h.port(0), h.port(10), h.port(20), nil)
-	h.addNode("b", h.port(1), h.port(11), h.port(21), []string{fmt.Sprintf("127.0.0.1:%d", h.port(20))})
-	h.addNode("c", h.port(2), h.port(12), h.port(22), []string{fmt.Sprintf("127.0.0.1:%d", h.port(20))})
-	for _, id := range []string{"a", "b", "c"} {
+
+	nodeIDs := []string{"a", "b", "c"}
+	if ecMode {
+		nodeIDs = []string{"a", "b", "c", "d"}
+		fmt.Println("SOAK_EC=1 → 4 nodes EC=2+2")
+	}
+
+	seed := fmt.Sprintf("127.0.0.1:%d", h.port(20))
+	for i, id := range nodeIDs {
+		seeds := []string{seed}
+		if i == 0 {
+			seeds = nil
+		}
+		if ecMode {
+			h.addNodeEC(id, h.port(i), h.port(10+i), h.port(20+i), seeds, ecOpts{dataShards: 2, parityShards: 2})
+		} else {
+			h.addNode(id, h.port(i), h.port(10+i), h.port(20+i), seeds)
+		}
+	}
+	for _, id := range nodeIDs {
 		h.start(id)
 		h.waitReady(id, 5*time.Second)
 	}
-	h.waitConverge("a", 3, 10*time.Second)
+	h.waitConverge("a", len(nodeIDs), 10*time.Second)
 	h.createBucket("a", "testbucket")
 	ak, sk := h.createS3Key("a")
 	time.Sleep(500 * time.Millisecond)
-	clients := []*s3.Client{
-		h.s3Client("a", ak, sk),
-		h.s3Client("b", ak, sk),
-		h.s3Client("c", ak, sk),
+	clients := make([]*s3.Client, 0, len(nodeIDs))
+	for _, id := range nodeIDs {
+		clients = append(clients, h.s3Client(id, ak, sk))
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -1173,6 +1190,94 @@ func runScenarioEC() {
 	fmt.Println("EC OK (2+2, survived 2 owner loss, full reconstruct)")
 }
 
+func runScenarioECAE() {
+	h := newHarness("ecae")
+	defer h.cleanup()
+	ec := ecOpts{dataShards: 2, parityShards: 2}
+	h.addNodeEC("a", h.port(0), h.port(10), h.port(20), nil, ec)
+	h.addNodeEC("b", h.port(1), h.port(11), h.port(21), []string{fmt.Sprintf("127.0.0.1:%d", h.port(20))}, ec)
+	h.addNodeEC("c", h.port(2), h.port(12), h.port(22), []string{fmt.Sprintf("127.0.0.1:%d", h.port(20))}, ec)
+	h.addNodeEC("d", h.port(3), h.port(13), h.port(23), []string{fmt.Sprintf("127.0.0.1:%d", h.port(20))}, ec)
+	for _, id := range []string{"a", "b", "c", "d"} {
+		h.start(id)
+		h.waitReady(id, 10*time.Second)
+	}
+	h.waitConverge("a", 4, 20*time.Second)
+	h.createBucket("a", "testbucket")
+	ak, sk := h.createS3Key("a")
+	time.Sleep(500 * time.Millisecond)
+
+	a := h.s3Client("a", ak, sk)
+	payload := make([]byte, 256*1024)
+	if _, err := rand.Read(payload); err != nil {
+		log.Fatalf("rand: %v", err)
+	}
+	if _, err := a.PutObject(context.Background(), &s3.PutObjectInput{Bucket: aws.String("testbucket"), Key: aws.String("ecae/obj1"), Body: bytes.NewReader(payload)}); err != nil {
+		log.Fatalf("PUT: %v", err)
+	}
+	time.Sleep(300 * time.Millisecond)
+
+	before := map[string]int{}
+	for _, id := range []string{"a", "b", "c", "d"} {
+		before[id] = countChunksOnNode(h.nodes[id].dataDir)
+	}
+	fmt.Printf("shards before wipe: %v\n", before)
+
+	victim := ""
+	for _, id := range []string{"a", "b", "c", "d"} {
+		if before[id] > 0 {
+			victim = id
+			break
+		}
+	}
+	if victim == "" {
+		log.Fatal("no shard files anywhere?")
+	}
+	fmt.Printf("wiping node %s chunks dir\n", victim)
+	h.stop(victim)
+	time.Sleep(500 * time.Millisecond)
+	if err := os.RemoveAll(filepath.Join(h.nodes[victim].dataDir, "chunks")); err != nil {
+		log.Fatalf("rm chunks on %s: %v", victim, err)
+	}
+	h.start(victim)
+	h.waitReady(victim, 10*time.Second)
+	h.waitConverge("a", 4, 20*time.Second)
+
+	resp, err := http.Post(h.adminURL(victim)+"/admin/cluster/anti-entropy/run", "application/json", nil)
+	if err != nil {
+		log.Fatalf("trigger AE on %s: %v", victim, err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	fmt.Printf("AE on %s: %s\n", victim, strings.TrimSpace(string(body)))
+	time.Sleep(2 * time.Second)
+
+	after := countChunksOnNode(h.nodes[victim].dataDir)
+	if after == 0 {
+		log.Fatalf("AE failed to restore any shards on %s", victim)
+	}
+	if after < before[victim] {
+		fmt.Printf("WARN partial restore on %s: %d/%d shards\n", victim, after, before[victim])
+	}
+
+	clients := map[string]*s3.Client{}
+	for _, id := range []string{"a", "b", "c", "d"} {
+		clients[id] = h.s3Client(id, ak, sk)
+	}
+	for _, id := range []string{"a", "b", "c", "d"} {
+		got, err := clients[id].GetObject(context.Background(), &s3.GetObjectInput{Bucket: aws.String("testbucket"), Key: aws.String("ecae/obj1")})
+		if err != nil {
+			log.Fatalf("GET via %s after AE: %v", id, err)
+		}
+		gotBody, _ := io.ReadAll(got.Body)
+		got.Body.Close()
+		if !bytes.Equal(gotBody, payload) {
+			log.Fatalf("body mismatch on %s post-AE", id)
+		}
+	}
+	fmt.Printf("EC-AE OK (wiped %s, restored %d shards via reconstruction)\n", victim, after)
+}
+
 func dispatchScenario(name string) {
 	switch name {
 	case "basic":
@@ -1205,6 +1310,8 @@ func dispatchScenario(name string) {
 		runScenarioSoak()
 	case "ec":
 		runScenarioEC()
+	case "ec-ae":
+		runScenarioECAE()
 	case "all":
 		for _, s := range []string{"basic", "concurrent", "drain", "add-remove", "seed-failover", "wrong-secret", "anti-entropy", "wal-catchup", "large-multipart", "rolling-restart", "majority-kill", "long-run"} {
 			fmt.Printf("\n==== SCENARIO: %s ====\n", s)
