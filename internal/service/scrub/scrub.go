@@ -101,6 +101,10 @@ func Run(opts Opts) (*Stats, error) {
 			return nil
 		}
 
+		if isShardFile(name) {
+			return nil
+		}
+
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
@@ -252,6 +256,23 @@ func checkChunkRefs(existing map[string]struct{}, stats *Stats) error {
 	}
 
 	return nil
+}
+
+func isShardFile(name string) bool {
+	i := strings.LastIndex(name, "_s")
+	if i <= 0 {
+		return false
+	}
+	suffix := name[i+2:]
+	if suffix == "" {
+		return false
+	}
+	for _, c := range suffix {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 func throttle(bytes, rate int64) {

@@ -76,14 +76,31 @@ func (h *clusterHarness) port(off int) int {
 	return 30000 + h.portBase + off
 }
 
+type ecOpts struct {
+	dataShards   int
+	parityShards int
+}
+
+func (h *clusterHarness) addNodeEC(id string, api, s3p, rpc int, seedAddrs []string, ec ecOpts) *harnessNode {
+	return h.addNodeFull(id, api, s3p, rpc, seedAddrs, "", &ec)
+}
+
 func (h *clusterHarness) addNode(id string, api, s3p, rpc int, seedAddrs []string, extraSecret ...string) *harnessNode {
+	secret := ""
+	if len(extraSecret) > 0 {
+		secret = extraSecret[0]
+	}
+	return h.addNodeFull(id, api, s3p, rpc, seedAddrs, secret, nil)
+}
+
+func (h *clusterHarness) addNodeFull(id string, api, s3p, rpc int, seedAddrs []string, overrideSecret string, ec *ecOpts) *harnessNode {
 	dir := filepath.Join(h.root, id)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		log.Fatal(err)
 	}
 	secret := h.secret
-	if len(extraSecret) > 0 {
-		secret = extraSecret[0]
+	if overrideSecret != "" {
+		secret = overrideSecret
 	}
 	seedsLine := ""
 	if len(seedAddrs) > 0 {
@@ -92,6 +109,10 @@ func (h *clusterHarness) addNode(id string, api, s3p, rpc int, seedAddrs []strin
 			quoted[i] = fmt.Sprintf("\"%s\"", a)
 		}
 		seedsLine = "seeds = [" + strings.Join(quoted, ", ") + "]\n"
+	}
+	ecLine := ""
+	if ec != nil && ec.dataShards > 0 && ec.parityShards > 0 {
+		ecLine = fmt.Sprintf("ec_data_shards = %d\nec_parity_shards = %d\n", ec.dataShards, ec.parityShards)
 	}
 	cfg := fmt.Sprintf(`data_directory = "%s"
 [api]
@@ -109,8 +130,8 @@ enabled = true
 node_id = "%s"
 listen = "127.0.0.1:%d"
 shared_secret_b64 = "%s"
-%sheartbeat_ms = 200
-`, dir, api, s3p, id, rpc, secret, seedsLine)
+%s%sheartbeat_ms = 200
+`, dir, api, s3p, id, rpc, secret, seedsLine, ecLine)
 
 	cfgPath := filepath.Join(h.root, id+".toml")
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
@@ -1094,6 +1115,64 @@ func runScenarioSoak() {
 	fmt.Println("SOAK OK")
 }
 
+func runScenarioEC() {
+	h := newHarness("ec")
+	defer h.cleanup()
+	ec := ecOpts{dataShards: 2, parityShards: 2}
+	h.addNodeEC("a", h.port(0), h.port(10), h.port(20), nil, ec)
+	h.addNodeEC("b", h.port(1), h.port(11), h.port(21), []string{fmt.Sprintf("127.0.0.1:%d", h.port(20))}, ec)
+	h.addNodeEC("c", h.port(2), h.port(12), h.port(22), []string{fmt.Sprintf("127.0.0.1:%d", h.port(20))}, ec)
+	h.addNodeEC("d", h.port(3), h.port(13), h.port(23), []string{fmt.Sprintf("127.0.0.1:%d", h.port(20))}, ec)
+	for _, id := range []string{"a", "b", "c", "d"} {
+		h.start(id)
+		h.waitReady(id, 10*time.Second)
+	}
+	h.waitConverge("a", 4, 20*time.Second)
+	h.createBucket("a", "testbucket")
+	ak, sk := h.createS3Key("a")
+	time.Sleep(500 * time.Millisecond)
+
+	clients := map[string]*s3.Client{}
+	for _, id := range []string{"a", "b", "c", "d"} {
+		clients[id] = h.s3Client(id, ak, sk)
+	}
+
+	payload := make([]byte, 256*1024)
+	if _, err := rand.Read(payload); err != nil {
+		log.Fatalf("rand: %v", err)
+	}
+	if _, err := clients["a"].PutObject(context.Background(), &s3.PutObjectInput{Bucket: aws.String("testbucket"), Key: aws.String("ec/obj1"), Body: bytes.NewReader(payload)}); err != nil {
+		log.Fatalf("PUT: %v", err)
+	}
+	time.Sleep(300 * time.Millisecond)
+
+	for _, id := range []string{"a", "b", "c", "d"} {
+		got, err := clients[id].GetObject(context.Background(), &s3.GetObjectInput{Bucket: aws.String("testbucket"), Key: aws.String("ec/obj1")})
+		if err != nil {
+			log.Fatalf("GET via %s: %v", id, err)
+		}
+		body, _ := io.ReadAll(got.Body)
+		got.Body.Close()
+		if !bytes.Equal(body, payload) {
+			log.Fatalf("body mismatch on %s: got %d want %d", id, len(body), len(payload))
+		}
+	}
+
+	h.stop("a")
+	h.stop("b")
+	time.Sleep(2 * time.Second)
+	got, err := clients["c"].GetObject(context.Background(), &s3.GetObjectInput{Bucket: aws.String("testbucket"), Key: aws.String("ec/obj1")})
+	if err != nil {
+		log.Fatalf("GET after killing a+b: %v", err)
+	}
+	body, _ := io.ReadAll(got.Body)
+	got.Body.Close()
+	if !bytes.Equal(body, payload) {
+		log.Fatalf("body mismatch after losing 2 of 4 owners: got %d want %d", len(body), len(payload))
+	}
+	fmt.Println("EC OK (2+2, survived 2 owner loss, full reconstruct)")
+}
+
 func dispatchScenario(name string) {
 	switch name {
 	case "basic":
@@ -1124,6 +1203,8 @@ func dispatchScenario(name string) {
 		runScenarioSustainedTwoMin()
 	case "soak":
 		runScenarioSoak()
+	case "ec":
+		runScenarioEC()
 	case "all":
 		for _, s := range []string{"basic", "concurrent", "drain", "add-remove", "seed-failover", "wrong-secret", "anti-entropy", "wal-catchup", "large-multipart", "rolling-restart", "majority-kill", "long-run"} {
 			fmt.Printf("\n==== SCENARIO: %s ====\n", s)

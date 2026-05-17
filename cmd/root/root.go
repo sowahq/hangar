@@ -174,6 +174,8 @@ func Execute() {
 							Tags:        config.ClusterTags(),
 							Secret:      config.ClusterSharedSecret(),
 							HeartbeatMS: config.HeartbeatMS(),
+							ECData:      config.ECDataShards(),
+							ECParity:    config.ECParityShards(),
 							TLSServer:   tlsServer,
 							TLSClient:   tlsClient,
 						})

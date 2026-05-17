@@ -117,6 +117,22 @@ func (c *Cluster) ChunkOwners(hash string, count int) []NodeID {
 	return out
 }
 
+func (c *Cluster) ChunkOwnersStable(hash string, count int) []NodeID {
+	if count <= 0 {
+		return nil
+	}
+	nodes := c.layoutNodes()
+	if len(nodes) == 0 {
+		return nil
+	}
+	top := TopN("chunk:"+hash, nodes, count)
+	out := make([]NodeID, len(top))
+	for i, n := range top {
+		out[i] = NodeID(n.ID)
+	}
+	return out
+}
+
 func (c *Cluster) IsLocal(id NodeID) bool {
 	return id == c.cfg.NodeID
 }

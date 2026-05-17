@@ -187,6 +187,9 @@ type Config struct {
 	HeartbeatMS int
 	Generation  uint64
 
+	ECData   int
+	ECParity int
+
 	TLSServer *tls.Config
 	TLSClient *tls.Config
 
@@ -269,6 +272,19 @@ func New(cfg Config) *Cluster {
 func (c *Cluster) Self() NodeID { return c.cfg.NodeID }
 
 func (c *Cluster) Secret() []byte { return c.cfg.Secret }
+
+func (c *Cluster) ECEnabled() bool { return c.cfg.ECData > 0 && c.cfg.ECParity > 0 }
+
+func (c *Cluster) ECTotal() int {
+	if !c.ECEnabled() {
+		return 0
+	}
+	return c.cfg.ECData + c.cfg.ECParity
+}
+
+func (c *Cluster) ECData() int { return c.cfg.ECData }
+
+func (c *Cluster) ECParity() int { return c.cfg.ECParity }
 
 func (c *Cluster) HeartbeatInterval() time.Duration {
 	return time.Duration(c.cfg.HeartbeatMS) * time.Millisecond
