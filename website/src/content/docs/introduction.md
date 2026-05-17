@@ -5,7 +5,7 @@ description: What Hangar is, who it's for, and the design choices behind it.
 
 Hangar is a single-binary, self-hosted object storage server written in Go. It exposes both a small native HTTP API and an S3-compatible API on top of the same storage layer.
 
-It runs as a single node by default. Cluster mode (HRW chunk placement, RF=2 synchronous chunk fan-out, key-sharded metadata with WAL catchup, replicated system state, anti-entropy, dynamic seed-based membership) is built and beta-tested via the `tools/clusterinterop/` end-to-end harness. Erasure coding `k+m` is reserved in config but not yet wired into placement — RF=2 today. The goal is to be S3 for your homelab or a small production cluster without the operational complexity of MinIO/Ceph/Garage at small scale, and with cluster-wide BLAKE3 dedup nobody else does.
+It runs as a single node by default. Cluster mode (HRW chunk placement, RF=2 or opt-in Reed-Solomon `k+m` erasure coding, zone-aware shard spread, key-sharded metadata with WAL catchup, replicated system state, anti-entropy with EC reconstruction, deep-scrub, eager rebalancer, dynamic seed-based membership, optional dRPC TLS, secret rotation) is built and beta-tested via the `tools/clusterinterop/` end-to-end harness. The goal is to be S3 for your homelab or a small production cluster without the operational complexity of MinIO/Ceph/Garage at small scale, and with cluster-wide BLAKE3 dedup nobody else does.
 
 ## When Hangar fits
 
@@ -17,9 +17,9 @@ It runs as a single node by default. Cluster mode (HRW chunk placement, RF=2 syn
 
 ## When Hangar does not fit
 
-- You need erasure coding `k+m` today (RF=2 replication only; EC is on the [roadmap](/roadmap/)).
 - You need multi-DC replication or > 5 PB scale — use Garage / MinIO / Ceph.
 - You need SSE-KMS — not implemented.
+- You need bucket-level replication APIs (`PutBucketReplication`) — Hangar replicates internally in cluster mode but does not expose cross-cluster replication to S3 clients.
 - You need rolling-version upgrades or in-flight schema migrations across cluster members — same version everywhere is required.
 - You want a fully audited, formally certified S3 implementation. Hangar implements a working subset; see [S3 compatibility](/s3-compatibility/) for what is in and out.
 

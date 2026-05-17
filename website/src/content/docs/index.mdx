@@ -44,7 +44,7 @@ import { Card, CardGrid } from '@astrojs/starlight/components';
 
 ## Honest status
 
-v0.9.x — feature-complete single-node, pre-1.0. **Cluster mode is beta** — HRW chunk placement (RF=2), key-sharded metadata with WAL catchup, replicated system state, anti-entropy, dynamic seed-based membership. See [Cluster mode](/cluster/). Erasure coding `k+m` is still [planned](/roadmap/). Read [Limitations](/limitations/) before adopting.
+v0.10.x — feature-complete single-node, pre-1.0. **Cluster mode is beta** — HRW chunk placement with opt-in Reed-Solomon `k+m` erasure coding, zone-aware spread, key-sharded metadata with WAL catchup, replicated system state, anti-entropy + deep-scrub, eager rebalancer, dynamic seed-based membership, secret rotation, optional dRPC TLS. See [Cluster mode](/cluster/). Read [Limitations](/limitations/) before adopting.
 
 ## In 30 seconds
 
