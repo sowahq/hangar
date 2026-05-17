@@ -15,6 +15,7 @@ import (
 
 type Runtime struct {
 	Cluster *Cluster
+	Pool    *ConnPool
 
 	listener net.Listener
 	cancel   context.CancelFunc
@@ -79,7 +80,8 @@ func Start(ctx context.Context, cfg Config) (*Runtime, error) {
 
 	runCtx, cancel := context.WithCancel(ctx)
 
-	rt := &Runtime{Cluster: cl, listener: ln, cancel: cancel}
+	pool := NewConnPool(cl.Self(), cl.Secret(), cl.NodeAddr)
+	rt := &Runtime{Cluster: cl, Pool: pool, listener: ln, cancel: cancel}
 
 	rt.wg.Add(2)
 
@@ -109,6 +111,9 @@ func (r *Runtime) Stop() {
 		_ = r.listener.Close()
 	}
 	r.wg.Wait()
+	if r.Pool != nil {
+		r.Pool.Close()
+	}
 	SetGlobal(nil)
 }
 

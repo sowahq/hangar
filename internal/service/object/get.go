@@ -157,7 +157,7 @@ func (cr *ChunkReader) Read(p []byte) (n int, err error) {
 				return 0, io.EOF
 			}
 
-			chunkPath := config.ChunkHashToPath(cr.chunkHashes[cr.currentIdx])
+			hash := cr.chunkHashes[cr.currentIdx]
 
 			var rc io.ReadCloser
 			var openErr error
@@ -167,12 +167,12 @@ func (cr *ChunkReader) Read(p []byte) (n int, err error) {
 				if nErr != nil {
 					return 0, fmt.Errorf("chunk nonce: %w", nErr)
 				}
-				rc, openErr = storage.OpenChunkEncrypted(chunkPath, cr.key, nonce)
+				rc, openErr = storage.OpenChunkEncrypted(hash, cr.key, nonce)
 			} else {
-				rc, openErr = storage.OpenChunk(chunkPath)
+				rc, openErr = storage.OpenChunk(hash)
 			}
 			if openErr != nil {
-				return 0, fmt.Errorf("failed to open chunk %s: %w", chunkPath, openErr)
+				return 0, fmt.Errorf("failed to open chunk %s: %w", hash, openErr)
 			}
 			cr.current = rc
 		}

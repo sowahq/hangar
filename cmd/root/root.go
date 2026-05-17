@@ -166,6 +166,14 @@ func Execute() {
 							return err
 						}
 
+						if err := clusterRuntime.Cluster.LoadLayout(); err != nil {
+							log.Warn().Err(err).Msg("Failed to load persisted cluster layout.")
+						}
+
+						storage.SetMetadataStore(cluster.NewClusteredMetadataStore(clusterRuntime.Cluster, clusterRuntime.Pool))
+						storage.SetChunkStore(cluster.NewClusteredChunkStore(clusterRuntime.Cluster, clusterRuntime.Pool))
+						storage.SetRefcountStore(cluster.NewClusteredRefcountStore(clusterRuntime.Cluster, clusterRuntime.Pool))
+
 						log.Info().
 							Str("node_id", config.ClusterNodeID()).
 							Str("listen", clusterRuntime.Addr()).

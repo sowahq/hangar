@@ -138,21 +138,23 @@ func ChunkAndHashOpts(r io.Reader, chunkDir string, enc *EncryptParams) (returne
 			hashStr = hex.EncodeToString(hash[:])
 		}
 
-		chunkPath := config.ChunkHashToPath(hashStr)
-
 		MarkChunkPending(hashStr)
 		chunkHashes = append(chunkHashes, hashStr)
 
-		if _, err := os.Stat(chunkPath); os.IsNotExist(err) {
-			if enc != nil {
-				if err := writeChunkRaw(chunkPath, payload); err != nil {
-					return nil, "", 0, err
-				}
-			} else {
-				if err := writeChunkAtomic(chunkPath, buf[:n], compressionEnabled); err != nil {
-					return nil, "", 0, err
-				}
-			}
+		var finalPayload []byte
+		if enc != nil {
+			finalPayload = payload
+		} else if compressionEnabled {
+			encoder := zstdEncoderPool.Get().(*zstd.Encoder)
+			finalPayload = encoder.EncodeAll(buf[:n], nil)
+			zstdEncoderPool.Put(encoder)
+		} else {
+			finalPayload = make([]byte, n)
+			copy(finalPayload, buf[:n])
+		}
+
+		if err := ActiveChunkStore().PutRaw(hashStr, finalPayload); err != nil {
+			return nil, "", 0, err
 		}
 
 		localIdx++
@@ -243,15 +245,20 @@ func writeChunkAtomic(chunkPath string, data []byte, compress bool) error {
 	return nil
 }
 
-func OpenChunkEncrypted(chunkPath string, key, nonce []byte) (io.ReadCloser, error) {
-	data, err := os.ReadFile(chunkPath)
+func OpenChunkEncrypted(hash string, key, nonce []byte) (io.ReadCloser, error) {
+	rc, err := ActiveChunkStore().OpenRaw(hash)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read chunk file %s: %w", chunkPath, err)
+		return nil, fmt.Errorf("failed to open chunk %s: %w", hash, err)
+	}
+	data, err := io.ReadAll(rc)
+	_ = rc.Close()
+	if err != nil {
+		return nil, fmt.Errorf("read chunk %s: %w", hash, err)
 	}
 
 	plain, err := crypto.Open(key, nonce, data, nil)
 	if err != nil {
-		return nil, fmt.Errorf("decrypt chunk %s: %w", chunkPath, err)
+		return nil, fmt.Errorf("decrypt chunk %s: %w", hash, err)
 	}
 
 	if config.CompressionEnabled() {
@@ -283,32 +290,29 @@ func (m *memReadCloser) Read(p []byte) (int, error) {
 
 func (m *memReadCloser) Close() error { return nil }
 
-func OpenChunk(chunkPath string) (io.ReadCloser, error) {
-	file, err := os.Open(chunkPath)
+func OpenChunk(hash string) (io.ReadCloser, error) {
+	rc, err := ActiveChunkStore().OpenRaw(hash)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open chunk file %s: %w", chunkPath, err)
+		return nil, fmt.Errorf("failed to open chunk %s: %w", hash, err)
 	}
 
-	if config.CompressionEnabled() {
-		decoder := GetZstdDecoder()
-		if err := decoder.Reset(file); err != nil {
-			PutZstdDecoder(decoder)
-			file.Close()
-			return nil, fmt.Errorf("failed to reset zstd decoder for %s: %w", chunkPath, err)
-		}
-
-		return &chunkReader{
-			decoder: decoder,
-			file:    file,
-		}, nil
+	if !config.CompressionEnabled() {
+		return rc, nil
 	}
 
-	return file, nil
+	decoder := GetZstdDecoder()
+	if err := decoder.Reset(rc); err != nil {
+		PutZstdDecoder(decoder)
+		_ = rc.Close()
+		return nil, fmt.Errorf("failed to reset zstd decoder for %s: %w", hash, err)
+	}
+
+	return &chunkReader{decoder: decoder, file: rc}, nil
 }
 
 type chunkReader struct {
 	decoder *zstd.Decoder
-	file    *os.File
+	file    io.ReadCloser
 }
 
 func (cr *chunkReader) Read(p []byte) (int, error) {

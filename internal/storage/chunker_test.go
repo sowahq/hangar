@@ -181,7 +181,7 @@ func TestRoundtrip(t *testing.T) {
 
 			var got bytes.Buffer
 			for _, h := range hashes {
-				rc, err := OpenChunk(config.ChunkHashToPath(h))
+				rc, err := OpenChunk(h)
 				if err != nil {
 					t.Fatalf("OpenChunk(%s): %v", h, err)
 				}
