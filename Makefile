@@ -1,4 +1,4 @@
-.PHONY: build test test-race vet fmt run docker docker-run clean tidy install help
+.PHONY: build test test-race vet fmt run docker docker-run clean tidy install proto help
 
 BINARY := hangar
 PKG    := ./...
@@ -41,3 +41,12 @@ install: ## Install binary into GOPATH/bin
 
 clean: ## Remove build artifacts
 	rm -rf bin/ data/
+
+proto: ## Regenerate dRPC stubs from .proto files
+	@command -v protoc >/dev/null || { echo "protoc not found in PATH"; exit 1; }
+	go install google.golang.org/protobuf/cmd/protoc-gen-go
+	go install storj.io/drpc/cmd/protoc-gen-go-drpc
+	protoc \
+		--go_out=. --go_opt=paths=source_relative \
+		--go-drpc_out=. --go-drpc_opt=paths=source_relative \
+		internal/api/rpc/service.proto
