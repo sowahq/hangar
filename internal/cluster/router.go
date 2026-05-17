@@ -55,6 +55,9 @@ func (c *Cluster) aliveLayoutNodes() []Node {
 		if _, ok := alive[n.ID]; !ok {
 			continue
 		}
+		if n.Status == StatusDraining {
+			continue
+		}
 		w := float64(n.Capacity)
 		if w <= 0 {
 			w = 1.0
