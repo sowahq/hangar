@@ -67,7 +67,7 @@ func TestMetadataRPCRoundtrip(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	conn, _, err := Dial(ctx, rt.Addr(), "a", secret)
+	conn, _, err := Dial(ctx, rt.Addr(), "a", secret, nil)
 	if err != nil {
 		t.Fatalf("dial: %v", err)
 	}
@@ -118,7 +118,7 @@ func TestChunkRPCRoundtrip(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	conn, _, err := Dial(ctx, rt.Addr(), "a", secret)
+	conn, _, err := Dial(ctx, rt.Addr(), "a", secret, nil)
 	if err != nil {
 		t.Fatalf("dial: %v", err)
 	}
@@ -191,7 +191,7 @@ func TestRefRPC(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	conn, _, err := Dial(ctx, rt.Addr(), "a", rt.Cluster.Secret())
+	conn, _, err := Dial(ctx, rt.Addr(), "a", rt.Cluster.Secret(), nil)
 	if err != nil {
 		t.Fatalf("dial: %v", err)
 	}

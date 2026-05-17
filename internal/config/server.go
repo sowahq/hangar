@@ -91,6 +91,10 @@ type serverConfig struct {
 		MetaShards         int      `toml:"meta_shards" validate:"min=0"`
 		HeartbeatMS        int      `toml:"heartbeat_ms" validate:"min=0"`
 		MetadataSyncQuorum bool     `toml:"metadata_sync_quorum"`
+		TLSCert            string   `toml:"tls_cert"`
+		TLSKey             string   `toml:"tls_key"`
+		TLSCA              string   `toml:"tls_ca"`
+		TLSServerName      string   `toml:"tls_server_name"`
 	} `toml:"cluster"`
 }
 
@@ -736,4 +740,40 @@ func MetadataSyncQuorum() bool {
 		c = DefaultServerConfig()
 	}
 	return c.Cluster.MetadataSyncQuorum
+}
+
+func ClusterTLSCert() string {
+	mu.RLock()
+	defer mu.RUnlock()
+	if c == nil {
+		c = DefaultServerConfig()
+	}
+	return c.Cluster.TLSCert
+}
+
+func ClusterTLSKey() string {
+	mu.RLock()
+	defer mu.RUnlock()
+	if c == nil {
+		c = DefaultServerConfig()
+	}
+	return c.Cluster.TLSKey
+}
+
+func ClusterTLSCA() string {
+	mu.RLock()
+	defer mu.RUnlock()
+	if c == nil {
+		c = DefaultServerConfig()
+	}
+	return c.Cluster.TLSCA
+}
+
+func ClusterTLSServerName() string {
+	mu.RLock()
+	defer mu.RUnlock()
+	if c == nil {
+		c = DefaultServerConfig()
+	}
+	return c.Cluster.TLSServerName
 }

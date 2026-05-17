@@ -2,6 +2,7 @@ package cluster
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"net"
@@ -47,11 +48,15 @@ func Start(ctx context.Context, cfg Config) (*Runtime, error) {
 		return nil, fmt.Errorf("cluster: listen %s: %w", cfg.Listen, err)
 	}
 
+	if cfg.TLSServer != nil {
+		ln = tls.NewListener(ln, cfg.TLSServer)
+	}
+
 	cl := New(cfg)
 
 	runCtx, cancel := context.WithCancel(ctx)
 
-	pool := NewConnPool(cl.Self(), cl.Secret(), cl.NodeAddr)
+	pool := NewConnPoolTLS(cl.Self(), cl.Secret(), cl.NodeAddr, cfg.TLSClient)
 	rt := &Runtime{
 		Cluster:  cl,
 		Pool:     pool,
@@ -167,7 +172,7 @@ func (r *Runtime) joinViaSeed(ctx context.Context, seedAddr string) error {
 	dialCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	conn, _, err := Dial(dialCtx, seedAddr, string(r.Cluster.Self()), r.Cluster.Secret())
+	conn, _, err := Dial(dialCtx, seedAddr, string(r.Cluster.Self()), r.Cluster.Secret(), r.Cluster.cfg.TLSClient)
 	if err != nil {
 		return fmt.Errorf("dial seed %s: %w", seedAddr, err)
 	}

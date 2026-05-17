@@ -152,6 +152,18 @@ func Execute() {
 
 					var clusterRuntime *cluster.Runtime
 					if config.ClusterEnabled() {
+						tlsServer, tlsClient, terr := cluster.BuildTLSConfigs(cluster.TLSOptions{
+							CertFile:   config.ClusterTLSCert(),
+							KeyFile:    config.ClusterTLSKey(),
+							CAFile:     config.ClusterTLSCA(),
+							ServerName: config.ClusterTLSServerName(),
+						})
+						if terr != nil {
+							log.Error().Err(terr).Msg("Failed to load cluster TLS configuration.")
+							cancel()
+							return terr
+						}
+
 						var err error
 						clusterRuntime, err = cluster.Start(ctx, cluster.Config{
 							NodeID:      cluster.NodeID(config.ClusterNodeID()),
@@ -162,6 +174,8 @@ func Execute() {
 							Tags:        config.ClusterTags(),
 							Secret:      config.ClusterSharedSecret(),
 							HeartbeatMS: config.HeartbeatMS(),
+							TLSServer:   tlsServer,
+							TLSClient:   tlsClient,
 						})
 						if err != nil {
 							log.Error().Err(err).Msg("Failed to start cluster runtime.")

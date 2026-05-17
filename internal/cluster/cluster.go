@@ -1,6 +1,7 @@
 package cluster
 
 import (
+	"crypto/tls"
 	"sort"
 	"sync"
 	"time"
@@ -185,6 +186,9 @@ type Config struct {
 	Secret      []byte
 	HeartbeatMS int
 	Generation  uint64
+
+	TLSServer *tls.Config
+	TLSClient *tls.Config
 
 	NowFn func() time.Time
 }

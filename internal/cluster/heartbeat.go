@@ -38,7 +38,7 @@ func (c *Cluster) PeerLoop(ctx context.Context, peerID NodeID, addr string) {
 		}
 
 		dialCtx, cancel := context.WithTimeout(ctx, dialTimeout)
-		conn, _, err := Dial(dialCtx, addr, string(c.cfg.NodeID), c.cfg.Secret)
+		conn, _, err := Dial(dialCtx, addr, string(c.cfg.NodeID), c.cfg.Secret, c.cfg.TLSClient)
 		cancel()
 		if err != nil {
 			if !sleepCtx(ctx, backoff) {

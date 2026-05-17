@@ -2,6 +2,7 @@ package cluster
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"sync"
 	"time"
@@ -17,6 +18,7 @@ type ConnPool struct {
 	self   NodeID
 	secret []byte
 	resolv func(NodeID) string
+	tlsCfg *tls.Config
 
 	mu    sync.Mutex
 	conns map[NodeID]*drpcconn.Conn
@@ -29,6 +31,12 @@ func NewConnPool(self NodeID, secret []byte, resolv func(NodeID) string) *ConnPo
 		resolv: resolv,
 		conns:  map[NodeID]*drpcconn.Conn{},
 	}
+}
+
+func NewConnPoolTLS(self NodeID, secret []byte, resolv func(NodeID) string, tlsCfg *tls.Config) *ConnPool {
+	p := NewConnPool(self, secret, resolv)
+	p.tlsCfg = tlsCfg
+	return p
 }
 
 func (p *ConnPool) Get(ctx context.Context, id NodeID) (*drpcconn.Conn, error) {
@@ -56,7 +64,7 @@ func (p *ConnPool) Get(ctx context.Context, id NodeID) (*drpcconn.Conn, error) {
 	dialCtx, cancel := context.WithTimeout(ctx, peerDialTimeout)
 	defer cancel()
 
-	conn, _, err := Dial(dialCtx, addr, string(p.self), p.secret)
+	conn, _, err := Dial(dialCtx, addr, string(p.self), p.secret, p.tlsCfg)
 	if err != nil {
 		return nil, err
 	}

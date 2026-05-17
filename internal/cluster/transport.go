@@ -5,8 +5,10 @@ import (
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/tls"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"net"
 	"time"
 
@@ -89,11 +91,26 @@ func VerifyHello(h *rpc.Hello, secret []byte, knownPeers map[string]struct{}, no
 	return nil
 }
 
-func Dial(ctx context.Context, addr, nodeID string, secret []byte) (*drpcconn.Conn, *rpc.HelloAck, error) {
+func Dial(ctx context.Context, addr, nodeID string, secret []byte, tlsCfg *tls.Config) (*drpcconn.Conn, *rpc.HelloAck, error) {
 	var d net.Dialer
 	nc, err := d.DialContext(ctx, "tcp", addr)
 	if err != nil {
 		return nil, nil, err
+	}
+
+	if tlsCfg != nil {
+		cfg := tlsCfg.Clone()
+		if cfg.ServerName == "" {
+			if host, _, _ := net.SplitHostPort(addr); host != "" {
+				cfg.ServerName = host
+			}
+		}
+		tc := tls.Client(nc, cfg)
+		if err := tc.HandshakeContext(ctx); err != nil {
+			_ = tc.Close()
+			return nil, nil, fmt.Errorf("tls handshake: %w", err)
+		}
+		return handshakeOver(ctx, tc, nodeID, secret)
 	}
 
 	return handshakeOver(ctx, nc, nodeID, secret)

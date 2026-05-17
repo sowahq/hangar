@@ -72,7 +72,7 @@ func TestReplicaCatchupStreamsWALEntries(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	conn, _, err := Dial(ctx, rt.Addr(), "primary", rt.Cluster.Secret())
+	conn, _, err := Dial(ctx, rt.Addr(), "primary", rt.Cluster.Secret(), nil)
 	if err != nil {
 		t.Fatalf("dial: %v", err)
 	}
