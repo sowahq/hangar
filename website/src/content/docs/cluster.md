@@ -31,7 +31,7 @@ Hangar can run as a multi-node cluster where chunks and metadata are distributed
 
 ### Membership
 
-Layout-driven. Each node either bootstraps (no `seeds`) or joins via a seed. The seed accepts the join after handshake (HMAC-SHA256 with shared secret), bumps the layout version, signs it, and replication propagates it to every peer. dRPC bidirectional heartbeat stream every `heartbeat_ms` (default 500ms) between every pair of layout members. Three missed ticks (default 1.5s) flip a peer to `down`. Reconnect uses exponential backoff (1s → 30s). Peer goroutines spawn/cancel automatically when the layout changes — no restart required.
+Layout-driven. Each node either bootstraps (no `seeds`) or joins via a seed. The seed accepts the join after handshake (HMAC-SHA256 with shared secret), bumps the layout version, signs it, and replication propagates it to every peer. On startup, a joining node retries `Join` against every seed with exponential backoff (500ms → 5s, up to 30 attempts) so it tolerates a seed that's still starting up. dRPC bidirectional heartbeat stream every `heartbeat_ms` (default 500ms) between every pair of layout members. Three missed ticks (default 1.5s) flip a peer to `down`. Reconnect uses exponential backoff (1s → 30s). Peer goroutines spawn/cancel automatically when the layout changes — no restart required.
 
 | Status     | Meaning                                                                 |
 |------------|-------------------------------------------------------------------------|
@@ -52,7 +52,7 @@ Metadata is sharded by `bucket+key` via HRW. Top 2 nodes own a key: primary + se
 1. Primary: synchronous local Put, then WAL append.
 2. Secondary fan-out: best-effort goroutine, fire-and-forget.
 
-Reads hit owners in HRW order. If primary is down, secondary serves the read. Strong consistency in the steady state; secondaries can briefly lag during async fan-out.
+Reads hit owners in HRW order. If primary is down (or RPC times out), the read transparently falls through to the secondary; `NotFound` on one owner does not short-circuit — the next owner is tried. Strong consistency in the steady state; secondaries can briefly lag during async fan-out.
 
 ### Write-ahead log (WAL)
 
@@ -60,13 +60,13 @@ Each node maintains a per-node WAL of metadata ops it accepted as primary (`mwal
 
 ### Anti-entropy
 
-Hourly per-node scan: for each `chunkref:<hash>` key,
+Hourly per-node scan, also triggerable manually via `POST /admin/cluster/anti-entropy/run`. For each known chunk hash (derived by union of local `chunkref:` keys and chunk hashes referenced by replicated `metadata:` entries):
 
 - compute HRW owners
 - if self is an owner but chunk file is missing → pull from another owner via `GetChunk` stream
 - if self is not an owner but chunk file exists → delete locally, but **only after verifying at least one expected owner has the chunk** (via `HasChunk`)
 
-This converges placement after layout changes, node loss, or write failures.
+This converges placement after layout changes, node loss, or write failures. Scanning replicated metadata ensures a freshly-recovered peer (whose own refcount may not yet be up-to-date) still discovers what chunks it should hold.
 
 ### Replicated KV
 
@@ -75,7 +75,7 @@ A pebble write hook fires on every Put/Delete. Keys matching a whitelist of syst
 ```
 s3key:  bucket:  token:  encryption:  objectlock:
 ssekr:  lifecycle:  cors:  tagging:  website:  logging:
-cluster:layout:
+cluster:layout:  mpu:  mpupart:  version:
 ```
 
 On startup, the node calls `BulkSyncKV(prefixes)` on the first alive peer to pull a full snapshot — this is how a cold-start node joins an existing cluster without manual intervention.
@@ -216,7 +216,7 @@ Bumps the layout, drops `n3`, replicates. `n3` itself can still be running; it i
 hangar cluster node drain n3 --server http://...
 ```
 
-Marks `n3` as `draining` in the layout. HRW skips draining nodes for new writes. In-flight reads continue. After traffic settles, run `remove`, then stop the process.
+Marks `n3` as `draining` in the layout. HRW excludes draining nodes from placement (new writes never land there). In-flight reads continue. After traffic settles, run `remove`, then stop the process.
 
 ## CLI
 
@@ -228,7 +228,7 @@ hangar cluster node remove <id>                # drop node from layout
 hangar cluster node drain <id>                 # mark node draining (HRW skip writes)
 ```
 
-All commands accept `--server <admin-url>` (default `http://localhost:8080`).
+All commands accept `--server <admin-url>` (default `http://localhost:8080`). The `--server` flag must come before positional arguments.
 
 Layout JSON:
 
@@ -253,6 +253,7 @@ GET     /admin/cluster/layout              → current signed layout
 PUT     /admin/cluster/layout              → apply a new layout (version must increase)
 DELETE  /admin/cluster/node/:id            → remove node from layout
 POST    /admin/cluster/node/:id/drain      → mark node draining
+POST    /admin/cluster/anti-entropy/run    → trigger anti-entropy scan immediately
 ```
 
 ## Observability
@@ -285,22 +286,41 @@ Sampled every 5s from the cluster runtime.
 
 ## Interop harness
 
-`tools/clusterinterop/` runs cross-node S3 scenarios against a live two-node cluster:
+`tools/clusterinterop/` orchestrates real `hangar` binaries (no in-process mocks) and runs end-to-end scenarios:
 
 ```bash
 cd tools/clusterinterop && go build -o /tmp/clusterinterop .
+go build -o /tmp/hangar .
 
-# normal scenarios — requires the cluster already running
-S3_AK=<ak> S3_SK=<sk> S3_BUCKET=<bucket> \
-S3_A=http://127.0.0.1:9101 S3_B=http://127.0.0.1:9102 \
-/tmp/clusterinterop
+# all scenarios, fully self-managed (spawns/kills processes, generates secret)
+HANGAR_BIN=/tmp/hangar /tmp/clusterinterop all
 
-# WAL catchup — orchestrates the whole scenario incl. process kill/restart
-HANGAR_BIN=/tmp/hangar CLUSTER_SECRET=$(head -c 32 /dev/urandom | base64) \
+# a single scenario
+/tmp/clusterinterop drain
 /tmp/clusterinterop wal-catchup
+/tmp/clusterinterop majority-kill
+
+# tunable durations
+LONGRUN_SECONDS=30 SUSTAINED_SECONDS=120 /tmp/clusterinterop all
 ```
 
-Scenarios covered: PUT-A→GET-B small, PUT-B→GET-A medium, cross-node LIST, dedup, cross-node DELETE propagation, multipart upload on A → GET on B, kill-B-PUT-on-A-restart-B-verify-via-WAL.
+Scenarios covered:
+
+| Scenario          | What it validates                                                                                  |
+|-------------------|----------------------------------------------------------------------------------------------------|
+| `basic`           | 2 nodes, PUT-A → GET-B, small object                                                              |
+| `concurrent`      | 2 clients, 50 parallel uploads against both nodes, all readable                                    |
+| `drain`           | Drained node receives zero chunks for new writes (HRW respects `draining`)                        |
+| `add-remove`      | Add a node dynamically via seed, then remove it; existing data survives                            |
+| `seed-failover`   | Kill the primary seed, new node joins via the secondary seed                                       |
+| `wrong-secret`    | Joining with the wrong shared secret is refused at handshake                                       |
+| `anti-entropy`    | Kill a peer, write objects, restart it, manually trigger anti-entropy → chunks back on peer        |
+| `wal-catchup`     | Kill a peer, write 3 objects on primary, restart peer → secondary catches up via WAL replay        |
+| `large-multipart` | 50 MB multipart upload split across both nodes, full GET round-trip cross-node                     |
+| `rolling-restart` | Stop+restart each of 3 nodes sequentially; all 12 seeded objects readable from every node          |
+| `majority-kill`   | Kill 2 of 3 nodes; the survivor still serves chunks for which it is an HRW owner (zero corruption) |
+| `long-run`        | 4 workers writing for N seconds across both nodes; require zero errors                              |
+| `sustained`       | 6 workers PUT+GET against 3 nodes for N seconds; error rate must stay below 1%                     |
 
 ## Limitations & non-goals
 
