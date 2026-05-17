@@ -66,6 +66,7 @@ export default defineConfig({
             { label: "Metrics (Prometheus)", link: "/observability/metrics/" },
           ],
         },
+        { label: "Cluster mode", link: "/cluster/" },
         { label: "Architecture", link: "/architecture/" },
         { label: "Roadmap", link: "/roadmap/" },
       ],
