@@ -92,9 +92,20 @@ func (localKVHandler) ReplicateKV(op *rpc.KVOp) error {
 	}
 	switch op.Op {
 	case "put":
-		return db.PutSilent(op.Key, op.Value)
+		if err := db.PutSilent(op.Key, op.Value); err != nil {
+			return err
+		}
 	case "del":
-		return db.DeleteSilent(op.Key)
+		if err := db.DeleteSilent(op.Key); err != nil {
+			return err
+		}
+	}
+	if bytes.Equal(op.Key, []byte(layoutCurrentKey)) {
+		if cl := Global(); cl != nil {
+			if err := cl.LoadLayout(); err != nil {
+				return err
+			}
+		}
 	}
 	return nil
 }

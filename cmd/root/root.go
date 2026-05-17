@@ -10,6 +10,7 @@ import (
 
 	"github.com/anhostfr/hangar/cmd/backup"
 	"github.com/anhostfr/hangar/cmd/bucket"
+	clusterCmd "github.com/anhostfr/hangar/cmd/cluster"
 	"github.com/anhostfr/hangar/cmd/s3keys"
 	scrubcmd "github.com/anhostfr/hangar/cmd/scrub"
 	"github.com/anhostfr/hangar/internal/api/http"
@@ -57,6 +58,11 @@ func Execute() {
 				Name:        "scrub",
 				Usage:       "Verify chunk integrity (re-hash, quarantine corrupt)",
 				Subcommands: scrubcmd.Commands(),
+			},
+			{
+				Name:        "cluster",
+				Usage:       "Inspect and manage cluster state",
+				Subcommands: clusterCmd.Commands(),
 			},
 			{
 				Name:  "server",

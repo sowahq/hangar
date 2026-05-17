@@ -47,3 +47,30 @@ func ClusterStatus(c *fiber.Ctx) error {
 		"nodes":          nodes,
 	})
 }
+
+func ClusterLayoutGet(c *fiber.Ctx) error {
+	cl := cluster.Global()
+	if cl == nil {
+		return response.Error(c, fiber.StatusServiceUnavailable, "cluster mode disabled")
+	}
+	l := cl.Layout()
+	if l == nil {
+		return response.Error(c, fiber.StatusNotFound, "no layout applied")
+	}
+	return response.JSON(c, l)
+}
+
+func ClusterLayoutApply(c *fiber.Ctx) error {
+	cl := cluster.Global()
+	if cl == nil {
+		return response.Error(c, fiber.StatusServiceUnavailable, "cluster mode disabled")
+	}
+	var l cluster.Layout
+	if err := c.BodyParser(&l); err != nil {
+		return response.Error(c, fiber.StatusBadRequest, "invalid layout json: "+err.Error())
+	}
+	if err := cl.ApplyLayout(&l); err != nil {
+		return response.Error(c, fiber.StatusBadRequest, err.Error())
+	}
+	return response.JSON(c, fiber.Map{"version": l.Version, "ok": true})
+}
