@@ -10,10 +10,12 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -901,6 +903,197 @@ func runScenarioSustainedTwoMin() {
 	fmt.Printf("SUSTAINED OK (error rate %.3f%%)\n", errRate*100)
 }
 
+func runScenarioSoak() {
+	maxDur := 24 * time.Hour
+	if env := os.Getenv("SOAK_HOURS"); env != "" {
+		var h int
+		fmt.Sscanf(env, "%d", &h)
+		if h > 0 {
+			maxDur = time.Duration(h) * time.Hour
+		}
+	}
+	workers := 6
+	if env := os.Getenv("SOAK_WORKERS"); env != "" {
+		var w int
+		fmt.Sscanf(env, "%d", &w)
+		if w > 0 {
+			workers = w
+		}
+	}
+	keyCap := 200
+	if env := os.Getenv("SOAK_KEY_CAP"); env != "" {
+		var k int
+		fmt.Sscanf(env, "%d", &k)
+		if k > 0 {
+			keyCap = k
+		}
+	}
+
+	h := newHarness("soak")
+	defer h.cleanup()
+	h.addNode("a", h.port(0), h.port(10), h.port(20), nil)
+	h.addNode("b", h.port(1), h.port(11), h.port(21), []string{fmt.Sprintf("127.0.0.1:%d", h.port(20))})
+	h.addNode("c", h.port(2), h.port(12), h.port(22), []string{fmt.Sprintf("127.0.0.1:%d", h.port(20))})
+	for _, id := range []string{"a", "b", "c"} {
+		h.start(id)
+		h.waitReady(id, 5*time.Second)
+	}
+	h.waitConverge("a", 3, 10*time.Second)
+	h.createBucket("a", "testbucket")
+	ak, sk := h.createS3Key("a")
+	time.Sleep(500 * time.Millisecond)
+	clients := []*s3.Client{
+		h.s3Client("a", ak, sk),
+		h.s3Client("b", ak, sk),
+		h.s3Client("c", ak, sk),
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	deadline := time.NewTimer(maxDur)
+	defer deadline.Stop()
+
+	go func() {
+		select {
+		case s := <-sigCh:
+			fmt.Printf("\nreceived %s, draining workers...\n", s)
+			cancel()
+		case <-deadline.C:
+			fmt.Printf("\nreached %s max duration, draining workers...\n", maxDur)
+			cancel()
+		}
+	}()
+
+	var puts, gets, dels, errs int64
+	var errSamplesMu sync.Mutex
+	errSamples := []string{}
+	addErrSample := func(kind, msg string) {
+		errSamplesMu.Lock()
+		if len(errSamples) < 10 {
+			errSamples = append(errSamples, kind+": "+msg)
+		}
+		errSamplesMu.Unlock()
+	}
+
+	start := time.Now()
+	var wg sync.WaitGroup
+
+	for w := 0; w < workers; w++ {
+		wg.Add(1)
+		go func(w int) {
+			defer wg.Done()
+			cli := clients[w%len(clients)]
+			seen := make([]string, 0, keyCap)
+			for {
+				if ctx.Err() != nil {
+					return
+				}
+				if len(seen) > 0 && time.Now().UnixNano()%3 == 0 {
+					key := seen[time.Now().UnixNano()%int64(len(seen))]
+					readCli := clients[(w+1)%len(clients)]
+					got, err := readCli.GetObject(ctx, &s3.GetObjectInput{Bucket: aws.String("testbucket"), Key: aws.String(key)})
+					if err != nil {
+						if ctx.Err() == nil {
+							atomic.AddInt64(&errs, 1)
+							addErrSample("GET", err.Error())
+						}
+						continue
+					}
+					_, _ = io.Copy(io.Discard, got.Body)
+					got.Body.Close()
+					atomic.AddInt64(&gets, 1)
+					continue
+				}
+				body := make([]byte, 2048)
+				_, _ = rand.Read(body)
+				key := fmt.Sprintf("soak/w%d/%d", w, time.Now().UnixNano())
+				if _, err := cli.PutObject(ctx, &s3.PutObjectInput{Bucket: aws.String("testbucket"), Key: aws.String(key), Body: bytes.NewReader(body)}); err != nil {
+					if ctx.Err() == nil {
+						atomic.AddInt64(&errs, 1)
+						addErrSample("PUT", err.Error())
+					}
+					continue
+				}
+				atomic.AddInt64(&puts, 1)
+				seen = append(seen, key)
+				if len(seen) > keyCap {
+					old := seen[0]
+					seen = seen[1:]
+					if _, err := cli.DeleteObject(ctx, &s3.DeleteObjectInput{Bucket: aws.String("testbucket"), Key: aws.String(old)}); err != nil {
+						if ctx.Err() == nil {
+							atomic.AddInt64(&errs, 1)
+							addErrSample("DEL", err.Error())
+						}
+						continue
+					}
+					atomic.AddInt64(&dels, 1)
+				}
+			}
+		}(w)
+	}
+
+	tk := time.NewTicker(30 * time.Second)
+	defer tk.Stop()
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-tk.C:
+				elapsed := time.Since(start)
+				p := atomic.LoadInt64(&puts)
+				g := atomic.LoadInt64(&gets)
+				d := atomic.LoadInt64(&dels)
+				e := atomic.LoadInt64(&errs)
+				total := p + g + d + e
+				rate := float64(total) / elapsed.Seconds()
+				errRate := float64(0)
+				if total > 0 {
+					errRate = float64(e) / float64(total) * 100
+				}
+				fmt.Printf("[%s] elapsed=%s puts=%d gets=%d dels=%d errs=%d (%.3f%% err, %.1f ops/s)\n",
+					time.Now().Format("15:04:05"), elapsed.Truncate(time.Second), p, g, d, e, errRate, rate)
+			}
+		}
+	}()
+
+	wg.Wait()
+	elapsed := time.Since(start)
+	p := atomic.LoadInt64(&puts)
+	g := atomic.LoadInt64(&gets)
+	d := atomic.LoadInt64(&dels)
+	e := atomic.LoadInt64(&errs)
+	total := p + g + d + e
+	errRate := float64(0)
+	if total > 0 {
+		errRate = float64(e) / float64(total) * 100
+	}
+
+	fmt.Printf("\n==== SOAK REPORT ====\n")
+	fmt.Printf("elapsed:    %s\n", elapsed.Truncate(time.Second))
+	fmt.Printf("workers:    %d\n", workers)
+	fmt.Printf("puts:       %d\n", p)
+	fmt.Printf("gets:       %d\n", g)
+	fmt.Printf("deletes:    %d\n", d)
+	fmt.Printf("errors:     %d (%.3f%%)\n", e, errRate)
+	if elapsed.Seconds() > 0 {
+		fmt.Printf("throughput: %.1f ops/s\n", float64(total)/elapsed.Seconds())
+	}
+	if len(errSamples) > 0 {
+		fmt.Println("error samples:")
+		for _, s := range errSamples {
+			fmt.Println("  -", s)
+		}
+	}
+	if errRate > 1.0 {
+		log.Fatalf("SOAK FAIL: error rate %.3f%% exceeds 1%%", errRate)
+	}
+	fmt.Println("SOAK OK")
+}
+
 func dispatchScenario(name string) {
 	switch name {
 	case "basic":
@@ -929,6 +1122,8 @@ func dispatchScenario(name string) {
 		runScenarioMajorityKill()
 	case "sustained":
 		runScenarioSustainedTwoMin()
+	case "soak":
+		runScenarioSoak()
 	case "all":
 		for _, s := range []string{"basic", "concurrent", "drain", "add-remove", "seed-failover", "wrong-secret", "anti-entropy", "wal-catchup", "large-multipart", "rolling-restart", "majority-kill", "long-run"} {
 			fmt.Printf("\n==== SCENARIO: %s ====\n", s)
