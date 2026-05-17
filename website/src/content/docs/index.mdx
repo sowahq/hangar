@@ -44,7 +44,7 @@ import { Card, CardGrid } from '@astrojs/starlight/components';
 
 ## Honest status
 
-v0.9.x — feature-complete first cut, pre-1.0. **Single-node today** — distribution, replication, and erasure coding are [planned](/roadmap/) but not built. Read [Limitations](/limitations/) before adopting.
+v0.9.x — feature-complete single-node, pre-1.0. **Cluster mode is beta** — HRW chunk placement (RF=2), key-sharded metadata with WAL catchup, replicated system state, anti-entropy, dynamic seed-based membership. See [Cluster mode](/cluster/). Erasure coding `k+m` is still [planned](/roadmap/). Read [Limitations](/limitations/) before adopting.
 
 ## In 30 seconds
 

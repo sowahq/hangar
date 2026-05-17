@@ -28,27 +28,38 @@ Hangar is pre-1.0. This page tracks themes; check the [git log](https://github.c
 - Disk safeguards: min free bytes / pct / node cap
 - Rate limit, deep healthcheck (`/status`), graceful shutdown
 - JSONL audit log with rotation (`/admin/audit`)
-- Prometheus metrics on a separate port
+- Prometheus metrics on a separate port (incl. cluster gauges)
+
+### Cluster (beta)
+- Seed-based dynamic membership (`seeds = ["host:port"]`, self-registering join)
+- HRW chunk placement with RF=2 synchronous fan-out
+- Key-sharded metadata (HRW on `bucket+key`), primary sync + secondary async fan-out
+- Per-primary WAL with on-recovery catchup stream
+- Anti-entropy worker (pull missing, prune orphans, manual trigger admin endpoint)
+- Replicated system state (S3 keys, buckets, configs, layout, mpu, versions) via Pebble write hook + cold-start BulkSync
+- GC / scrub / lifecycle leader-gated on lowest-id alive node
+- Drain / remove / status via `hangar cluster node …`
+- `tools/clusterinterop/` 13-scenario e2e harness
 
 ## Next up
 
-Pre-1.0 polish and the next round of S3 surface:
+Pre-1.0 polish:
 
-- **Object Lock / WORM** — retention periods, legal hold.
-- **Bucket default encryption** (`PUT /:bucket?encryption`).
+- **Erasure coding `k+m`** — wire `klauspost/reedsolomon`, replace RF=2 hardcode. Storage parity with MinIO.
+- **`hangar cluster init`** — scaffold base64 secret + TOML template.
+- **TLS on the dRPC layer** — optional `cluster.tls_{cert,key}` so VPN is no longer mandatory.
+- **Version handshake** — refuse mixed-major across cluster.
+- **24 h sustained soak** — single command to run cluster under load until SIGINT, report regression.
 - **Bucket policy / ACL** — JSON policy doc, evaluated per request.
-- **Object tagging.**
-- **Virtual-host-style addressing.**
-- **`UploadPartCopy`.**
+- **SSE-KMS** — provider integration so master keys can live outside the server.
 - **Admin UI.**
 
 ## Planned (not built)
 
-These are committed-to directions, not "maybe":
-
-- **Distribution + erasure coding.** Multi-node cluster on top of the per-node Pebble engine. Likely Raft for control plane, content-addressed chunks placed via consistent hashing + EC across nodes. Unlocks `PutBucketReplication`, multi-AZ durability, online repair.
-- **SSE-KMS.** Provider integration so master keys can live outside the server.
+- **Multi-DC.** Async replication between geographically distinct clusters.
 - **Online / hot backup.** Streaming snapshots without stopping the server.
+- **Rolling-version upgrade.** Mixed-version cluster operation during upgrade window.
+- **Secret rotation** without full restart.
 
 ## Known gaps
 

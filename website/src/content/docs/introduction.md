@@ -5,19 +5,22 @@ description: What Hangar is, who it's for, and the design choices behind it.
 
 Hangar is a single-binary, self-hosted object storage server written in Go. It exposes both a small native HTTP API and an S3-compatible API on top of the same storage layer.
 
-It runs as a single node today. Distribution, replication, and erasure coding are on the roadmap — not built yet. The current goal is to be something close to "S3 for your homelab or a single production node" without the operational complexity of MinIO/Ceph/Garage when you do not need their guarantees right now.
+It runs as a single node by default. Cluster mode (HRW chunk placement, RF=2 synchronous chunk fan-out, key-sharded metadata with WAL catchup, replicated system state, anti-entropy, dynamic seed-based membership) is built and beta-tested via the `tools/clusterinterop/` end-to-end harness. Erasure coding `k+m` is reserved in config but not yet wired into placement — RF=2 today. The goal is to be S3 for your homelab or a small production cluster without the operational complexity of MinIO/Ceph/Garage at small scale, and with cluster-wide BLAKE3 dedup nobody else does.
 
 ## When Hangar fits
 
-- You need an S3 endpoint behind your apps (`aws s3`, `rclone`, `boto3`, `mc`, etc.) but you do not want to operate a cluster.
-- You back up the underlying disk (or filesystem snapshot) anyway and can accept "single-node durability" — i.e. the durability of your disk — until distribution lands.
-- You want content-addressed storage so duplicate uploads do not cost twice the bytes.
+- You need an S3 endpoint behind your apps (`aws s3`, `rclone`, `boto3`, `mc`, etc.).
+- Single-node : you back up the underlying disk (or filesystem snapshot) and accept disk durability.
+- Cluster (2-5 nodes, single DC) : you want a self-registering peer membership with one binary and zero coordinator (no Raft, no etcd, no Zookeeper).
+- You want content-addressed storage so duplicate uploads do not cost twice the bytes — works cluster-wide too.
 - You want server-side encryption at rest with either a server-held key (SSE-S3) or per-request client keys (SSE-C).
 
 ## When Hangar does not fit
 
-- You need replication, erasure coding, or any kind of multi-node availability **today**. These are planned but not built yet — see [Roadmap](/roadmap/).
-- You need SSE-KMS, bucket default encryption, or object lock / WORM. None of these exist yet — see [Limitations](/limitations/).
+- You need erasure coding `k+m` today (RF=2 replication only; EC is on the [roadmap](/roadmap/)).
+- You need multi-DC replication or > 5 PB scale — use Garage / MinIO / Ceph.
+- You need SSE-KMS — not implemented.
+- You need rolling-version upgrades or in-flight schema migrations across cluster members — same version everywhere is required.
 - You want a fully audited, formally certified S3 implementation. Hangar implements a working subset; see [S3 compatibility](/s3-compatibility/) for what is in and out.
 
 ## Design choices
@@ -34,7 +37,7 @@ This means:
 
 ### Pebble as the only KV
 
-All metadata (buckets, objects, versions, multipart uploads, tokens, S3 keys, chunk reference counts, lifecycle/CORS configs, SSE keyring) lives in an embedded [Pebble](https://github.com/cockroachdb/pebble) LSM at `data/store/`. No external database, no external cache. That is also the main reason Hangar is single-writer per node: Pebble is.
+All metadata (buckets, objects, versions, multipart uploads, tokens, S3 keys, chunk reference counts, lifecycle/CORS configs, SSE keyring, cluster layout) lives in an embedded [Pebble](https://github.com/cockroachdb/pebble) LSM at `data/store/`. No external database, no external cache. In cluster mode, writes to designated prefixes are intercepted by a Pebble write hook and fanned out to peers; per-object metadata routes via HRW primary + async secondary; the WAL on each primary lets disconnected peers catch up on reconnect.
 
 ### zstd + AEAD pipeline
 
@@ -49,4 +52,4 @@ The split exists because the native API was first and is convenient for CLI / sc
 
 ## Maturity
 
-Current series: **v0.9.x** — feature-complete first cut, pre-1.0. The on-disk format may evolve. Backups are supported (`hangar backup create` + `restore`) but cross-version migrations are not guaranteed before 1.0 is tagged. The HTTP/S3 wire surface is stable for what is documented; anything not documented is not a stable contract. v1.0.0 lands once a real production deployment has lived on it long enough to commit to SemVer stability.
+Current series: **v0.9.x** single-node — feature-complete first cut, pre-1.0. **Cluster mode is beta** — 13 end-to-end scenarios pass in the `clusterinterop` harness (cross-node PUT/GET, multipart 50 MB, drain, rolling restart, majority-kill, WAL catchup, anti-entropy, seed failover, sustained 60 s @ <1% error rate), but it has not lived under sustained production load. The on-disk format may evolve. Backups are supported (`hangar backup create` + `restore`) but cross-version migrations are not guaranteed before 1.0 is tagged. The HTTP/S3 wire surface is stable for what is documented; anything not documented is not a stable contract. v1.0.0 lands once a real production deployment has lived on cluster mode long enough to commit to SemVer stability.

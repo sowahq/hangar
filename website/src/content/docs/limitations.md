@@ -7,9 +7,11 @@ Hangar is honest about scope. If any of the items below are blockers for your us
 
 ## Durability and availability
 
-- **Single-node today.** No replication, no failover, no erasure coding yet. Distribution and EC are on the [roadmap](/roadmap/) but not implemented. Until they ship, the durability ceiling is the durability of the underlying disk — use RAID, ZFS, or filesystem snapshots, and back up.
-- **Pebble is single-writer.** You cannot run two `hangar server` processes against the same `data_directory`. Pebble holds an exclusive lock and a second process will fail to start. A future clustered mode will not change this for the local store — distribution will sit above the per-node engine.
-- **No quorum, no consistency model beyond local fsync.** Writes are durable once `PutObject` returns 200, but only on this one machine.
+- **Cluster mode is beta.** Default deployment is single-node. Cluster mode ([see /cluster/](/cluster/)) is built and validated end-to-end via the `clusterinterop` harness (13 scenarios) but has not lived under sustained production load. Erasure coding `k+m` is not yet wired — cluster mode currently uses RF=2 replication for chunks, which means 2× storage versus 1× single-node. For single-node deployments, durability ceiling is the underlying disk — use RAID, ZFS, or filesystem snapshots, and back up.
+- **Pebble is single-writer per node.** You cannot run two `hangar server` processes against the same `data_directory`. Pebble holds an exclusive lock and a second process will fail to start. Cluster mode does not change this for the local store — distribution sits above the per-node engine.
+- **Cluster reads are strongly consistent on primary, eventually consistent on secondary fan-out.** A read that hits the primary always sees the latest write. A read that falls through to a secondary may briefly see the previous version during async fan-out. WAL catchup on peer recovery is best-effort within the 24 h retention window.
+- **No multi-DC.** Single zone only. Cluster heartbeat assumes LAN-class latencies.
+- **No rolling-version upgrades.** All cluster nodes must run the same Hangar binary. Stop everywhere, upgrade, restart.
 
 ## Backups
 
@@ -32,7 +34,7 @@ See [S3 compatibility](/s3-compatibility/) for the full matrix. The main gaps:
 - **No ACLs, no bucket policies.** Permissions are coarse: per-token (`read` / `write` / `delete` / `admin`) and optional per-bucket scoping on S3 access keys.
 - **No object tagging, no object metadata beyond standard headers** (Content-Type, user-defined headers are not persisted today).
 - **No Object Lock / WORM, no Legal Hold.**
-- **No replication APIs** (`PutBucketReplication`, etc.) yet. Will arrive together with the distribution work.
+- **No replication APIs** (`PutBucketReplication`, etc.). Hangar replicates internally in cluster mode but does not expose S3 replication configuration to clients.
 - **No `PutBucketNotificationConfiguration`, no event streams.** Webhooks / SNS / SQS are out of scope.
 - **No `SelectObjectContent`, no Glacier tiers.**
 
@@ -46,7 +48,8 @@ See [S3 compatibility](/s3-compatibility/) for the full matrix. The main gaps:
 - **No Prometheus by default.** Metrics are opt-in via `[metrics] enabled = true` on a separate port. See [Metrics](/observability/metrics/).
 - **Audit log is opt-in.** Same story — `[audit] enabled = true`. JSONL with size + age rotation. See [Audit](/operations/audit/).
 - **No web UI.** Admin is HTTP API + the bundled `hangar` CLI. No dashboard.
-- **No clustering / migration helpers.** The on-disk format is stable enough for routine restarts but **pre-1.0 means cross-version upgrades may require a backup + restore cycle**. Read the release notes.
+- **No migration helpers across versions.** The on-disk format is stable enough for routine restarts but **pre-1.0 means cross-version upgrades may require a backup + restore cycle**. Read the release notes.
+- **No TLS on the cluster dRPC layer.** Cluster traffic is authenticated by HMAC-SHA256 with a 32-byte shared secret but not encrypted. Deploy the cluster behind a VPN / WireGuard / VPC.
 
 ## Performance caveats
 

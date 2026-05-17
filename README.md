@@ -4,7 +4,7 @@ Self-hosted object storage in Go. Content-addressed chunks (blake3 + zstd) on Pe
 
 > Full documentation: **[hangar.mth.lc](https://hangar.mth.lc)**
 
-v0.9.x, single-node. Distribution and erasure coding are planned but not built yet.
+Single-node or cluster mode. Cluster mode (HRW chunk placement RF=2, key-sharded metadata, replicated system state, WAL catchup, anti-entropy, seed-based dynamic membership) is beta. Erasure coding `k+m` is planned but not yet wired.
 
 ## Quickstart
 
