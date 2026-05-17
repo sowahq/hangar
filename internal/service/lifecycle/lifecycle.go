@@ -24,7 +24,13 @@ type Stats struct {
 var (
 	mu       sync.Mutex
 	lastTick time.Time
+
+	clusterLeaderCheck func() bool
 )
+
+func SetClusterLeaderCheck(fn func() bool) {
+	clusterLeaderCheck = fn
+}
 
 func now() time.Time { return time.Now() }
 
@@ -180,6 +186,10 @@ func StartScheduled(ctx context.Context, done chan<- struct{}) {
 			log.Info().Msg("Stopping lifecycle scheduler")
 			return
 		case <-ticker.C:
+			if cl := clusterLeaderCheck; cl != nil && !cl() {
+				log.Debug().Msg("Skipping lifecycle: not cluster GC leader")
+				continue
+			}
 			stats, err := Run(ctx)
 			if err != nil {
 				log.Error().Err(err).Msg("Lifecycle run failed")

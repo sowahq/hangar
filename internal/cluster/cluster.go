@@ -257,6 +257,21 @@ func (c *Cluster) LayoutVersion() uint64 {
 	return c.layoutV
 }
 
+func (c *Cluster) IsGCLeader() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	var lowest NodeID
+	for id, ns := range c.view.Nodes {
+		if ns.Status != StatusActive {
+			continue
+		}
+		if lowest == "" || id < lowest {
+			lowest = id
+		}
+	}
+	return lowest == c.cfg.NodeID
+}
+
 func (c *Cluster) NodeStatus(id NodeID) Status {
 	c.mu.RLock()
 	defer c.mu.RUnlock()

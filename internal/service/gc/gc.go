@@ -19,7 +19,13 @@ import (
 var (
 	lastTickMu sync.RWMutex
 	lastTick   time.Time
+
+	clusterLeaderCheck func() bool
 )
+
+func SetClusterLeaderCheck(fn func() bool) {
+	clusterLeaderCheck = fn
+}
 
 func LastTick() time.Time {
 	lastTickMu.RLock()
@@ -157,6 +163,10 @@ func StartScheduledGC(ctx context.Context, done chan<- struct{}) {
 			log.Info().Msg("Stopping scheduled garbage collection")
 			return
 		case <-ticker.C:
+			if cl := clusterLeaderCheck; cl != nil && !cl() {
+				log.Debug().Msg("Skipping garbage collection: not cluster GC leader")
+				continue
+			}
 			setLastTick(time.Now())
 			log.Info().Msg("Running scheduled garbage collection")
 			stats, err := RunGarbageCollection(false)

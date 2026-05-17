@@ -174,6 +174,11 @@ func Execute() {
 						storage.SetChunkStore(cluster.NewClusteredChunkStore(clusterRuntime.Cluster, clusterRuntime.Pool))
 						storage.SetRefcountStore(cluster.NewClusteredRefcountStore(clusterRuntime.Cluster, clusterRuntime.Pool))
 
+						cl := clusterRuntime.Cluster
+						gcService.SetClusterLeaderCheck(cl.IsGCLeader)
+						scrubService.SetClusterLeaderCheck(cl.IsGCLeader)
+						lifecycleService.SetClusterLeaderCheck(cl.IsGCLeader)
+
 						go func() {
 							syncCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 							defer cancel()

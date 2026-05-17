@@ -46,12 +46,18 @@ type Opts struct {
 var (
 	lastTickMu sync.RWMutex
 	lastTick   time.Time
+
+	clusterLeaderCheck func() bool
 )
 
 func LastTick() time.Time {
 	lastTickMu.RLock()
 	defer lastTickMu.RUnlock()
 	return lastTick
+}
+
+func SetClusterLeaderCheck(fn func() bool) {
+	clusterLeaderCheck = fn
 }
 
 func setLastTick(t time.Time) {
@@ -279,6 +285,10 @@ func StartScheduledScrub(ctx context.Context, done chan<- struct{}) {
 			log.Info().Msg("Stopping scheduled scrub")
 			return
 		case <-ticker.C:
+			if cl := clusterLeaderCheck; cl != nil && !cl() {
+				log.Debug().Msg("Skipping scrub: not cluster GC leader")
+				continue
+			}
 			setLastTick(time.Now())
 			log.Info().Msg("Running scheduled scrub")
 			stats, err := Run(Opts{
