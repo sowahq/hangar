@@ -90,7 +90,8 @@ func TestCanonicalURI(t *testing.T) {
 		{"/", "/"},
 		{"/foo/bar", "/foo/bar"},
 		{"/foo bar", "/foo%20bar"},
-		{"/documents%20and%20settings/", "/documents%20and%20settings/"},
+		{"/documents and settings/", "/documents%20and%20settings/"},
+		{"/literal%percent.txt", "/literal%25percent.txt"},
 		{"/ütf8", "/%C3%BCtf8"},
 	}
 	for _, tc := range cases {

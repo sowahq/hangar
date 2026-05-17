@@ -142,12 +142,7 @@ func canonicalURI(path string) string {
 
 	segments := strings.Split(path, "/")
 	for i, s := range segments {
-		decoded, err := url.PathUnescape(s)
-		if err != nil {
-			decoded = s
-		}
-
-		segments[i] = uriEncode(decoded, false)
+		segments[i] = uriEncode(s, false)
 	}
 	return strings.Join(segments, "/")
 }
