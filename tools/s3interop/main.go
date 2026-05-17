@@ -261,6 +261,7 @@ func main() {
 
 	runSSETests(ctx, cli, bucket, &fails, step)
 	runNewFeatureTests(ctx, cli, bucket, ak, sk, endpoint, &fails, step)
+	runEdgeCaseTests(ctx, cli, bucket, &fails, step)
 
 	if fails > 0 {
 		fmt.Printf("\n%d FAIL\n", fails)
@@ -554,6 +555,255 @@ func runNewFeatureTests(ctx context.Context, cli *s3.Client, bucket, ak, sk, end
 	// cleanup
 	_, _ = cli.DeleteObject(ctx, &s3.DeleteObjectInput{Bucket: &bucket, Key: &condKey})
 	_, _ = cli.DeleteObject(ctx, &s3.DeleteObjectInput{Bucket: &bucket, Key: &tagKey})
+}
+
+func runEdgeCaseTests(ctx context.Context, cli *s3.Client, bucket string, fails *int, step func(string, error, string)) {
+	// Range tail (bytes=-N)
+	tailKey := "edge/tail.bin"
+	tailBody := []byte("abcdefghijklmnop")
+	_, _ = cli.PutObject(ctx, &s3.PutObjectInput{Bucket: &bucket, Key: &tailKey, Body: bytes.NewReader(tailBody)})
+	rng := "bytes=-4"
+	gr, err := cli.GetObject(ctx, &s3.GetObjectInput{Bucket: &bucket, Key: &tailKey, Range: &rng})
+	if err == nil {
+		b, _ := io.ReadAll(gr.Body)
+		_ = gr.Body.Close()
+		if string(b) == "mnop" {
+			step("Range(tail bytes=-4)", nil, fmt.Sprintf("got=%q", b))
+		} else {
+			step("Range(tail bytes=-4)", fmt.Errorf("got %q want mnop", b), "")
+		}
+	} else {
+		step("Range(tail bytes=-4)", err, "")
+	}
+
+	// Range out-of-bounds → 416
+	rngBad := "bytes=9999-99999"
+	_, err = cli.GetObject(ctx, &s3.GetObjectInput{Bucket: &bucket, Key: &tailKey, Range: &rngBad})
+	if err != nil {
+		step("Range(out-of-bounds)", nil, "416 as expected")
+	} else {
+		step("Range(out-of-bounds)", fmt.Errorf("accepted oob range"), "")
+	}
+
+	// ListObjects v1 with delimiter
+	for _, k := range []string{"docs/a", "docs/b", "img/c"} {
+		_, _ = cli.PutObject(ctx, &s3.PutObjectInput{Bucket: &bucket, Key: aws.String("edge/" + k), Body: bytes.NewReader([]byte("x"))})
+	}
+	lod, err := cli.ListObjects(ctx, &s3.ListObjectsInput{Bucket: &bucket, Prefix: aws.String("edge/"), Delimiter: aws.String("/")})
+	if err == nil {
+		step("ListObjects v1(delimiter)", nil, fmt.Sprintf("contents=%d commonPrefixes=%d", len(lod.Contents), len(lod.CommonPrefixes)))
+	} else {
+		step("ListObjects v1(delimiter)", err, "")
+	}
+
+	// Delete versioned object → delete-marker, ListObjectVersions reflects it
+	vKey := "edge/versioned.bin"
+	_, _ = cli.PutObject(ctx, &s3.PutObjectInput{Bucket: &bucket, Key: &vKey, Body: bytes.NewReader([]byte("v1"))})
+	_, _ = cli.PutObject(ctx, &s3.PutObjectInput{Bucket: &bucket, Key: &vKey, Body: bytes.NewReader([]byte("v2"))})
+	_, _ = cli.DeleteObject(ctx, &s3.DeleteObjectInput{Bucket: &bucket, Key: &vKey})
+	lv, err := cli.ListObjectVersions(ctx, &s3.ListObjectVersionsInput{Bucket: &bucket, Prefix: &vKey})
+	if err == nil {
+		if len(lv.Versions) == 2 && len(lv.DeleteMarkers) == 1 && aws.ToBool(lv.DeleteMarkers[0].IsLatest) {
+			step("Delete-marker after Delete", nil, fmt.Sprintf("v=%d dm=%d", len(lv.Versions), len(lv.DeleteMarkers)))
+		} else {
+			step("Delete-marker after Delete", fmt.Errorf("v=%d dm=%d latest=%v", len(lv.Versions), len(lv.DeleteMarkers), len(lv.DeleteMarkers) > 0 && aws.ToBool(lv.DeleteMarkers[0].IsLatest)), "")
+		}
+	} else {
+		step("Delete-marker after Delete", err, "")
+	}
+
+	// GetObject on deleted versioned object → 404 + x-amz-delete-marker
+	_, err = cli.GetObject(ctx, &s3.GetObjectInput{Bucket: &bucket, Key: &vKey})
+	if err != nil {
+		step("Get(deleted versioned)", nil, "404 as expected")
+	} else {
+		step("Get(deleted versioned)", fmt.Errorf("accepted"), "")
+	}
+
+	// Restore previous version via versionId
+	var prevVID string
+	for _, v := range lv.Versions {
+		if !aws.ToBool(v.IsLatest) {
+			prevVID = aws.ToString(v.VersionId)
+			break
+		}
+	}
+	if prevVID == "" && len(lv.Versions) > 0 {
+		prevVID = aws.ToString(lv.Versions[0].VersionId)
+	}
+	if prevVID != "" {
+		gv, gerr := cli.GetObject(ctx, &s3.GetObjectInput{Bucket: &bucket, Key: &vKey, VersionId: &prevVID})
+		if gerr == nil {
+			b, _ := io.ReadAll(gv.Body)
+			_ = gv.Body.Close()
+			step("Get(versionId)", nil, fmt.Sprintf("body=%q", b))
+		} else {
+			step("Get(versionId)", gerr, "")
+		}
+	}
+
+	// Conditional GET If-Modified-Since past → 200
+	ifKey := "edge/cond.bin"
+	_, _ = cli.PutObject(ctx, &s3.PutObjectInput{Bucket: &bucket, Key: &ifKey, Body: bytes.NewReader([]byte("body"))})
+	past := time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
+	_, err = cli.GetObject(ctx, &s3.GetObjectInput{Bucket: &bucket, Key: &ifKey, IfModifiedSince: &past})
+	step("If-Modified-Since past → 200", err, "")
+	future := time.Now().Add(24 * time.Hour)
+	_, err = cli.GetObject(ctx, &s3.GetObjectInput{Bucket: &bucket, Key: &ifKey, IfModifiedSince: &future})
+	if err != nil {
+		step("If-Modified-Since future → 304", nil, "304 as expected")
+	} else {
+		step("If-Modified-Since future → 304", fmt.Errorf("accepted"), "")
+	}
+
+	// Concurrent writes — 8 PUTs same key, last write wins
+	concKey := "edge/concurrent.bin"
+	done := make(chan error, 8)
+	for i := 0; i < 8; i++ {
+		i := i
+		go func() {
+			payload := []byte(fmt.Sprintf("writer-%d", i))
+			_, e := cli.PutObject(ctx, &s3.PutObjectInput{Bucket: &bucket, Key: &concKey, Body: bytes.NewReader(payload)})
+			done <- e
+		}()
+	}
+	concFails := 0
+	for i := 0; i < 8; i++ {
+		if e := <-done; e != nil {
+			concFails++
+		}
+	}
+	if concFails == 0 {
+		step("Concurrent PUTs x8", nil, "all succeeded")
+	} else {
+		step("Concurrent PUTs x8", fmt.Errorf("%d errors", concFails), "")
+	}
+	hr, err := cli.HeadObject(ctx, &s3.HeadObjectInput{Bucket: &bucket, Key: &concKey})
+	if err == nil {
+		step("HeadObject(after concurrent)", nil, fmt.Sprintf("size=%d", aws.ToInt64(hr.ContentLength)))
+	} else {
+		step("HeadObject(after concurrent)", err, "")
+	}
+
+	// Empty body PUT/GET
+	emptyKey := "edge/empty.bin"
+	_, err = cli.PutObject(ctx, &s3.PutObjectInput{Bucket: &bucket, Key: &emptyKey, Body: bytes.NewReader(nil)})
+	step("PutObject(empty)", err, "")
+	hg, err := cli.HeadObject(ctx, &s3.HeadObjectInput{Bucket: &bucket, Key: &emptyKey})
+	if err == nil && aws.ToInt64(hg.ContentLength) == 0 {
+		step("HeadObject(empty)", nil, "size=0")
+	} else {
+		step("HeadObject(empty)", fmt.Errorf("size mismatch err=%v size=%d", err, aws.ToInt64(hg.ContentLength)), "")
+	}
+
+	// Missing key → 404
+	_, err = cli.HeadObject(ctx, &s3.HeadObjectInput{Bucket: &bucket, Key: aws.String("edge/does-not-exist")})
+	if err != nil {
+		step("HeadObject(missing)", nil, "404 as expected")
+	} else {
+		step("HeadObject(missing)", fmt.Errorf("accepted"), "")
+	}
+
+	// Special chars in key: space, unicode, deep slashes
+	specialKeys := []string{
+		"edge/with space.txt",
+		"edge/déjà-vu/café.txt",
+		"edge/a/b/c/d/e/f/g/leaf.bin",
+		"edge/percent%20encoded.txt",
+	}
+	for _, sk := range specialKeys {
+		_, e := cli.PutObject(ctx, &s3.PutObjectInput{Bucket: &bucket, Key: aws.String(sk), Body: bytes.NewReader([]byte("v"))})
+		if e != nil {
+			step("PutObject("+sk+")", e, "")
+			continue
+		}
+		g, e := cli.GetObject(ctx, &s3.GetObjectInput{Bucket: &bucket, Key: aws.String(sk)})
+		if e != nil {
+			step("GetObject("+sk+")", e, "")
+			continue
+		}
+		b, _ := io.ReadAll(g.Body)
+		_ = g.Body.Close()
+		if string(b) != "v" {
+			step("GetObject("+sk+")", fmt.Errorf("body mismatch"), "")
+		} else {
+			step("Round-trip("+sk+")", nil, "")
+		}
+	}
+
+	// Pagination: 1200 keys, V2 with max-keys=100
+	for i := 0; i < 1200; i++ {
+		_, _ = cli.PutObject(ctx, &s3.PutObjectInput{Bucket: &bucket, Key: aws.String(fmt.Sprintf("page/k-%04d", i)), Body: bytes.NewReader([]byte("x"))})
+	}
+	var token *string
+	total := 0
+	pages := 0
+	for {
+		lo, perr := cli.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
+			Bucket: &bucket, Prefix: aws.String("page/"),
+			MaxKeys: aws.Int32(100), ContinuationToken: token,
+		})
+		if perr != nil {
+			step("ListObjectsV2(paginate)", perr, "")
+			break
+		}
+		total += len(lo.Contents)
+		pages++
+		if !aws.ToBool(lo.IsTruncated) {
+			break
+		}
+		token = lo.NextContinuationToken
+		if pages > 50 {
+			step("ListObjectsV2(paginate)", fmt.Errorf("too many pages"), "")
+			break
+		}
+	}
+	if total == 1200 {
+		step("ListObjectsV2(paginate 1200)", nil, fmt.Sprintf("pages=%d total=%d", pages, total))
+	} else {
+		step("ListObjectsV2(paginate 1200)", fmt.Errorf("got %d total in %d pages", total, pages), "")
+	}
+
+	// DeleteObjects batch with mix of present + missing
+	dl, err := cli.DeleteObjects(ctx, &s3.DeleteObjectsInput{
+		Bucket: &bucket,
+		Delete: &types.Delete{
+			Objects: []types.ObjectIdentifier{
+				{Key: aws.String("page/k-0000")},
+				{Key: aws.String("page/k-0001")},
+				{Key: aws.String("page/missing")},
+			},
+			Quiet: aws.Bool(false),
+		},
+	})
+	if err == nil {
+		step("DeleteObjects(mixed)", nil, fmt.Sprintf("deleted=%d errors=%d", len(dl.Deleted), len(dl.Errors)))
+	} else {
+		step("DeleteObjects(mixed)", err, "")
+	}
+
+	// Big multipart 50MiB
+	bigKey := "edge/big.bin"
+	bigBody := make([]byte, 50*1024*1024)
+	_, _ = rand.Read(bigBody)
+	uploader := manager.NewUploader(cli, func(u *manager.Uploader) {
+		u.PartSize = 8 * 1024 * 1024
+		u.Concurrency = 4
+	})
+	_, err = uploader.Upload(ctx, &s3.PutObjectInput{Bucket: &bucket, Key: &bigKey, Body: bytes.NewReader(bigBody)})
+	step("Multipart 50MiB", err, "")
+	if err == nil {
+		gg, gerr := cli.GetObject(ctx, &s3.GetObjectInput{Bucket: &bucket, Key: &bigKey})
+		if gerr == nil {
+			b, _ := io.ReadAll(gg.Body)
+			_ = gg.Body.Close()
+			h1 := sha256.Sum256(bigBody)
+			h2 := sha256.Sum256(b)
+			step("Get(50MiB) sha256", nil, fmt.Sprintf("len=%d ok=%v", len(b), h1 == h2))
+		} else {
+			step("Get(50MiB)", gerr, "")
+		}
+	}
 }
 
 func rawHeadRaw(ctx context.Context, endpoint, bucket, key, ak, sk string) {
