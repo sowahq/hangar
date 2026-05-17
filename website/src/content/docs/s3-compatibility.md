@@ -135,8 +135,8 @@ Hangar trusts the client-provided value and echoes it. It does not recompute, so
 | `Range: bytes=…`    | ✅ single range, returns `206 Partial Content`, multipart ranges not supported |
 | `If-Modified-Since` | ✅     |
 | `If-None-Match`     | ✅     |
-| `If-Match`          | ❌     |
-| `If-Unmodified-Since` | ❌   |
+| `If-Match`          | ✅     |
+| `If-Unmodified-Since` | ✅   |
 
 ### Object lock headers
 
