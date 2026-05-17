@@ -33,6 +33,12 @@ export default defineConfig({
         },
         { label: "Encryption (SSE)", link: "/sse/" },
         {
+          label: "Guides",
+          items: [
+            { label: "Host a SPA", link: "/guides/spa-hosting/" },
+          ],
+        },
+        {
           label: "Operations",
           items: [
             { label: "Backup & restore", link: "/operations/backup-restore/" },
