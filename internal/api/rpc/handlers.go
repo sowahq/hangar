@@ -238,6 +238,40 @@ func (s *Server) DecRefs(ctx context.Context, d *RefDelta) (*Ack, error) {
 	return &Ack{Ok: true}, nil
 }
 
+func (s *Server) ReplicateKV(ctx context.Context, op *KVOp) (*KVAck, error) {
+	if s.KV == nil {
+		return s.DRPCClusterUnimplementedServer.ReplicateKV(ctx, op)
+	}
+	if op == nil {
+		return &KVAck{Ok: false, Error: "nil op"}, nil
+	}
+	if err := s.KV.ReplicateKV(op); err != nil {
+		return &KVAck{Ok: false, Error: err.Error()}, nil
+	}
+	return &KVAck{Ok: true}, nil
+}
+
+func (s *Server) BulkSyncKV(req *KVBulkRequest, stream DRPCCluster_BulkSyncKVStream) error {
+	if s.KV == nil {
+		return s.DRPCClusterUnimplementedServer.BulkSyncKV(req, stream)
+	}
+	if req == nil {
+		return nil
+	}
+	var sendErr error
+	err := s.KV.BulkSync(req.Prefixes, func(k, v []byte) bool {
+		if err := stream.Send(&KVEntry{Key: append([]byte(nil), k...), Value: append([]byte(nil), v...)}); err != nil {
+			sendErr = err
+			return false
+		}
+		return true
+	})
+	if sendErr != nil {
+		return sendErr
+	}
+	return err
+}
+
 func (s *Server) GetLayout(ctx context.Context, req *LayoutRequest) (*LayoutResponse, error) {
 	if s.Layout == nil {
 		return s.DRPCClusterUnimplementedServer.GetLayout(ctx, req)

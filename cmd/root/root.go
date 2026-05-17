@@ -174,6 +174,19 @@ func Execute() {
 						storage.SetChunkStore(cluster.NewClusteredChunkStore(clusterRuntime.Cluster, clusterRuntime.Pool))
 						storage.SetRefcountStore(cluster.NewClusteredRefcountStore(clusterRuntime.Cluster, clusterRuntime.Pool))
 
+						go func() {
+							syncCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+							defer cancel()
+							count, err := clusterRuntime.BootstrapPeerSync(syncCtx, 30, time.Second)
+							if err != nil {
+								log.Warn().Err(err).Msg("Cluster bootstrap sync error.")
+								return
+							}
+							if count > 0 {
+								log.Info().Int("entries", count).Msg("Cluster bootstrap synced replicated KV from peer.")
+							}
+						}()
+
 						log.Info().
 							Str("node_id", config.ClusterNodeID()).
 							Str("listen", clusterRuntime.Addr()).

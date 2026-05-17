@@ -6,11 +6,13 @@ import (
 	"net"
 	"strings"
 	"sync"
+	"time"
 
 	"storj.io/drpc/drpcmux"
 	"storj.io/drpc/drpcserver"
 
 	"github.com/anhostfr/hangar/internal/api/rpc"
+	"github.com/anhostfr/hangar/internal/database"
 )
 
 type Runtime struct {
@@ -69,6 +71,7 @@ func Start(ctx context.Context, cfg Config) (*Runtime, error) {
 	srv.Chunks = localChunkAdapter{}
 	srv.Refs = localRefcountAdapter{}
 	srv.Layout = localLayoutAdapter{}
+	srv.KV = localKVHandler{}
 
 	mux := drpcmux.New()
 	if err := rpc.DRPCRegisterCluster(mux, srv); err != nil {
@@ -82,6 +85,10 @@ func Start(ctx context.Context, cfg Config) (*Runtime, error) {
 
 	pool := NewConnPool(cl.Self(), cl.Secret(), cl.NodeAddr)
 	rt := &Runtime{Cluster: cl, Pool: pool, listener: ln, cancel: cancel}
+
+	if db := database.LocalStore(); db != nil {
+		db.SetHook(newKVReplicator(cl, pool))
+	}
 
 	rt.wg.Add(2)
 
@@ -111,10 +118,37 @@ func (r *Runtime) Stop() {
 		_ = r.listener.Close()
 	}
 	r.wg.Wait()
+	if db := database.LocalStore(); db != nil {
+		db.ClearHook()
+	}
 	if r.Pool != nil {
 		r.Pool.Close()
 	}
 	SetGlobal(nil)
+}
+
+func (r *Runtime) BootstrapPeerSync(ctx context.Context, attempts int, delay time.Duration) (int, error) {
+	if r == nil || r.Cluster == nil || r.Pool == nil {
+		return 0, nil
+	}
+	for i := 0; i < attempts; i++ {
+		view := r.Cluster.View()
+		for id, ns := range view.Nodes {
+			if id == r.Cluster.Self() || ns.Status != StatusActive {
+				continue
+			}
+			count, err := PullBulkSyncFrom(ctx, r.Pool, id)
+			if err == nil {
+				return count, nil
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return 0, ctx.Err()
+		case <-time.After(delay):
+		}
+	}
+	return 0, nil
 }
 
 func (r *Runtime) Addr() string {

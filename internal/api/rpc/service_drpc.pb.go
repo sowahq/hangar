@@ -63,6 +63,8 @@ type DRPCClusterClient interface {
 	DecRefs(ctx context.Context, in *RefDelta) (*Ack, error)
 	ReplicaCatchup(ctx context.Context, in *CatchupCursor) (DRPCCluster_ReplicaCatchupClient, error)
 	GetLayout(ctx context.Context, in *LayoutRequest) (*LayoutResponse, error)
+	ReplicateKV(ctx context.Context, in *KVOp) (*KVAck, error)
+	BulkSyncKV(ctx context.Context, in *KVBulkRequest) (DRPCCluster_BulkSyncKVClient, error)
 }
 
 type drpcClusterClient struct {
@@ -459,6 +461,55 @@ func (c *drpcClusterClient) GetLayout(ctx context.Context, in *LayoutRequest) (*
 	return out, nil
 }
 
+func (c *drpcClusterClient) ReplicateKV(ctx context.Context, in *KVOp) (*KVAck, error) {
+	out := new(KVAck)
+	err := c.cc.Invoke(ctx, "/hangar.cluster.v1.Cluster/ReplicateKV", drpcEncoding_File_internal_api_rpc_service_proto{}, in, out)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *drpcClusterClient) BulkSyncKV(ctx context.Context, in *KVBulkRequest) (DRPCCluster_BulkSyncKVClient, error) {
+	stream, err := c.cc.NewStream(ctx, "/hangar.cluster.v1.Cluster/BulkSyncKV", drpcEncoding_File_internal_api_rpc_service_proto{})
+	if err != nil {
+		return nil, err
+	}
+	x := &drpcCluster_BulkSyncKVClient{stream}
+	if err := x.MsgSend(in, drpcEncoding_File_internal_api_rpc_service_proto{}); err != nil {
+		return nil, err
+	}
+	if err := x.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type DRPCCluster_BulkSyncKVClient interface {
+	drpc.Stream
+	Recv() (*KVEntry, error)
+}
+
+type drpcCluster_BulkSyncKVClient struct {
+	drpc.Stream
+}
+
+func (x *drpcCluster_BulkSyncKVClient) GetStream() drpc.Stream {
+	return x.Stream
+}
+
+func (x *drpcCluster_BulkSyncKVClient) Recv() (*KVEntry, error) {
+	m := new(KVEntry)
+	if err := x.MsgRecv(m, drpcEncoding_File_internal_api_rpc_service_proto{}); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func (x *drpcCluster_BulkSyncKVClient) RecvMsg(m *KVEntry) error {
+	return x.MsgRecv(m, drpcEncoding_File_internal_api_rpc_service_proto{})
+}
+
 type DRPCClusterServer interface {
 	Handshake(context.Context, *Hello) (*HelloAck, error)
 	HeartbeatStream(DRPCCluster_HeartbeatStreamStream) error
@@ -485,6 +536,8 @@ type DRPCClusterServer interface {
 	DecRefs(context.Context, *RefDelta) (*Ack, error)
 	ReplicaCatchup(*CatchupCursor, DRPCCluster_ReplicaCatchupStream) error
 	GetLayout(context.Context, *LayoutRequest) (*LayoutResponse, error)
+	ReplicateKV(context.Context, *KVOp) (*KVAck, error)
+	BulkSyncKV(*KVBulkRequest, DRPCCluster_BulkSyncKVStream) error
 }
 
 type DRPCClusterUnimplementedServer struct{}
@@ -589,9 +642,17 @@ func (s *DRPCClusterUnimplementedServer) GetLayout(context.Context, *LayoutReque
 	return nil, drpcerr.WithCode(errors.New("Unimplemented"), drpcerr.Unimplemented)
 }
 
+func (s *DRPCClusterUnimplementedServer) ReplicateKV(context.Context, *KVOp) (*KVAck, error) {
+	return nil, drpcerr.WithCode(errors.New("Unimplemented"), drpcerr.Unimplemented)
+}
+
+func (s *DRPCClusterUnimplementedServer) BulkSyncKV(*KVBulkRequest, DRPCCluster_BulkSyncKVStream) error {
+	return drpcerr.WithCode(errors.New("Unimplemented"), drpcerr.Unimplemented)
+}
+
 type DRPCClusterDescription struct{}
 
-func (DRPCClusterDescription) NumMethods() int { return 25 }
+func (DRPCClusterDescription) NumMethods() int { return 27 }
 
 func (DRPCClusterDescription) Method(n int) (string, drpc.Encoding, drpc.Receiver, interface{}, bool) {
 	switch n {
@@ -818,6 +879,24 @@ func (DRPCClusterDescription) Method(n int) (string, drpc.Encoding, drpc.Receive
 						in1.(*LayoutRequest),
 					)
 			}, DRPCClusterServer.GetLayout, true
+	case 25:
+		return "/hangar.cluster.v1.Cluster/ReplicateKV", drpcEncoding_File_internal_api_rpc_service_proto{},
+			func(srv interface{}, ctx context.Context, in1, in2 interface{}) (drpc.Message, error) {
+				return srv.(DRPCClusterServer).
+					ReplicateKV(
+						ctx,
+						in1.(*KVOp),
+					)
+			}, DRPCClusterServer.ReplicateKV, true
+	case 26:
+		return "/hangar.cluster.v1.Cluster/BulkSyncKV", drpcEncoding_File_internal_api_rpc_service_proto{},
+			func(srv interface{}, ctx context.Context, in1, in2 interface{}) (drpc.Message, error) {
+				return nil, srv.(DRPCClusterServer).
+					BulkSyncKV(
+						in1.(*KVBulkRequest),
+						&drpcCluster_BulkSyncKVStream{in2.(drpc.Stream)},
+					)
+			}, DRPCClusterServer.BulkSyncKV, true
 	default:
 		return "", nil, nil, nil, false
 	}
@@ -1339,4 +1418,41 @@ func (x *drpcCluster_GetLayoutStream) SendAndClose(m *LayoutResponse) error {
 		return err
 	}
 	return x.CloseSend()
+}
+
+type DRPCCluster_ReplicateKVStream interface {
+	drpc.Stream
+	SendAndClose(*KVAck) error
+}
+
+type drpcCluster_ReplicateKVStream struct {
+	drpc.Stream
+}
+
+func (x *drpcCluster_ReplicateKVStream) GetStream() drpc.Stream {
+	return x.Stream
+}
+
+func (x *drpcCluster_ReplicateKVStream) SendAndClose(m *KVAck) error {
+	if err := x.MsgSend(m, drpcEncoding_File_internal_api_rpc_service_proto{}); err != nil {
+		return err
+	}
+	return x.CloseSend()
+}
+
+type DRPCCluster_BulkSyncKVStream interface {
+	drpc.Stream
+	Send(*KVEntry) error
+}
+
+type drpcCluster_BulkSyncKVStream struct {
+	drpc.Stream
+}
+
+func (x *drpcCluster_BulkSyncKVStream) GetStream() drpc.Stream {
+	return x.Stream
+}
+
+func (x *drpcCluster_BulkSyncKVStream) Send(m *KVEntry) error {
+	return x.MsgSend(m, drpcEncoding_File_internal_api_rpc_service_proto{})
 }

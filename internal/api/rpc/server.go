@@ -37,6 +37,11 @@ type LayoutHandler interface {
 	GetLayout(version uint64) ([]byte, error)
 }
 
+type KVHandler interface {
+	ReplicateKV(op *KVOp) error
+	BulkSync(prefixes [][]byte, fn func(key, value []byte) bool) error
+}
+
 type Server struct {
 	DRPCClusterUnimplementedServer
 
@@ -45,6 +50,7 @@ type Server struct {
 	Chunks   ChunkHandler
 	Refs     RefcountHandler
 	Layout   LayoutHandler
+	KV       KVHandler
 }
 
 func NewServer(b Bridge) *Server {

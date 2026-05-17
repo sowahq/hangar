@@ -168,6 +168,26 @@ message LayoutResponse {
   bytes signed_layout = 1;
 }
 
+message KVOp {
+  string op    = 1;
+  bytes  key   = 2;
+  bytes  value = 3;
+}
+
+message KVAck {
+  bool   ok    = 1;
+  string error = 2;
+}
+
+message KVBulkRequest {
+  repeated bytes prefixes = 1;
+}
+
+message KVEntry {
+  bytes key   = 1;
+  bytes value = 2;
+}
+
 service Cluster {
   rpc Handshake(Hello) returns (HelloAck);
 
@@ -204,4 +224,7 @@ service Cluster {
   rpc ReplicaCatchup(CatchupCursor) returns (stream WALEntry);
 
   rpc GetLayout(LayoutRequest) returns (LayoutResponse);
+
+  rpc ReplicateKV(KVOp) returns (KVAck);
+  rpc BulkSyncKV(KVBulkRequest) returns (stream KVEntry);
 }

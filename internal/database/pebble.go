@@ -11,9 +11,24 @@ type nopLogger struct{}
 func (nopLogger) Fatalf(format string, args ...interface{}) {}
 func (nopLogger) Infof(format string, args ...interface{})  {}
 
+type WriteHook interface {
+	OnPut(key, value []byte)
+	OnDelete(key []byte)
+}
+
 type PebbleDB struct {
 	db        *pebble.DB
 	writeOpts *pebble.WriteOptions
+
+	hook WriteHook
+}
+
+func (p *PebbleDB) SetHook(h WriteHook) {
+	p.hook = h
+}
+
+func (p *PebbleDB) ClearHook() {
+	p.hook = nil
 }
 
 func NewPebbleDB(path string) (*PebbleDB, error) {
@@ -47,10 +62,30 @@ func (p *PebbleDB) Get(key []byte) ([]byte, error) {
 }
 
 func (p *PebbleDB) Put(key, value []byte) error {
+	if err := p.db.Set(key, value, p.writeOpts); err != nil {
+		return err
+	}
+	if p.hook != nil {
+		p.hook.OnPut(key, value)
+	}
+	return nil
+}
+
+func (p *PebbleDB) PutSilent(key, value []byte) error {
 	return p.db.Set(key, value, p.writeOpts)
 }
 
 func (p *PebbleDB) Delete(key []byte) error {
+	if err := p.db.Delete(key, p.writeOpts); err != nil {
+		return err
+	}
+	if p.hook != nil {
+		p.hook.OnDelete(key)
+	}
+	return nil
+}
+
+func (p *PebbleDB) DeleteSilent(key []byte) error {
 	return p.db.Delete(key, p.writeOpts)
 }
 

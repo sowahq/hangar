@@ -1657,6 +1657,214 @@ func (x *LayoutResponse) GetSignedLayout() []byte {
 	return nil
 }
 
+type KVOp struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Op            string                 `protobuf:"bytes,1,opt,name=op,proto3" json:"op,omitempty"`
+	Key           []byte                 `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
+	Value         []byte                 `protobuf:"bytes,3,opt,name=value,proto3" json:"value,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *KVOp) Reset() {
+	*x = KVOp{}
+	mi := &file_internal_api_rpc_service_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *KVOp) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*KVOp) ProtoMessage() {}
+
+func (x *KVOp) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_api_rpc_service_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use KVOp.ProtoReflect.Descriptor instead.
+func (*KVOp) Descriptor() ([]byte, []int) {
+	return file_internal_api_rpc_service_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *KVOp) GetOp() string {
+	if x != nil {
+		return x.Op
+	}
+	return ""
+}
+
+func (x *KVOp) GetKey() []byte {
+	if x != nil {
+		return x.Key
+	}
+	return nil
+}
+
+func (x *KVOp) GetValue() []byte {
+	if x != nil {
+		return x.Value
+	}
+	return nil
+}
+
+type KVAck struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Ok            bool                   `protobuf:"varint,1,opt,name=ok,proto3" json:"ok,omitempty"`
+	Error         string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *KVAck) Reset() {
+	*x = KVAck{}
+	mi := &file_internal_api_rpc_service_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *KVAck) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*KVAck) ProtoMessage() {}
+
+func (x *KVAck) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_api_rpc_service_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use KVAck.ProtoReflect.Descriptor instead.
+func (*KVAck) Descriptor() ([]byte, []int) {
+	return file_internal_api_rpc_service_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *KVAck) GetOk() bool {
+	if x != nil {
+		return x.Ok
+	}
+	return false
+}
+
+func (x *KVAck) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
+type KVBulkRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Prefixes      [][]byte               `protobuf:"bytes,1,rep,name=prefixes,proto3" json:"prefixes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *KVBulkRequest) Reset() {
+	*x = KVBulkRequest{}
+	mi := &file_internal_api_rpc_service_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *KVBulkRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*KVBulkRequest) ProtoMessage() {}
+
+func (x *KVBulkRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_api_rpc_service_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use KVBulkRequest.ProtoReflect.Descriptor instead.
+func (*KVBulkRequest) Descriptor() ([]byte, []int) {
+	return file_internal_api_rpc_service_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *KVBulkRequest) GetPrefixes() [][]byte {
+	if x != nil {
+		return x.Prefixes
+	}
+	return nil
+}
+
+type KVEntry struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Key           []byte                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
+	Value         []byte                 `protobuf:"bytes,2,opt,name=value,proto3" json:"value,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *KVEntry) Reset() {
+	*x = KVEntry{}
+	mi := &file_internal_api_rpc_service_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *KVEntry) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*KVEntry) ProtoMessage() {}
+
+func (x *KVEntry) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_api_rpc_service_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use KVEntry.ProtoReflect.Descriptor instead.
+func (*KVEntry) Descriptor() ([]byte, []int) {
+	return file_internal_api_rpc_service_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *KVEntry) GetKey() []byte {
+	if x != nil {
+		return x.Key
+	}
+	return nil
+}
+
+func (x *KVEntry) GetValue() []byte {
+	if x != nil {
+		return x.Value
+	}
+	return nil
+}
+
 var File_internal_api_rpc_service_proto protoreflect.FileDescriptor
 
 const file_internal_api_rpc_service_proto_rawDesc = "" +
@@ -1780,7 +1988,19 @@ const file_internal_api_rpc_service_proto_rawDesc = "" +
 	"\rLayoutRequest\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\x04R\aversion\"5\n" +
 	"\x0eLayoutResponse\x12#\n" +
-	"\rsigned_layout\x18\x01 \x01(\fR\fsignedLayout2\xe9\x0e\n" +
+	"\rsigned_layout\x18\x01 \x01(\fR\fsignedLayout\">\n" +
+	"\x04KVOp\x12\x0e\n" +
+	"\x02op\x18\x01 \x01(\tR\x02op\x12\x10\n" +
+	"\x03key\x18\x02 \x01(\fR\x03key\x12\x14\n" +
+	"\x05value\x18\x03 \x01(\fR\x05value\"-\n" +
+	"\x05KVAck\x12\x0e\n" +
+	"\x02ok\x18\x01 \x01(\bR\x02ok\x12\x14\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error\"+\n" +
+	"\rKVBulkRequest\x12\x1a\n" +
+	"\bprefixes\x18\x01 \x03(\fR\bprefixes\"1\n" +
+	"\aKVEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\fR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\fR\x05value2\xf9\x0f\n" +
 	"\aCluster\x12B\n" +
 	"\tHandshake\x12\x18.hangar.cluster.v1.Hello\x1a\x1b.hangar.cluster.v1.HelloAck\x12Q\n" +
 	"\x0fHeartbeatStream\x12\x1c.hangar.cluster.v1.Heartbeat\x1a\x1c.hangar.cluster.v1.Heartbeat(\x010\x01\x12I\n" +
@@ -1809,7 +2029,10 @@ const file_internal_api_rpc_service_proto_rawDesc = "" +
 	"\aIncRefs\x12\x1b.hangar.cluster.v1.RefDelta\x1a\x16.hangar.cluster.v1.Ack\x12>\n" +
 	"\aDecRefs\x12\x1b.hangar.cluster.v1.RefDelta\x1a\x16.hangar.cluster.v1.Ack\x12Q\n" +
 	"\x0eReplicaCatchup\x12 .hangar.cluster.v1.CatchupCursor\x1a\x1b.hangar.cluster.v1.WALEntry0\x01\x12P\n" +
-	"\tGetLayout\x12 .hangar.cluster.v1.LayoutRequest\x1a!.hangar.cluster.v1.LayoutResponseB1Z/github.com/anhostfr/hangar/internal/api/rpc;rpcb\x06proto3"
+	"\tGetLayout\x12 .hangar.cluster.v1.LayoutRequest\x1a!.hangar.cluster.v1.LayoutResponse\x12@\n" +
+	"\vReplicateKV\x12\x17.hangar.cluster.v1.KVOp\x1a\x18.hangar.cluster.v1.KVAck\x12L\n" +
+	"\n" +
+	"BulkSyncKV\x12 .hangar.cluster.v1.KVBulkRequest\x1a\x1a.hangar.cluster.v1.KVEntry0\x01B1Z/github.com/anhostfr/hangar/internal/api/rpc;rpcb\x06proto3"
 
 var (
 	file_internal_api_rpc_service_proto_rawDescOnce sync.Once
@@ -1823,7 +2046,7 @@ func file_internal_api_rpc_service_proto_rawDescGZIP() []byte {
 	return file_internal_api_rpc_service_proto_rawDescData
 }
 
-var file_internal_api_rpc_service_proto_msgTypes = make([]protoimpl.MessageInfo, 27)
+var file_internal_api_rpc_service_proto_msgTypes = make([]protoimpl.MessageInfo, 31)
 var file_internal_api_rpc_service_proto_goTypes = []any{
 	(*Hello)(nil),              // 0: hangar.cluster.v1.Hello
 	(*HelloAck)(nil),           // 1: hangar.cluster.v1.HelloAck
@@ -1852,6 +2075,10 @@ var file_internal_api_rpc_service_proto_goTypes = []any{
 	(*WALEntry)(nil),           // 24: hangar.cluster.v1.WALEntry
 	(*LayoutRequest)(nil),      // 25: hangar.cluster.v1.LayoutRequest
 	(*LayoutResponse)(nil),     // 26: hangar.cluster.v1.LayoutResponse
+	(*KVOp)(nil),               // 27: hangar.cluster.v1.KVOp
+	(*KVAck)(nil),              // 28: hangar.cluster.v1.KVAck
+	(*KVBulkRequest)(nil),      // 29: hangar.cluster.v1.KVBulkRequest
+	(*KVEntry)(nil),            // 30: hangar.cluster.v1.KVEntry
 }
 var file_internal_api_rpc_service_proto_depIdxs = []int32{
 	4,  // 0: hangar.cluster.v1.ChunkPresenceBatch.entries:type_name -> hangar.cluster.v1.ChunkPresence
@@ -1881,33 +2108,37 @@ var file_internal_api_rpc_service_proto_depIdxs = []int32{
 	21, // 24: hangar.cluster.v1.Cluster.DecRefs:input_type -> hangar.cluster.v1.RefDelta
 	23, // 25: hangar.cluster.v1.Cluster.ReplicaCatchup:input_type -> hangar.cluster.v1.CatchupCursor
 	25, // 26: hangar.cluster.v1.Cluster.GetLayout:input_type -> hangar.cluster.v1.LayoutRequest
-	1,  // 27: hangar.cluster.v1.Cluster.Handshake:output_type -> hangar.cluster.v1.HelloAck
-	2,  // 28: hangar.cluster.v1.Cluster.HeartbeatStream:output_type -> hangar.cluster.v1.Heartbeat
-	4,  // 29: hangar.cluster.v1.Cluster.HasChunk:output_type -> hangar.cluster.v1.ChunkPresence
-	5,  // 30: hangar.cluster.v1.Cluster.HasChunks:output_type -> hangar.cluster.v1.ChunkPresenceBatch
-	8,  // 31: hangar.cluster.v1.Cluster.PutChunk:output_type -> hangar.cluster.v1.PutChunkAck
-	7,  // 32: hangar.cluster.v1.Cluster.GetChunk:output_type -> hangar.cluster.v1.ChunkData
-	9,  // 33: hangar.cluster.v1.Cluster.DeleteChunkReplica:output_type -> hangar.cluster.v1.Ack
-	9,  // 34: hangar.cluster.v1.Cluster.AcquirePending:output_type -> hangar.cluster.v1.Ack
-	9,  // 35: hangar.cluster.v1.Cluster.ReleasePending:output_type -> hangar.cluster.v1.Ack
-	13, // 36: hangar.cluster.v1.Cluster.PutMetadata:output_type -> hangar.cluster.v1.MetadataAck
-	12, // 37: hangar.cluster.v1.Cluster.GetMetadata:output_type -> hangar.cluster.v1.Metadata
-	12, // 38: hangar.cluster.v1.Cluster.DeleteMetadata:output_type -> hangar.cluster.v1.Metadata
-	15, // 39: hangar.cluster.v1.Cluster.ListMetadata:output_type -> hangar.cluster.v1.MetadataEntry
-	13, // 40: hangar.cluster.v1.Cluster.PutVersion:output_type -> hangar.cluster.v1.MetadataAck
-	12, // 41: hangar.cluster.v1.Cluster.GetVersion:output_type -> hangar.cluster.v1.Metadata
-	12, // 42: hangar.cluster.v1.Cluster.DeleteVersion:output_type -> hangar.cluster.v1.Metadata
-	9,  // 43: hangar.cluster.v1.Cluster.InitiateMPU:output_type -> hangar.cluster.v1.Ack
-	9,  // 44: hangar.cluster.v1.Cluster.PutMPUPart:output_type -> hangar.cluster.v1.Ack
-	13, // 45: hangar.cluster.v1.Cluster.CompleteMPU:output_type -> hangar.cluster.v1.MetadataAck
-	9,  // 46: hangar.cluster.v1.Cluster.AbortMPU:output_type -> hangar.cluster.v1.Ack
-	20, // 47: hangar.cluster.v1.Cluster.BucketOp:output_type -> hangar.cluster.v1.BucketOpResponse
-	9,  // 48: hangar.cluster.v1.Cluster.IncRefs:output_type -> hangar.cluster.v1.Ack
-	9,  // 49: hangar.cluster.v1.Cluster.DecRefs:output_type -> hangar.cluster.v1.Ack
-	24, // 50: hangar.cluster.v1.Cluster.ReplicaCatchup:output_type -> hangar.cluster.v1.WALEntry
-	26, // 51: hangar.cluster.v1.Cluster.GetLayout:output_type -> hangar.cluster.v1.LayoutResponse
-	27, // [27:52] is the sub-list for method output_type
-	2,  // [2:27] is the sub-list for method input_type
+	27, // 27: hangar.cluster.v1.Cluster.ReplicateKV:input_type -> hangar.cluster.v1.KVOp
+	29, // 28: hangar.cluster.v1.Cluster.BulkSyncKV:input_type -> hangar.cluster.v1.KVBulkRequest
+	1,  // 29: hangar.cluster.v1.Cluster.Handshake:output_type -> hangar.cluster.v1.HelloAck
+	2,  // 30: hangar.cluster.v1.Cluster.HeartbeatStream:output_type -> hangar.cluster.v1.Heartbeat
+	4,  // 31: hangar.cluster.v1.Cluster.HasChunk:output_type -> hangar.cluster.v1.ChunkPresence
+	5,  // 32: hangar.cluster.v1.Cluster.HasChunks:output_type -> hangar.cluster.v1.ChunkPresenceBatch
+	8,  // 33: hangar.cluster.v1.Cluster.PutChunk:output_type -> hangar.cluster.v1.PutChunkAck
+	7,  // 34: hangar.cluster.v1.Cluster.GetChunk:output_type -> hangar.cluster.v1.ChunkData
+	9,  // 35: hangar.cluster.v1.Cluster.DeleteChunkReplica:output_type -> hangar.cluster.v1.Ack
+	9,  // 36: hangar.cluster.v1.Cluster.AcquirePending:output_type -> hangar.cluster.v1.Ack
+	9,  // 37: hangar.cluster.v1.Cluster.ReleasePending:output_type -> hangar.cluster.v1.Ack
+	13, // 38: hangar.cluster.v1.Cluster.PutMetadata:output_type -> hangar.cluster.v1.MetadataAck
+	12, // 39: hangar.cluster.v1.Cluster.GetMetadata:output_type -> hangar.cluster.v1.Metadata
+	12, // 40: hangar.cluster.v1.Cluster.DeleteMetadata:output_type -> hangar.cluster.v1.Metadata
+	15, // 41: hangar.cluster.v1.Cluster.ListMetadata:output_type -> hangar.cluster.v1.MetadataEntry
+	13, // 42: hangar.cluster.v1.Cluster.PutVersion:output_type -> hangar.cluster.v1.MetadataAck
+	12, // 43: hangar.cluster.v1.Cluster.GetVersion:output_type -> hangar.cluster.v1.Metadata
+	12, // 44: hangar.cluster.v1.Cluster.DeleteVersion:output_type -> hangar.cluster.v1.Metadata
+	9,  // 45: hangar.cluster.v1.Cluster.InitiateMPU:output_type -> hangar.cluster.v1.Ack
+	9,  // 46: hangar.cluster.v1.Cluster.PutMPUPart:output_type -> hangar.cluster.v1.Ack
+	13, // 47: hangar.cluster.v1.Cluster.CompleteMPU:output_type -> hangar.cluster.v1.MetadataAck
+	9,  // 48: hangar.cluster.v1.Cluster.AbortMPU:output_type -> hangar.cluster.v1.Ack
+	20, // 49: hangar.cluster.v1.Cluster.BucketOp:output_type -> hangar.cluster.v1.BucketOpResponse
+	9,  // 50: hangar.cluster.v1.Cluster.IncRefs:output_type -> hangar.cluster.v1.Ack
+	9,  // 51: hangar.cluster.v1.Cluster.DecRefs:output_type -> hangar.cluster.v1.Ack
+	24, // 52: hangar.cluster.v1.Cluster.ReplicaCatchup:output_type -> hangar.cluster.v1.WALEntry
+	26, // 53: hangar.cluster.v1.Cluster.GetLayout:output_type -> hangar.cluster.v1.LayoutResponse
+	28, // 54: hangar.cluster.v1.Cluster.ReplicateKV:output_type -> hangar.cluster.v1.KVAck
+	30, // 55: hangar.cluster.v1.Cluster.BulkSyncKV:output_type -> hangar.cluster.v1.KVEntry
+	29, // [29:56] is the sub-list for method output_type
+	2,  // [2:29] is the sub-list for method input_type
 	2,  // [2:2] is the sub-list for extension type_name
 	2,  // [2:2] is the sub-list for extension extendee
 	0,  // [0:2] is the sub-list for field type_name
@@ -1924,7 +2155,7 @@ func file_internal_api_rpc_service_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_internal_api_rpc_service_proto_rawDesc), len(file_internal_api_rpc_service_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   27,
+			NumMessages:   31,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
