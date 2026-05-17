@@ -31,7 +31,7 @@ Hangar can run as a multi-node cluster where chunks and metadata are distributed
 
 ### Membership
 
-Static peer list in each node's TOML. dRPC bidirectional heartbeat stream every `heartbeat_ms` (default 500ms). Three missed ticks (default 1.5s) flip a peer to `down`. Reconnect uses exponential backoff (1s → 30s).
+Layout-driven. Each node either bootstraps (no `seeds`) or joins via a seed. The seed accepts the join after handshake (HMAC-SHA256 with shared secret), bumps the layout version, signs it, and replication propagates it to every peer. dRPC bidirectional heartbeat stream every `heartbeat_ms` (default 500ms) between every pair of layout members. Three missed ticks (default 1.5s) flip a peer to `down`. Reconnect uses exponential backoff (1s → 30s). Peer goroutines spawn/cancel automatically when the layout changes — no restart required.
 
 | Status     | Meaning                                                                 |
 |------------|-------------------------------------------------------------------------|
@@ -96,11 +96,39 @@ Pebble-backed `pending:<hash>` keys with a 1h TTL replaced the in-memory map. Su
 
 A signed, versioned, declarative description of cluster topology. Includes node IDs, addresses, zones, capacities, tags. HMAC-SHA256 signed with the cluster shared secret. Stored at `cluster:layout:<v>` plus `cluster:layout:current` pointer in Pebble. Layout is replicated like other system state; on receive, the node hot-reloads. HRW weighting picks up `Capacity` automatically.
 
-## Setup — two-node cluster
+## Setup
+
+### First node (seed)
+
+```toml
+[cluster]
+enabled            = true
+listen             = "10.0.0.1:7000"
+shared_secret_b64  = "<base64 32 bytes>"
+# node_id defaults to hostname
+# no seeds — this node bootstraps the cluster
+```
+
+On first start, this node auto-applies layout v1 = `{self}`.
+
+### Any additional node
+
+```toml
+[cluster]
+enabled            = true
+listen             = "10.0.0.2:7000"
+shared_secret_b64  = "<base64 32 bytes>"   # same secret as first node
+seeds              = ["10.0.0.1:7000"]      # one or more reachable nodes
+```
+
+On start, dials a seed, calls `Join`, gets the current layout (which includes itself after the seed bumps the version), and starts heartbeating. Zero coordination from the operator — the binary self-registers.
+
+### Full example: bring up a fresh 3-node cluster
 
 ```bash
 SECRET=$(head -c 32 /dev/urandom | base64)
 
+# node 1 — seed
 cat > /etc/hangar/n1.toml <<EOF
 data_directory = "/var/lib/hangar/n1"
 [api]
@@ -108,57 +136,99 @@ bind_addr = ":8091"
 [s3]
 enabled = true
 bind_addr = ":9101"
-region = "us-east-1"
 [storage]
 chunk_size = 4194304
 [garbage_collection]
 interval_hours = 24
 [cluster]
 enabled = true
-node_id = "n1"
 listen = "10.0.0.1:7000"
 shared_secret_b64 = "$SECRET"
-peers = ["n2@10.0.0.2:7000"]
-heartbeat_ms = 500
 EOF
 
-# same for n2, with swapped node_id / listen / peers / ports
+# node 2 / node 3 — seeds = [n1]
+cat > /etc/hangar/n2.toml <<EOF
+data_directory = "/var/lib/hangar/n2"
+[api]
+bind_addr = ":8091"
+[s3]
+enabled = true
+bind_addr = ":9101"
+[storage]
+chunk_size = 4194304
+[garbage_collection]
+interval_hours = 24
+[cluster]
+enabled = true
+listen = "10.0.0.2:7000"
+shared_secret_b64 = "$SECRET"
+seeds = ["10.0.0.1:7000"]
+EOF
 
-hangar server --config /etc/hangar/n1.toml &
-hangar server --config /etc/hangar/n2.toml &
+# launch — order matters for node 1 only on first ever start
+ssh n1 hangar server --config /etc/hangar/n1.toml &
+ssh n2 hangar server --config /etc/hangar/n2.toml &
+ssh n3 hangar server --config /etc/hangar/n3.toml &
 
-# create state on n1; n2 picks it up
-hangar bucket create  --server http://10.0.0.1:8091 mybucket
-hangar s3keys create  --server http://10.0.0.1:8091 --perm admin
-
-# query state
+# verify on any node
 hangar cluster status --server http://10.0.0.1:8091
-hangar cluster status --server http://10.0.0.2:8091
+hangar cluster layout show --server http://10.0.0.2:8091
 ```
 
-## Configuration reference
+### Configuration reference
 
 ```toml
 [cluster]
 enabled                = false             # default off
-node_id                = "n1"              # unique, stable
+node_id                = "n1"              # optional, defaults to hostname
 listen                 = "10.0.0.1:7000"   # dRPC bind
 shared_secret_b64      = "<base64 32 bytes>"
-peers                  = ["n2@10.0.0.2:7000", "n3@10.0.0.3:7000"]
+seeds                  = ["10.0.0.1:7000"] # >= 1 reachable peer (omit on the very first node)
+zone                   = "rack-a"           # optional, advertised in layout
+capacity               = 1000               # optional weight for HRW
+tags                   = ["ssd"]            # optional metadata in layout
 heartbeat_ms           = 500
-ec_data_shards         = 4                  # reserved (not yet wired)
+ec_data_shards         = 4                  # reserved (EC not yet wired)
 ec_parity_shards       = 2                  # reserved
 meta_shards            = 256                # reserved
 metadata_sync_quorum   = false              # reserved
 ```
 
+`seeds` are dialed once at startup to bootstrap. They are just addresses (`host:port`) — no IDs needed. Multiple seeds = tries each until one accepts.
+
+## Adding and removing nodes
+
+### Add
+
+Just start the new node with `seeds = [<any-existing-addr>]`. The seed's `Join` handler bumps the layout, the new version replicates via the Pebble write hook, every node hot-reloads.
+
+### Remove
+
+```bash
+hangar cluster node remove n3 --server http://any-running-node:8091
+```
+
+Bumps the layout, drops `n3`, replicates. `n3` itself can still be running; it is no longer included in HRW placement. Stop the `n3` process when ready.
+
+### Drain (clean shutdown)
+
+```bash
+hangar cluster node drain n3 --server http://...
+```
+
+Marks `n3` as `draining` in the layout. HRW skips draining nodes for new writes. In-flight reads continue. After traffic settles, run `remove`, then stop the process.
+
 ## CLI
 
 ```bash
-hangar cluster status                        # JSON view: self, view_version, layout_version, nodes
-hangar cluster layout show                   # current applied layout
-hangar cluster layout apply <path.json>      # bump layout version
+hangar cluster status                          # cluster view: self, view_version, layout_version, nodes
+hangar cluster layout show                     # current applied layout (signed)
+hangar cluster layout apply <path.json>        # bump layout version (low-level)
+hangar cluster node remove <id>                # drop node from layout
+hangar cluster node drain <id>                 # mark node draining (HRW skip writes)
 ```
+
+All commands accept `--server <admin-url>` (default `http://localhost:8080`).
 
 Layout JSON:
 
@@ -178,9 +248,11 @@ Layout JSON:
 ## Admin HTTP API
 
 ```
-GET  /admin/cluster/status     → cluster view + layout version
-GET  /admin/cluster/layout     → current signed layout
-PUT  /admin/cluster/layout     → apply a new layout (version must increase)
+GET     /admin/cluster/status              → cluster view + layout version
+GET     /admin/cluster/layout              → current signed layout
+PUT     /admin/cluster/layout              → apply a new layout (version must increase)
+DELETE  /admin/cluster/node/:id            → remove node from layout
+POST    /admin/cluster/node/:id/drain      → mark node draining
 ```
 
 ## Observability
@@ -237,7 +309,7 @@ Scenarios covered: PUT-A→GET-B small, PUT-B→GET-A medium, cross-node LIST, d
 - **No multi-DC** awareness. Single-zone cluster only. Latency-sensitive WAN deployment is explicitly out of scope.
 - **No TLS** on the dRPC layer — assume VPN/WireGuard/VPC.
 - **Same version everywhere** — rolling upgrades not supported. Stop, upgrade, restart.
-- **Static topology** — adding/removing a node requires editing the peers list on every node and restarting. The layout CLI changes weighting and zone metadata but not membership.
+- **Mixed versions** — all cluster nodes must run the same Hangar binary version. Stop, upgrade everywhere, restart.
 - **No cross-bucket transactions** — same as AWS S3.
 - **List ops are eventually consistent across nodes** when secondaries are catching up.
 - **No EC-aware repair** yet — anti-entropy currently expects whole chunks, not parity shards.
