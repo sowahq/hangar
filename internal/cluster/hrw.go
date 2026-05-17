@@ -9,6 +9,7 @@ import (
 
 type Node struct {
 	ID     string
+	Zone   string
 	Weight float64
 }
 
@@ -47,6 +48,43 @@ func TopN(key string, nodes []Node, n int) []Node {
 		n = len(ranked)
 	}
 	return ranked[:n]
+}
+
+func TopNZoneAware(key string, nodes []Node, count int) []Node {
+	if count <= 0 || len(nodes) == 0 {
+		return nil
+	}
+	ranked := RankNodes(key, nodes)
+	if count > len(ranked) {
+		count = len(ranked)
+	}
+
+	out := make([]Node, 0, count)
+	used := make([]bool, len(ranked))
+	seenZones := make(map[string]struct{}, count)
+
+	for i, n := range ranked {
+		if len(out) >= count {
+			break
+		}
+		if _, dup := seenZones[n.Zone]; dup {
+			continue
+		}
+		seenZones[n.Zone] = struct{}{}
+		used[i] = true
+		out = append(out, n)
+	}
+
+	for i, n := range ranked {
+		if len(out) >= count {
+			break
+		}
+		if used[i] {
+			continue
+		}
+		out = append(out, n)
+	}
+	return out
 }
 
 func hrwScore(key string, n Node) float64 {
