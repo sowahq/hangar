@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/base64"
+	"fmt"
 	"log"
 	"os"
 	"sync"
@@ -75,9 +76,24 @@ type serverConfig struct {
 		Enabled       bool `toml:"enabled"`
 		IntervalHours int  `toml:"interval_hours" validate:"min=0"`
 	} `toml:"lifecycle"`
+
+	Cluster struct {
+		Enabled            bool     `toml:"enabled"`
+		NodeID             string   `toml:"node_id"`
+		Listen             string   `toml:"listen"`
+		SharedSecretB64    string   `toml:"shared_secret_b64"`
+		Peers              []string `toml:"peers"`
+		ECDataShards       int      `toml:"ec_data_shards" validate:"min=0"`
+		ECParityShards     int      `toml:"ec_parity_shards" validate:"min=0"`
+		MetaShards         int      `toml:"meta_shards" validate:"min=0"`
+		HeartbeatMS        int      `toml:"heartbeat_ms" validate:"min=0"`
+		MetadataSyncQuorum bool     `toml:"metadata_sync_quorum"`
+	} `toml:"cluster"`
 }
 
 var masterKey []byte
+
+var clusterSharedSecret []byte
 
 var (
 	c  *serverConfig
@@ -118,6 +134,12 @@ func DefaultServerConfig() *serverConfig {
 
 	config.Lifecycle.Enabled = false
 	config.Lifecycle.IntervalHours = 24
+
+	config.Cluster.Enabled = false
+	config.Cluster.ECDataShards = 4
+	config.Cluster.ECParityShards = 2
+	config.Cluster.MetaShards = 256
+	config.Cluster.HeartbeatMS = 500
 
 	return config
 }
@@ -349,6 +371,40 @@ func LoadServerConfig(path string) error {
 		return err
 	}
 
+	if c.Cluster.ECDataShards == 0 {
+		c.Cluster.ECDataShards = 4
+	}
+	if c.Cluster.ECParityShards == 0 {
+		c.Cluster.ECParityShards = 2
+	}
+	if c.Cluster.MetaShards == 0 {
+		c.Cluster.MetaShards = 256
+	}
+	if c.Cluster.HeartbeatMS == 0 {
+		c.Cluster.HeartbeatMS = 500
+	}
+
+	clusterSharedSecret = nil
+	if c.Cluster.Enabled {
+		if c.Cluster.NodeID == "" {
+			return fmt.Errorf("cluster: node_id required when cluster.enabled=true")
+		}
+		if c.Cluster.Listen == "" {
+			return fmt.Errorf("cluster: listen required when cluster.enabled=true")
+		}
+		if c.Cluster.SharedSecretB64 == "" {
+			return fmt.Errorf("cluster: shared_secret_b64 required when cluster.enabled=true")
+		}
+		decoded, err := base64.StdEncoding.DecodeString(c.Cluster.SharedSecretB64)
+		if err != nil {
+			return fmt.Errorf("cluster: shared_secret_b64 not valid base64: %w", err)
+		}
+		if len(decoded) != 32 {
+			return fmt.Errorf("cluster: shared_secret_b64 must decode to 32 bytes (got %d)", len(decoded))
+		}
+		clusterSharedSecret = decoded
+	}
+
 	syncWrites := true
 	if c.Storage.SyncWrites != nil {
 		syncWrites = *c.Storage.SyncWrites
@@ -559,4 +615,91 @@ func DataPath() string {
 	}
 
 	return c.DataDirectory
+}
+
+func ClusterEnabled() bool {
+	mu.RLock()
+	defer mu.RUnlock()
+	if c == nil {
+		c = DefaultServerConfig()
+	}
+	return c.Cluster.Enabled
+}
+
+func ClusterNodeID() string {
+	mu.RLock()
+	defer mu.RUnlock()
+	if c == nil {
+		c = DefaultServerConfig()
+	}
+	return c.Cluster.NodeID
+}
+
+func ClusterListen() string {
+	mu.RLock()
+	defer mu.RUnlock()
+	if c == nil {
+		c = DefaultServerConfig()
+	}
+	return c.Cluster.Listen
+}
+
+func ClusterPeers() []string {
+	mu.RLock()
+	defer mu.RUnlock()
+	if c == nil {
+		c = DefaultServerConfig()
+	}
+	return c.Cluster.Peers
+}
+
+func ClusterSharedSecret() []byte {
+	mu.RLock()
+	defer mu.RUnlock()
+	return clusterSharedSecret
+}
+
+func ECDataShards() int {
+	mu.RLock()
+	defer mu.RUnlock()
+	if c == nil {
+		c = DefaultServerConfig()
+	}
+	return c.Cluster.ECDataShards
+}
+
+func ECParityShards() int {
+	mu.RLock()
+	defer mu.RUnlock()
+	if c == nil {
+		c = DefaultServerConfig()
+	}
+	return c.Cluster.ECParityShards
+}
+
+func MetaShards() int {
+	mu.RLock()
+	defer mu.RUnlock()
+	if c == nil {
+		c = DefaultServerConfig()
+	}
+	return c.Cluster.MetaShards
+}
+
+func HeartbeatMS() int {
+	mu.RLock()
+	defer mu.RUnlock()
+	if c == nil {
+		c = DefaultServerConfig()
+	}
+	return c.Cluster.HeartbeatMS
+}
+
+func MetadataSyncQuorum() bool {
+	mu.RLock()
+	defer mu.RUnlock()
+	if c == nil {
+		c = DefaultServerConfig()
+	}
+	return c.Cluster.MetadataSyncQuorum
 }
