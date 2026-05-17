@@ -1,0 +1,206 @@
+syntax = "proto3";
+
+package hangar.cluster.v1;
+
+option go_package = "github.com/anhostfr/hangar/internal/api/rpc;rpc";
+
+message Hello {
+  string node_id = 1;
+  bytes  nonce   = 2;
+  int64  ts      = 3;
+  bytes  hmac    = 4;
+}
+
+message HelloAck {
+  bool   accepted       = 1;
+  string reason         = 2;
+  uint64 view_version   = 3;
+  uint64 layout_version = 4;
+}
+
+message Heartbeat {
+  string node_id        = 1;
+  uint64 generation     = 2;
+  uint64 view_version   = 3;
+  uint64 layout_version = 4;
+  string gc_leader_hint = 5;
+  int64  ts             = 6;
+  uint64 load_score     = 7;
+}
+
+message ChunkRef {
+  string hash      = 1;
+  int32  shard_idx = 2;
+}
+
+message ChunkPresence {
+  string hash      = 1;
+  int32  shard_idx = 2;
+  bool   present   = 3;
+}
+
+message ChunkPresenceBatch {
+  repeated ChunkPresence entries = 1;
+}
+
+message ChunkRefBatch {
+  repeated ChunkRef refs = 1;
+}
+
+message ChunkData {
+  string hash      = 1;
+  int32  shard_idx = 2;
+  bytes  payload   = 3;
+  bool   last      = 4;
+  int64  size      = 5;
+}
+
+message PutChunkAck {
+  bool   stored = 1;
+  string error  = 2;
+}
+
+message Ack {
+  bool   ok    = 1;
+  string error = 2;
+}
+
+message MetadataKey {
+  string bucket     = 1;
+  string key        = 2;
+  string version_id = 3;
+}
+
+message MetadataOp {
+  string bucket   = 1;
+  bytes  metadata = 2;
+  string op_id    = 3;
+}
+
+message Metadata {
+  bool  found    = 1;
+  bytes metadata = 2;
+}
+
+message MetadataAck {
+  bool   ok      = 1;
+  string error   = 2;
+  uint64 wal_seq = 3;
+}
+
+message ListRequest {
+  string bucket             = 1;
+  string prefix             = 2;
+  string start_after        = 3;
+  string continuation_token = 4;
+  int32  max_keys           = 5;
+  string delimiter          = 6;
+}
+
+message MetadataEntry {
+  string bucket   = 1;
+  string key      = 2;
+  bytes  metadata = 3;
+}
+
+message MPUPart {
+  string bucket      = 1;
+  string key         = 2;
+  string upload_id   = 3;
+  int32  part_number = 4;
+  bytes  part_data   = 5;
+}
+
+message MPUComplete {
+  string bucket               = 1;
+  string key                  = 2;
+  string upload_id            = 3;
+  repeated int32  part_numbers = 4;
+  repeated string part_etags   = 5;
+}
+
+message MPUAbort {
+  string bucket    = 1;
+  string key       = 2;
+  string upload_id = 3;
+}
+
+message BucketOpRequest {
+  string op      = 1;
+  string bucket  = 2;
+  bytes  payload = 3;
+}
+
+message BucketOpResponse {
+  bytes  result = 1;
+  string error  = 2;
+}
+
+message RefDelta {
+  repeated string hashes = 1;
+  string op_id           = 2;
+}
+
+message LeaseRequest {
+  string hash       = 1;
+  string lease_id   = 2;
+  int64  expires_at = 3;
+}
+
+message CatchupCursor {
+  string shard_id = 1;
+  uint64 last_seq = 2;
+}
+
+message WALEntry {
+  uint64 seq     = 1;
+  int64  ts      = 2;
+  string op_type = 3;
+  bytes  payload = 4;
+}
+
+message LayoutRequest {
+  uint64 version = 1;
+}
+
+message LayoutResponse {
+  bytes signed_layout = 1;
+}
+
+service Cluster {
+  rpc Handshake(Hello) returns (HelloAck);
+
+  rpc HeartbeatStream(stream Heartbeat) returns (stream Heartbeat);
+
+  rpc HasChunk(ChunkRef) returns (ChunkPresence);
+  rpc HasChunks(ChunkRefBatch) returns (ChunkPresenceBatch);
+  rpc PutChunk(stream ChunkData) returns (PutChunkAck);
+  rpc GetChunk(ChunkRef) returns (stream ChunkData);
+  rpc DeleteChunkReplica(ChunkRef) returns (Ack);
+
+  rpc AcquirePending(LeaseRequest) returns (Ack);
+  rpc ReleasePending(LeaseRequest) returns (Ack);
+
+  rpc PutMetadata(MetadataOp) returns (MetadataAck);
+  rpc GetMetadata(MetadataKey) returns (Metadata);
+  rpc DeleteMetadata(MetadataKey) returns (Metadata);
+  rpc ListMetadata(ListRequest) returns (stream MetadataEntry);
+
+  rpc PutVersion(MetadataOp) returns (MetadataAck);
+  rpc GetVersion(MetadataKey) returns (Metadata);
+  rpc DeleteVersion(MetadataKey) returns (Metadata);
+
+  rpc InitiateMPU(MPUPart) returns (Ack);
+  rpc PutMPUPart(MPUPart) returns (Ack);
+  rpc CompleteMPU(MPUComplete) returns (MetadataAck);
+  rpc AbortMPU(MPUAbort) returns (Ack);
+
+  rpc BucketOp(BucketOpRequest) returns (BucketOpResponse);
+
+  rpc IncRefs(RefDelta) returns (Ack);
+  rpc DecRefs(RefDelta) returns (Ack);
+
+  rpc ReplicaCatchup(CatchupCursor) returns (stream WALEntry);
+
+  rpc GetLayout(LayoutRequest) returns (LayoutResponse);
+}
