@@ -2,7 +2,10 @@ package cluster
 
 import (
 	"sort"
+	"sync"
 	"time"
+
+	"github.com/anhostfr/hangar/internal/api/rpc"
 )
 
 type NodeID string
@@ -170,4 +173,155 @@ func (v *View) Remove(id NodeID) bool {
 	delete(v.Nodes, id)
 	v.Version++
 	return true
+}
+
+type Config struct {
+	NodeID      NodeID
+	Listen      string
+	Peers       map[NodeID]string
+	Secret      []byte
+	HeartbeatMS int
+	Generation  uint64
+
+	NowFn func() time.Time
+}
+
+type Cluster struct {
+	cfg Config
+
+	knownPeers map[string]struct{}
+
+	mu      sync.RWMutex
+	view    View
+	layoutV uint64
+}
+
+func New(cfg Config) *Cluster {
+	if cfg.HeartbeatMS <= 0 {
+		cfg.HeartbeatMS = 500
+	}
+	if cfg.NowFn == nil {
+		cfg.NowFn = time.Now
+	}
+
+	known := map[string]struct{}{string(cfg.NodeID): {}}
+	for id := range cfg.Peers {
+		known[string(id)] = struct{}{}
+	}
+
+	c := &Cluster{
+		cfg:        cfg,
+		knownPeers: known,
+		view:       NewView(),
+	}
+
+	now := cfg.NowFn()
+	c.view.Upsert(NodeState{
+		ID:         cfg.NodeID,
+		Addr:       cfg.Listen,
+		Generation: cfg.Generation,
+		Status:     StatusActive,
+		LastSeen:   now,
+	})
+	for id, addr := range cfg.Peers {
+		c.view.Upsert(NodeState{ID: id, Addr: addr, Status: StatusUnknown})
+	}
+
+	return c
+}
+
+func (c *Cluster) Self() NodeID { return c.cfg.NodeID }
+
+func (c *Cluster) Secret() []byte { return c.cfg.Secret }
+
+func (c *Cluster) HeartbeatInterval() time.Duration {
+	return time.Duration(c.cfg.HeartbeatMS) * time.Millisecond
+}
+
+func (c *Cluster) View() View {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.view.Clone()
+}
+
+func (c *Cluster) ViewVersion() uint64 {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.view.Version
+}
+
+func (c *Cluster) LayoutVersion() uint64 {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.layoutV
+}
+
+func (c *Cluster) NodeStatus(id NodeID) Status {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if ns, ok := c.view.Nodes[id]; ok {
+		return ns.Status
+	}
+	return StatusUnknown
+}
+
+func (c *Cluster) VerifyHello(h *rpc.Hello, now time.Time) error {
+	return VerifyHello(h, c.cfg.Secret, c.knownPeers, now)
+}
+
+func (c *Cluster) BuildHeartbeat() *rpc.Heartbeat {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return &rpc.Heartbeat{
+		NodeId:        string(c.cfg.NodeID),
+		Generation:    c.cfg.Generation,
+		ViewVersion:   c.view.Version,
+		LayoutVersion: c.layoutV,
+		Ts:            c.cfg.NowFn().UnixMilli(),
+	}
+}
+
+func (c *Cluster) OnHeartbeat(h *rpc.Heartbeat) {
+	if h == nil || h.NodeId == "" {
+		return
+	}
+
+	id := NodeID(h.NodeId)
+	if _, known := c.knownPeers[h.NodeId]; !known {
+		return
+	}
+	if id == c.cfg.NodeID {
+		return
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	state, ok := c.view.Nodes[id]
+	if !ok {
+		state = NodeState{ID: id}
+	}
+	state.LastSeen = c.cfg.NowFn()
+	state.Status = StatusActive
+	if h.Generation > state.Generation {
+		state.Generation = h.Generation
+	}
+	c.view.Upsert(state)
+}
+
+func (c *Cluster) markStale(now time.Time) {
+	deadline := now.Add(-3 * c.HeartbeatInterval())
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	for id, ns := range c.view.Nodes {
+		if id == c.cfg.NodeID {
+			continue
+		}
+		if ns.Status == StatusActive && ns.LastSeen.Before(deadline) {
+			ns.Status = StatusDown
+			c.view.Upsert(ns)
+		}
+	}
 }
