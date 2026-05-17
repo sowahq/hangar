@@ -193,6 +193,8 @@ func Execute() {
 							})
 						}
 
+						go clusterRuntime.StartAntiEntropy(ctx, time.Hour)
+
 						go func() {
 							syncCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 							defer cancel()
