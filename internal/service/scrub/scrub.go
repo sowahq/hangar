@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"encoding/hex"
 	"github.com/anhostfr/hangar/internal/config"
 	"github.com/anhostfr/hangar/internal/database"
 	"github.com/anhostfr/hangar/internal/service/metrics"
@@ -18,7 +19,6 @@ import (
 	dbutils "github.com/anhostfr/hangar/pkg/database"
 	"github.com/phuslu/log"
 	"github.com/zeebo/blake3"
-	"encoding/hex"
 )
 
 const (
@@ -33,6 +33,7 @@ type Stats struct {
 	Quarantined   int
 	MissingFiles  int
 	DanglingRefs  int
+	ShardsSkipped int
 	StartedAt     time.Time
 	Duration      time.Duration
 }
@@ -102,6 +103,7 @@ func Run(opts Opts) (*Stats, error) {
 		}
 
 		if isShardFile(name) {
+			stats.ShardsSkipped++
 			return nil
 		}
 
@@ -171,6 +173,7 @@ func Run(opts Opts) (*Stats, error) {
 		Int("quarantined", stats.Quarantined).
 		Int("missing_files", stats.MissingFiles).
 		Int("dangling_refs", stats.DanglingRefs).
+		Int("shards_skipped", stats.ShardsSkipped).
 		Dur("duration", stats.Duration).
 		Msg("Integrity scrub completed")
 

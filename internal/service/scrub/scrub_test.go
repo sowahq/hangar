@@ -52,6 +52,36 @@ func TestRunVerifiesCleanChunks(t *testing.T) {
 	}
 }
 
+func TestRunCountsAndSkipsShardFiles(t *testing.T) {
+	testutil.SetupServer(t)
+
+	payload := []byte("base chunk payload")
+	hash := hashOf(payload)
+	basePath := writeChunk(t, hash, payload)
+
+	shardDir := filepath.Dir(basePath)
+	for i := 0; i < 3; i++ {
+		shardPath := filepath.Join(shardDir, fmt.Sprintf("%s_s%d", hash, i))
+		if err := os.WriteFile(shardPath, []byte("ec-shard-bytes"), 0644); err != nil {
+			t.Fatalf("write shard %d: %v", i, err)
+		}
+	}
+
+	stats, err := Run(Opts{})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if stats.TotalChunks != 1 {
+		t.Errorf("TotalChunks=%d want=1 (shards must not count)", stats.TotalChunks)
+	}
+	if stats.ShardsSkipped != 3 {
+		t.Errorf("ShardsSkipped=%d want=3", stats.ShardsSkipped)
+	}
+	if stats.Corrupted != 0 {
+		t.Errorf("Corrupted=%d want=0 (shards should not be content-verified)", stats.Corrupted)
+	}
+}
+
 func TestRunDetectsAndQuarantinesCorruption(t *testing.T) {
 	testutil.SetupServer(t)
 
