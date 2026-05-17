@@ -183,6 +183,24 @@ func (r *Runtime) antiEntropyECChunk(ctx context.Context, hash string, enc *ECEn
 		if r.verifyChunkOnOwners(ctx, key, []NodeID{owner}) {
 			_ = local.Delete(key)
 			stats.Deleted++
+			continue
+		}
+		rc, err := local.OpenRaw(key)
+		if err != nil {
+			stats.Errors++
+			continue
+		}
+		data, rerr := io.ReadAll(rc)
+		_ = rc.Close()
+		if rerr != nil {
+			stats.Errors++
+			continue
+		}
+		if r.pushShardTo(ctx, owner, key, data) {
+			_ = local.Delete(key)
+			stats.Deleted++
+		} else {
+			stats.Errors++
 		}
 	}
 
@@ -314,6 +332,43 @@ func (r *Runtime) pullShardBytes(ctx context.Context, owner NodeID, key string) 
 		return nil, false
 	}
 	return buf.Bytes(), true
+}
+
+func (r *Runtime) pushShardTo(ctx context.Context, owner NodeID, key string, payload []byte) bool {
+	if owner == r.Cluster.Self() {
+		return false
+	}
+	cctx, cancel := context.WithTimeout(ctx, chunkRPCTimeout)
+	defer cancel()
+	cli, err := r.Pool.Client(cctx, owner)
+	if err != nil {
+		return false
+	}
+	stream, err := cli.PutChunk(cctx)
+	if err != nil {
+		return false
+	}
+	const frame = 256 * 1024
+	for off := 0; off < len(payload); off += frame {
+		end := off + frame
+		if end > len(payload) {
+			end = len(payload)
+		}
+		last := end == len(payload)
+		if err := stream.Send(&rpc.ChunkData{Hash: key, Payload: payload[off:end], Last: last}); err != nil {
+			return false
+		}
+	}
+	if len(payload) == 0 {
+		if err := stream.Send(&rpc.ChunkData{Hash: key, Last: true}); err != nil {
+			return false
+		}
+	}
+	ack, err := stream.CloseAndRecv()
+	if err != nil {
+		return false
+	}
+	return ack.Stored
 }
 
 func (r *Runtime) pullChunkFromOwners(ctx context.Context, hash string, owners []NodeID) bool {

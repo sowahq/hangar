@@ -94,6 +94,20 @@ func TestRunAntiEntropyECModeSelectsShardKeys(t *testing.T) {
 	if stats.Scanned != 1 {
 		t.Fatalf("scanned=%d want 1", stats.Scanned)
 	}
+
+	kept := 0
+	for i, o := range owners {
+		if o == rt.Cluster.Self() {
+			continue
+		}
+		ex, _ := local.Exists(shardKey(hash, i))
+		if ex {
+			kept++
+		}
+	}
+	if kept == 0 {
+		t.Fatalf("expected orphan shards to remain when push fails (no live peers)")
+	}
 }
 
 func TestRunAntiEntropyECModeReconstructsLocalShard(t *testing.T) {

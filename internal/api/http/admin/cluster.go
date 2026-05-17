@@ -103,11 +103,12 @@ func ClusterAntiEntropyRun(c *fiber.Ctx) error {
 		return response.Error(c, fiber.StatusInternalServerError, err.Error())
 	}
 	return response.JSON(c, fiber.Map{
-		"scanned":  stats.Scanned,
-		"pulled":   stats.Pulled,
-		"deleted":  stats.Deleted,
-		"errors":   stats.Errors,
-		"duration_ms": stats.EndedAt.Sub(stats.StartedAt).Milliseconds(),
+		"scanned":       stats.Scanned,
+		"pulled":        stats.Pulled,
+		"reconstructed": stats.Reconstructed,
+		"deleted":       stats.Deleted,
+		"errors":        stats.Errors,
+		"duration_ms":   stats.EndedAt.Sub(stats.StartedAt).Milliseconds(),
 	})
 }
 
