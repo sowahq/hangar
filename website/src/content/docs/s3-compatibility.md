@@ -33,18 +33,18 @@ Configure SDKs with `UsePathStyle: true` (Go SDK v2), `s3={"addressing_style":"p
 | `DeleteBucket`                               | ✅     | Must be empty                                        |
 | `HeadBucket`                                 | ✅     |                                                      |
 | `GetBucketLocation`                          | ✅     | Returns the server's configured `region` (empty for `us-east-1` per S3 spec) |
-| `GetBucketAcl` / `PutBucketAcl`              | ❌     |                                                      |
-| `GetBucketPolicy` / `PutBucketPolicy`        | ❌     |                                                      |
+| `GetBucketAcl` / `PutBucketAcl`              | ⚠️ stub  | Always returns owner-FULL_CONTROL ACL. PUT is a no-op (Hangar uses S3-key permissions) |
+| `GetBucketPolicy` / `PutBucketPolicy` / `DeleteBucketPolicy` | ⚠️ stub | GET → 404 NoSuchBucketPolicy. PUT/DELETE no-op. Bucket policy not enforced |
 | `GetBucketVersioning` / `PutBucketVersioning`| ✅     | `VersioningConfiguration` XML with `Status: Enabled` / `Suspended`     |
 | `GetBucketTagging` / `PutBucketTagging` / `DeleteBucketTagging` | ✅ | Max 10 tags. Key ≤ 128, Value ≤ 256                                                  |
-| `GetBucketLogging` / `PutBucketLogging`      | ❌     |                                                      |
+| `GetBucketLogging` / `PutBucketLogging`      | ⚠️ stub | GET → empty `BucketLoggingStatus`. PUT no-op. Server logs unrelated to bucket logging                                  |
 | `GetBucketCors` / `PutBucketCors` / `DeleteBucketCors` | ✅ | See [CORS](/operations/cors/)                  |
 | `GetBucketLifecycleConfiguration` / `PutBucketLifecycleConfiguration` / `DeleteBucketLifecycle` | ✅ | Expiration + AbortIncompleteMultipartUpload. See [Lifecycle](/operations/lifecycle/) |
 | `GetBucketEncryption` / `PutBucketEncryption` / `DeleteBucketEncryption` | ✅ | AES256 (SSE-S3) only. See [Bucket default encryption](/operations/bucket-encryption/) |
-| `GetBucketNotificationConfiguration` / `Put…`| ❌     | No event hooks                                       |
+| `GetBucketNotificationConfiguration` / `Put…`| ⚠️ stub | GET → empty config. PUT no-op. No event hooks fire                                         |
 | `PutBucketReplication` / `Get…` / `Delete…`  | ❌     | Planned with the upcoming distribution work          |
-| `GetBucketWebsite` / `PutBucketWebsite`      | ❌     |                                                      |
-| `GetBucketRequestPayment` / `PutBucketRequestPayment` | ❌ |                                              |
+| `GetBucketWebsite` / `PutBucketWebsite` / `DeleteBucketWebsite` | ⚠️ stub | GET → 404 NoSuchWebsiteConfiguration. PUT/DELETE no-op                                  |
+| `GetBucketRequestPayment` / `PutBucketRequestPayment` | ⚠️ stub | GET → `BucketOwner` payer. PUT no-op                               |
 | `GetObjectLockConfiguration` / `PutObjectLockConfiguration` | ✅ | Requires versioning. GOVERNANCE / COMPLIANCE modes. See [Object Lock](/operations/object-lock/) |
 
 ## Object operations
@@ -60,7 +60,7 @@ Configure SDKs with `UsePathStyle: true` (Go SDK v2), `s3={"addressing_style":"p
 | `ListObjectsV2`                          | ✅     | `prefix`, `delimiter`, `start-after`, `continuation-token`, `max-keys` |
 | `ListObjects` (v1)                       | ✅     | `marker`, `max-keys`, `prefix`, `delimiter`. `NextMarker` returned when truncated |
 | `ListObjectVersions`                     | ✅     | `GET /:bucket?versions` with `prefix`, `delimiter`, `key-marker`, `version-id-marker`, `max-keys` |
-| `GetObjectAcl` / `PutObjectAcl`          | ❌     |                                                             |
+| `GetObjectAcl` / `PutObjectAcl`          | ⚠️ stub | GET → owner-FULL_CONTROL. PUT no-op                                                 |
 | `GetObjectTagging` / `PutObjectTagging` / `DeleteObjectTagging` | ✅ | Versioned objects tagged per-version via `versionId`. Same limits as bucket tagging                                     |
 | `GetObjectAttributes`                    | ✅     | `x-amz-object-attributes` filters: `ETag`, `Checksum`, `ObjectParts`, `StorageClass`, `ObjectSize` |
 | `RestoreObject`                          | ❌     | No tiers                                                    |

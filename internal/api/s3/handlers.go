@@ -118,6 +118,24 @@ func handleCreateBucket(c *fiber.Ctx) error {
 	if c.Request().URI().QueryArgs().Has("tagging") {
 		return handlePutBucketTagging(c)
 	}
+	if c.Request().URI().QueryArgs().Has("acl") {
+		return handlePutBucketACL(c)
+	}
+	if c.Request().URI().QueryArgs().Has("policy") {
+		return handlePutBucketPolicy(c)
+	}
+	if c.Request().URI().QueryArgs().Has("logging") {
+		return handlePutBucketLogging(c)
+	}
+	if c.Request().URI().QueryArgs().Has("website") {
+		return handlePutBucketWebsite(c)
+	}
+	if c.Request().URI().QueryArgs().Has("notification") {
+		return handlePutBucketNotification(c)
+	}
+	if c.Request().URI().QueryArgs().Has("requestPayment") {
+		return handlePutBucketRequestPayment(c)
+	}
 
 	name := c.Params("bucket")
 
@@ -149,6 +167,12 @@ func handleDeleteBucket(c *fiber.Ctx) error {
 	}
 	if c.Request().URI().QueryArgs().Has("tagging") {
 		return handleDeleteBucketTagging(c)
+	}
+	if c.Request().URI().QueryArgs().Has("policy") {
+		return handleDeleteBucketPolicy(c)
+	}
+	if c.Request().URI().QueryArgs().Has("website") {
+		return handleDeleteBucketWebsite(c)
 	}
 
 	name := c.Params("bucket")
@@ -189,6 +213,9 @@ func handleObjectGet(c *fiber.Ctx) error {
 	if c.Request().URI().QueryArgs().Has("tagging") {
 		return handleGetObjectTagging(c)
 	}
+	if c.Request().URI().QueryArgs().Has("acl") {
+		return handleGetObjectACL(c)
+	}
 	return handleGetObject(c)
 }
 
@@ -204,6 +231,9 @@ func handleObjectPut(c *fiber.Ctx) error {
 	}
 	if c.Request().URI().QueryArgs().Has("tagging") {
 		return handlePutObjectTagging(c)
+	}
+	if c.Request().URI().QueryArgs().Has("acl") {
+		return handlePutObjectACL(c)
 	}
 	return handlePutObject(c)
 }
@@ -604,6 +634,24 @@ func handleListObjectsV2(c *fiber.Ctx) error {
 	}
 	if c.Request().URI().QueryArgs().Has("location") {
 		return handleGetBucketLocation(c)
+	}
+	if c.Request().URI().QueryArgs().Has("acl") {
+		return handleGetBucketACL(c)
+	}
+	if c.Request().URI().QueryArgs().Has("policy") {
+		return handleGetBucketPolicy(c)
+	}
+	if c.Request().URI().QueryArgs().Has("logging") {
+		return handleGetBucketLogging(c)
+	}
+	if c.Request().URI().QueryArgs().Has("website") {
+		return handleGetBucketWebsite(c)
+	}
+	if c.Request().URI().QueryArgs().Has("notification") {
+		return handleGetBucketNotification(c)
+	}
+	if c.Request().URI().QueryArgs().Has("requestPayment") {
+		return handleGetBucketRequestPayment(c)
 	}
 
 	name := c.Params("bucket")

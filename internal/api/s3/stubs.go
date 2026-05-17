@@ -1,0 +1,207 @@
+package s3
+
+import (
+	"encoding/xml"
+
+	"github.com/anhostfr/hangar/internal/service/auth"
+	"github.com/anhostfr/hangar/internal/service/bucket"
+	"github.com/gofiber/fiber/v2"
+)
+
+type GranteeXML struct {
+	XMLName     xml.Name `xml:"Grantee"`
+	XmlnsXSI    string   `xml:"xmlns:xsi,attr,omitempty"`
+	Type        string   `xml:"xsi:type,attr"`
+	ID          string   `xml:"ID,omitempty"`
+	DisplayName string   `xml:"DisplayName,omitempty"`
+}
+
+type GrantXML struct {
+	Grantee    GranteeXML `xml:"Grantee"`
+	Permission string     `xml:"Permission"`
+}
+
+type AccessControlPolicyXML struct {
+	XMLName           xml.Name   `xml:"AccessControlPolicy"`
+	Xmlns             string     `xml:"xmlns,attr,omitempty"`
+	Owner             Owner      `xml:"Owner"`
+	AccessControlList []GrantXML `xml:"AccessControlList>Grant"`
+}
+
+type BucketLoggingStatusXML struct {
+	XMLName xml.Name `xml:"BucketLoggingStatus"`
+	Xmlns   string   `xml:"xmlns,attr,omitempty"`
+}
+
+type NotificationConfigurationXML struct {
+	XMLName xml.Name `xml:"NotificationConfiguration"`
+	Xmlns   string   `xml:"xmlns,attr,omitempty"`
+}
+
+type RequestPaymentConfigurationXML struct {
+	XMLName xml.Name `xml:"RequestPaymentConfiguration"`
+	Xmlns   string   `xml:"xmlns,attr,omitempty"`
+	Payer   string   `xml:"Payer"`
+}
+
+func defaultACL(c *fiber.Ctx) AccessControlPolicyXML {
+	owner := Owner{ID: currentKey(c), DisplayName: currentKey(c)}
+	return AccessControlPolicyXML{
+		Xmlns: xmlNamespace,
+		Owner: owner,
+		AccessControlList: []GrantXML{{
+			Grantee: GranteeXML{
+				XmlnsXSI:    "http://www.w3.org/2001/XMLSchema-instance",
+				Type:        "CanonicalUser",
+				ID:          owner.ID,
+				DisplayName: owner.DisplayName,
+			},
+			Permission: "FULL_CONTROL",
+		}},
+	}
+}
+
+func handleGetBucketACL(c *fiber.Ctx) error {
+	name := c.Params("bucket")
+	if !hasPerm(c, auth.PermRead) || !keyAllowsBucket(c, name) {
+		return writeError(c, fiber.StatusForbidden, "AccessDenied", "Access denied", "/"+name)
+	}
+	if _, err := bucket.GetBucket(name); err != nil {
+		return writeError(c, fiber.StatusNotFound, "NoSuchBucket", err.Error(), "/"+name)
+	}
+	return writeXML(c, fiber.StatusOK, defaultACL(c))
+}
+
+func handlePutBucketACL(c *fiber.Ctx) error {
+	name := c.Params("bucket")
+	if !hasPerm(c, auth.PermWrite) || !keyAllowsBucket(c, name) {
+		return writeError(c, fiber.StatusForbidden, "AccessDenied", "Access denied", "/"+name)
+	}
+	if _, err := bucket.GetBucket(name); err != nil {
+		return writeError(c, fiber.StatusNotFound, "NoSuchBucket", err.Error(), "/"+name)
+	}
+	return c.SendStatus(fiber.StatusOK)
+}
+
+func handleGetObjectACL(c *fiber.Ctx) error {
+	name := c.Params("bucket")
+	key := c.Params("*")
+	if !hasPerm(c, auth.PermRead) || !keyAllowsBucket(c, name) {
+		return writeError(c, fiber.StatusForbidden, "AccessDenied", "Access denied", "/"+name+"/"+key)
+	}
+	if _, err := bucket.GetBucket(name); err != nil {
+		return writeError(c, fiber.StatusNotFound, "NoSuchBucket", err.Error(), "/"+name)
+	}
+	return writeXML(c, fiber.StatusOK, defaultACL(c))
+}
+
+func handlePutObjectACL(c *fiber.Ctx) error {
+	name := c.Params("bucket")
+	key := c.Params("*")
+	if !hasPerm(c, auth.PermWrite) || !keyAllowsBucket(c, name) {
+		return writeError(c, fiber.StatusForbidden, "AccessDenied", "Access denied", "/"+name+"/"+key)
+	}
+	if _, err := bucket.GetBucket(name); err != nil {
+		return writeError(c, fiber.StatusNotFound, "NoSuchBucket", err.Error(), "/"+name)
+	}
+	return c.SendStatus(fiber.StatusOK)
+}
+
+func handleGetBucketPolicy(c *fiber.Ctx) error {
+	name := c.Params("bucket")
+	if _, err := bucket.GetBucket(name); err != nil {
+		return writeError(c, fiber.StatusNotFound, "NoSuchBucket", err.Error(), "/"+name)
+	}
+	return writeError(c, fiber.StatusNotFound, "NoSuchBucketPolicy", "The bucket policy does not exist", "/"+name)
+}
+
+func handlePutBucketPolicy(c *fiber.Ctx) error {
+	name := c.Params("bucket")
+	if !hasPerm(c, auth.PermWrite) || !keyAllowsBucket(c, name) {
+		return writeError(c, fiber.StatusForbidden, "AccessDenied", "Access denied", "/"+name)
+	}
+	if _, err := bucket.GetBucket(name); err != nil {
+		return writeError(c, fiber.StatusNotFound, "NoSuchBucket", err.Error(), "/"+name)
+	}
+	return c.SendStatus(fiber.StatusNoContent)
+}
+
+func handleDeleteBucketPolicy(c *fiber.Ctx) error {
+	name := c.Params("bucket")
+	if _, err := bucket.GetBucket(name); err != nil {
+		return writeError(c, fiber.StatusNotFound, "NoSuchBucket", err.Error(), "/"+name)
+	}
+	return c.SendStatus(fiber.StatusNoContent)
+}
+
+func handleGetBucketLogging(c *fiber.Ctx) error {
+	name := c.Params("bucket")
+	if _, err := bucket.GetBucket(name); err != nil {
+		return writeError(c, fiber.StatusNotFound, "NoSuchBucket", err.Error(), "/"+name)
+	}
+	return writeXML(c, fiber.StatusOK, BucketLoggingStatusXML{Xmlns: xmlNamespace})
+}
+
+func handlePutBucketLogging(c *fiber.Ctx) error {
+	name := c.Params("bucket")
+	if _, err := bucket.GetBucket(name); err != nil {
+		return writeError(c, fiber.StatusNotFound, "NoSuchBucket", err.Error(), "/"+name)
+	}
+	return c.SendStatus(fiber.StatusOK)
+}
+
+func handleGetBucketWebsite(c *fiber.Ctx) error {
+	name := c.Params("bucket")
+	if _, err := bucket.GetBucket(name); err != nil {
+		return writeError(c, fiber.StatusNotFound, "NoSuchBucket", err.Error(), "/"+name)
+	}
+	return writeError(c, fiber.StatusNotFound, "NoSuchWebsiteConfiguration", "The specified bucket does not have a website configuration", "/"+name)
+}
+
+func handlePutBucketWebsite(c *fiber.Ctx) error {
+	name := c.Params("bucket")
+	if _, err := bucket.GetBucket(name); err != nil {
+		return writeError(c, fiber.StatusNotFound, "NoSuchBucket", err.Error(), "/"+name)
+	}
+	return c.SendStatus(fiber.StatusOK)
+}
+
+func handleDeleteBucketWebsite(c *fiber.Ctx) error {
+	name := c.Params("bucket")
+	if _, err := bucket.GetBucket(name); err != nil {
+		return writeError(c, fiber.StatusNotFound, "NoSuchBucket", err.Error(), "/"+name)
+	}
+	return c.SendStatus(fiber.StatusNoContent)
+}
+
+func handleGetBucketNotification(c *fiber.Ctx) error {
+	name := c.Params("bucket")
+	if _, err := bucket.GetBucket(name); err != nil {
+		return writeError(c, fiber.StatusNotFound, "NoSuchBucket", err.Error(), "/"+name)
+	}
+	return writeXML(c, fiber.StatusOK, NotificationConfigurationXML{Xmlns: xmlNamespace})
+}
+
+func handlePutBucketNotification(c *fiber.Ctx) error {
+	name := c.Params("bucket")
+	if _, err := bucket.GetBucket(name); err != nil {
+		return writeError(c, fiber.StatusNotFound, "NoSuchBucket", err.Error(), "/"+name)
+	}
+	return c.SendStatus(fiber.StatusOK)
+}
+
+func handleGetBucketRequestPayment(c *fiber.Ctx) error {
+	name := c.Params("bucket")
+	if _, err := bucket.GetBucket(name); err != nil {
+		return writeError(c, fiber.StatusNotFound, "NoSuchBucket", err.Error(), "/"+name)
+	}
+	return writeXML(c, fiber.StatusOK, RequestPaymentConfigurationXML{Xmlns: xmlNamespace, Payer: "BucketOwner"})
+}
+
+func handlePutBucketRequestPayment(c *fiber.Ctx) error {
+	name := c.Params("bucket")
+	if _, err := bucket.GetBucket(name); err != nil {
+		return writeError(c, fiber.StatusNotFound, "NoSuchBucket", err.Error(), "/"+name)
+	}
+	return c.SendStatus(fiber.StatusOK)
+}
