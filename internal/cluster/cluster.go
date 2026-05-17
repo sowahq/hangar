@@ -194,6 +194,7 @@ type Cluster struct {
 	mu      sync.RWMutex
 	view    View
 	layoutV uint64
+	layout  *Layout
 }
 
 func New(cfg Config) *Cluster {
