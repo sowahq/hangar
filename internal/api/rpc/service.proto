@@ -75,6 +75,7 @@ message MetadataOp {
   string bucket   = 1;
   bytes  metadata = 2;
   string op_id    = 3;
+  string key      = 4;
 }
 
 message Metadata {

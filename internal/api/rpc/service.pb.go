@@ -694,6 +694,7 @@ type MetadataOp struct {
 	Bucket        string                 `protobuf:"bytes,1,opt,name=bucket,proto3" json:"bucket,omitempty"`
 	Metadata      []byte                 `protobuf:"bytes,2,opt,name=metadata,proto3" json:"metadata,omitempty"`
 	OpId          string                 `protobuf:"bytes,3,opt,name=op_id,json=opId,proto3" json:"op_id,omitempty"`
+	Key           string                 `protobuf:"bytes,4,opt,name=key,proto3" json:"key,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -745,6 +746,13 @@ func (x *MetadataOp) GetMetadata() []byte {
 func (x *MetadataOp) GetOpId() string {
 	if x != nil {
 		return x.OpId
+	}
+	return ""
+}
+
+func (x *MetadataOp) GetKey() string {
+	if x != nil {
+		return x.Key
 	}
 	return ""
 }
@@ -1702,12 +1710,13 @@ const file_internal_api_rpc_service_proto_rawDesc = "" +
 	"\x06bucket\x18\x01 \x01(\tR\x06bucket\x12\x10\n" +
 	"\x03key\x18\x02 \x01(\tR\x03key\x12\x1d\n" +
 	"\n" +
-	"version_id\x18\x03 \x01(\tR\tversionId\"U\n" +
+	"version_id\x18\x03 \x01(\tR\tversionId\"g\n" +
 	"\n" +
 	"MetadataOp\x12\x16\n" +
 	"\x06bucket\x18\x01 \x01(\tR\x06bucket\x12\x1a\n" +
 	"\bmetadata\x18\x02 \x01(\fR\bmetadata\x12\x13\n" +
-	"\x05op_id\x18\x03 \x01(\tR\x04opId\"<\n" +
+	"\x05op_id\x18\x03 \x01(\tR\x04opId\x12\x10\n" +
+	"\x03key\x18\x04 \x01(\tR\x03key\"<\n" +
 	"\bMetadata\x12\x14\n" +
 	"\x05found\x18\x01 \x01(\bR\x05found\x12\x1a\n" +
 	"\bmetadata\x18\x02 \x01(\fR\bmetadata\"L\n" +

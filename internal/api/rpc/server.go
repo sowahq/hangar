@@ -2,6 +2,7 @@ package rpc
 
 import (
 	"context"
+	"io"
 	"time"
 )
 
@@ -13,10 +14,37 @@ type Bridge interface {
 	LayoutVersion() uint64
 }
 
+type MetadataHandler interface {
+	PutMetadata(bucket, key string, raw []byte) error
+	GetMetadata(bucket, key string) ([]byte, bool, error)
+	DeleteMetadata(bucket, key string) ([]byte, bool, error)
+	ListMetadata(prefix string, fn func(key, val []byte) bool) error
+}
+
+type ChunkHandler interface {
+	PutChunk(hash string, payload []byte) error
+	OpenChunk(hash string) (io.ReadCloser, error)
+	HasChunk(hash string) (bool, error)
+	DeleteChunkReplica(hash string) error
+}
+
+type RefcountHandler interface {
+	IncRefs(hashes []string) error
+	DecRefs(hashes []string) error
+}
+
+type LayoutHandler interface {
+	GetLayout(version uint64) ([]byte, error)
+}
+
 type Server struct {
 	DRPCClusterUnimplementedServer
 
-	bridge Bridge
+	bridge   Bridge
+	Metadata MetadataHandler
+	Chunks   ChunkHandler
+	Refs     RefcountHandler
+	Layout   LayoutHandler
 }
 
 func NewServer(b Bridge) *Server {

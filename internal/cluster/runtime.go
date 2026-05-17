@@ -63,13 +63,19 @@ func Start(ctx context.Context, cfg Config) (*Runtime, error) {
 
 	cl := New(cfg)
 
+	srv := rpc.NewServer(cl)
+	srv.Metadata = localMetadataAdapter{}
+	srv.Chunks = localChunkAdapter{}
+	srv.Refs = localRefcountAdapter{}
+	srv.Layout = localLayoutAdapter{}
+
 	mux := drpcmux.New()
-	if err := rpc.DRPCRegisterCluster(mux, rpc.NewServer(cl)); err != nil {
+	if err := rpc.DRPCRegisterCluster(mux, srv); err != nil {
 		_ = ln.Close()
 		return nil, fmt.Errorf("cluster: register rpc: %w", err)
 	}
 
-	srv := drpcserver.New(mux)
+	dsrv := drpcserver.New(mux)
 
 	runCtx, cancel := context.WithCancel(ctx)
 
@@ -79,7 +85,7 @@ func Start(ctx context.Context, cfg Config) (*Runtime, error) {
 
 	go func() {
 		defer rt.wg.Done()
-		_ = srv.Serve(runCtx, ln)
+		_ = dsrv.Serve(runCtx, ln)
 	}()
 
 	go func() {
