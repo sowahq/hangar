@@ -82,7 +82,11 @@ type ecOpts struct {
 }
 
 func (h *clusterHarness) addNodeEC(id string, api, s3p, rpc int, seedAddrs []string, ec ecOpts) *harnessNode {
-	return h.addNodeFull(id, api, s3p, rpc, seedAddrs, "", &ec)
+	return h.addNodeFull(id, api, s3p, rpc, seedAddrs, "", &ec, "")
+}
+
+func (h *clusterHarness) addNodeECZone(id string, api, s3p, rpc int, seedAddrs []string, ec ecOpts, zone string) *harnessNode {
+	return h.addNodeFull(id, api, s3p, rpc, seedAddrs, "", &ec, zone)
 }
 
 func (h *clusterHarness) addNode(id string, api, s3p, rpc int, seedAddrs []string, extraSecret ...string) *harnessNode {
@@ -90,10 +94,10 @@ func (h *clusterHarness) addNode(id string, api, s3p, rpc int, seedAddrs []strin
 	if len(extraSecret) > 0 {
 		secret = extraSecret[0]
 	}
-	return h.addNodeFull(id, api, s3p, rpc, seedAddrs, secret, nil)
+	return h.addNodeFull(id, api, s3p, rpc, seedAddrs, secret, nil, "")
 }
 
-func (h *clusterHarness) addNodeFull(id string, api, s3p, rpc int, seedAddrs []string, overrideSecret string, ec *ecOpts) *harnessNode {
+func (h *clusterHarness) addNodeFull(id string, api, s3p, rpc int, seedAddrs []string, overrideSecret string, ec *ecOpts, zone string) *harnessNode {
 	dir := filepath.Join(h.root, id)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		log.Fatal(err)
@@ -114,6 +118,10 @@ func (h *clusterHarness) addNodeFull(id string, api, s3p, rpc int, seedAddrs []s
 	if ec != nil && ec.dataShards > 0 && ec.parityShards > 0 {
 		ecLine = fmt.Sprintf("ec_data_shards = %d\nec_parity_shards = %d\n", ec.dataShards, ec.parityShards)
 	}
+	zoneLine := ""
+	if zone != "" {
+		zoneLine = fmt.Sprintf("zone = \"%s\"\n", zone)
+	}
 	cfg := fmt.Sprintf(`data_directory = "%s"
 [api]
 bind_addr = ":%d"
@@ -130,8 +138,8 @@ enabled = true
 node_id = "%s"
 listen = "127.0.0.1:%d"
 shared_secret_b64 = "%s"
-%s%sheartbeat_ms = 200
-`, dir, api, s3p, id, rpc, secret, seedsLine, ecLine)
+%s%s%sheartbeat_ms = 200
+`, dir, api, s3p, id, rpc, secret, seedsLine, ecLine, zoneLine)
 
 	cfgPath := filepath.Join(h.root, id+".toml")
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
@@ -1278,6 +1286,212 @@ func runScenarioECAE() {
 	fmt.Printf("EC-AE OK (wiped %s, restored %d shards via reconstruction)\n", victim, after)
 }
 
+func runScenarioEC4Plus3() {
+	h := newHarness("ec4p3")
+	defer h.cleanup()
+	ec := ecOpts{dataShards: 4, parityShards: 3}
+	zones := []string{"A", "A", "A", "B", "B", "C", "C"}
+	ids := []string{"a1", "a2", "a3", "b1", "b2", "c1", "c2"}
+	seed := fmt.Sprintf("127.0.0.1:%d", h.port(20))
+	for i, id := range ids {
+		seeds := []string{seed}
+		if i == 0 {
+			seeds = nil
+		}
+		h.addNodeECZone(id, h.port(i), h.port(10+i), h.port(20+i), seeds, ec, zones[i])
+	}
+	for _, id := range ids {
+		h.start(id)
+		h.waitReady(id, 15*time.Second)
+	}
+	h.waitConverge("a1", len(ids), 30*time.Second)
+	h.createBucket("a1", "testbucket")
+	ak, sk := h.createS3Key("a1")
+	time.Sleep(500 * time.Millisecond)
+
+	clients := map[string]*s3.Client{}
+	for _, id := range ids {
+		clients[id] = h.s3Client(id, ak, sk)
+	}
+
+	payload := make([]byte, 512*1024)
+	if _, err := rand.Read(payload); err != nil {
+		log.Fatalf("rand: %v", err)
+	}
+	if _, err := clients["a1"].PutObject(context.Background(), &s3.PutObjectInput{Bucket: aws.String("testbucket"), Key: aws.String("ec4p3/obj1"), Body: bytes.NewReader(payload)}); err != nil {
+		log.Fatalf("PUT: %v", err)
+	}
+	time.Sleep(500 * time.Millisecond)
+
+	for _, id := range ids {
+		got, err := clients[id].GetObject(context.Background(), &s3.GetObjectInput{Bucket: aws.String("testbucket"), Key: aws.String("ec4p3/obj1")})
+		if err != nil {
+			log.Fatalf("GET via %s: %v", id, err)
+		}
+		body, _ := io.ReadAll(got.Body)
+		got.Body.Close()
+		if !bytes.Equal(body, payload) {
+			log.Fatalf("body mismatch on %s", id)
+		}
+	}
+
+	fmt.Println("kill a1, a2, a3 (whole zone A, 3 nodes)")
+	h.stop("a1")
+	h.stop("a2")
+	h.stop("a3")
+	time.Sleep(3 * time.Second)
+
+	got, err := clients["b1"].GetObject(context.Background(), &s3.GetObjectInput{Bucket: aws.String("testbucket"), Key: aws.String("ec4p3/obj1")})
+	if err != nil {
+		log.Fatalf("GET after killing zone A (3 nodes): %v", err)
+	}
+	body, _ := io.ReadAll(got.Body)
+	got.Body.Close()
+	if !bytes.Equal(body, payload) {
+		log.Fatalf("body mismatch after zone A loss")
+	}
+	fmt.Println("EC-4PLUS-3 OK (4+3, killed whole zone A=3 nodes, full reconstruct)")
+}
+
+func runScenarioEC6Plus3() {
+	h := newHarness("ec6p3")
+	defer h.cleanup()
+	ec := ecOpts{dataShards: 6, parityShards: 3}
+	zones := []string{"A", "A", "A", "B", "B", "B", "C", "C", "C"}
+	ids := []string{"a1", "a2", "a3", "b1", "b2", "b3", "c1", "c2", "c3"}
+	seed := fmt.Sprintf("127.0.0.1:%d", h.port(20))
+	for i, id := range ids {
+		seeds := []string{seed}
+		if i == 0 {
+			seeds = nil
+		}
+		h.addNodeECZone(id, h.port(i), h.port(10+i), h.port(20+i), seeds, ec, zones[i])
+	}
+	for _, id := range ids {
+		h.start(id)
+		h.waitReady(id, 15*time.Second)
+	}
+	h.waitConverge("a1", len(ids), 30*time.Second)
+	h.createBucket("a1", "testbucket")
+	ak, sk := h.createS3Key("a1")
+	time.Sleep(500 * time.Millisecond)
+
+	clients := map[string]*s3.Client{}
+	for _, id := range ids {
+		clients[id] = h.s3Client(id, ak, sk)
+	}
+
+	payload := make([]byte, 1024*1024)
+	if _, err := rand.Read(payload); err != nil {
+		log.Fatalf("rand: %v", err)
+	}
+	if _, err := clients["a1"].PutObject(context.Background(), &s3.PutObjectInput{Bucket: aws.String("testbucket"), Key: aws.String("ec6p3/obj1"), Body: bytes.NewReader(payload)}); err != nil {
+		log.Fatalf("PUT: %v", err)
+	}
+	time.Sleep(500 * time.Millisecond)
+
+	for _, id := range ids {
+		got, err := clients[id].GetObject(context.Background(), &s3.GetObjectInput{Bucket: aws.String("testbucket"), Key: aws.String("ec6p3/obj1")})
+		if err != nil {
+			log.Fatalf("GET via %s: %v", id, err)
+		}
+		body, _ := io.ReadAll(got.Body)
+		got.Body.Close()
+		if !bytes.Equal(body, payload) {
+			log.Fatalf("body mismatch on %s", id)
+		}
+	}
+
+	fmt.Println("kill zone C (3 nodes)")
+	h.stop("c1")
+	h.stop("c2")
+	h.stop("c3")
+	time.Sleep(3 * time.Second)
+
+	got, err := clients["a1"].GetObject(context.Background(), &s3.GetObjectInput{Bucket: aws.String("testbucket"), Key: aws.String("ec6p3/obj1")})
+	if err != nil {
+		log.Fatalf("GET after killing zone C: %v", err)
+	}
+	body, _ := io.ReadAll(got.Body)
+	got.Body.Close()
+	if !bytes.Equal(body, payload) {
+		log.Fatalf("body mismatch after zone C loss")
+	}
+	fmt.Println("EC-6PLUS-3 OK (6+3, killed zone C=3 nodes, full reconstruct)")
+}
+
+func runScenarioZoneSpread() {
+	h := newHarness("zonespread")
+	defer h.cleanup()
+	ec := ecOpts{dataShards: 2, parityShards: 2}
+	zones := []string{"A", "A", "B", "B", "C", "C"}
+	ids := []string{"a1", "a2", "b1", "b2", "c1", "c2"}
+	seed := fmt.Sprintf("127.0.0.1:%d", h.port(20))
+	for i, id := range ids {
+		seeds := []string{seed}
+		if i == 0 {
+			seeds = nil
+		}
+		h.addNodeECZone(id, h.port(i), h.port(10+i), h.port(20+i), seeds, ec, zones[i])
+	}
+	for _, id := range ids {
+		h.start(id)
+		h.waitReady(id, 10*time.Second)
+	}
+	h.waitConverge("a1", len(ids), 20*time.Second)
+	h.createBucket("a1", "testbucket")
+	ak, sk := h.createS3Key("a1")
+	time.Sleep(500 * time.Millisecond)
+	clients := map[string]*s3.Client{}
+	for _, id := range ids {
+		clients[id] = h.s3Client(id, ak, sk)
+	}
+
+	const N = 30
+	for i := 0; i < N; i++ {
+		body := make([]byte, 32*1024)
+		_, _ = rand.Read(body)
+		key := fmt.Sprintf("zs/o%d", i)
+		if _, err := clients["a1"].PutObject(context.Background(), &s3.PutObjectInput{Bucket: aws.String("testbucket"), Key: aws.String(key), Body: bytes.NewReader(body)}); err != nil {
+			log.Fatalf("put %s: %v", key, err)
+		}
+	}
+	time.Sleep(800 * time.Millisecond)
+
+	zoneShards := map[string]int{"A": 0, "B": 0, "C": 0}
+	for i, id := range ids {
+		c := countChunksOnNode(h.nodes[id].dataDir)
+		zoneShards[zones[i]] += c
+	}
+	fmt.Printf("shards per zone: A=%d B=%d C=%d\n", zoneShards["A"], zoneShards["B"], zoneShards["C"])
+	for z, c := range zoneShards {
+		if c == 0 {
+			log.Fatalf("zone %s got 0 shards — zone-aware HRW not spreading", z)
+		}
+	}
+
+	fmt.Println("kill zone B (2 nodes)")
+	h.stop("b1")
+	h.stop("b2")
+	time.Sleep(2 * time.Second)
+
+	failed := 0
+	for i := 0; i < N; i++ {
+		key := fmt.Sprintf("zs/o%d", i)
+		got, err := clients["a1"].GetObject(context.Background(), &s3.GetObjectInput{Bucket: aws.String("testbucket"), Key: aws.String(key)})
+		if err != nil {
+			failed++
+			continue
+		}
+		_, _ = io.Copy(io.Discard, got.Body)
+		got.Body.Close()
+	}
+	if failed > 0 {
+		log.Fatalf("%d/%d objects unreadable after zone B kill (EC=2+2 should tolerate 2 shard loss)", failed, N)
+	}
+	fmt.Printf("ZONE-SPREAD OK (zone B killed, all %d objects reconstructed from zones A+C)\n", N)
+}
+
 func dispatchScenario(name string) {
 	switch name {
 	case "basic":
@@ -1312,6 +1526,12 @@ func dispatchScenario(name string) {
 		runScenarioEC()
 	case "ec-ae":
 		runScenarioECAE()
+	case "ec-4plus3":
+		runScenarioEC4Plus3()
+	case "ec-6plus3":
+		runScenarioEC6Plus3()
+	case "zone-spread":
+		runScenarioZoneSpread()
 	case "all":
 		for _, s := range []string{"basic", "concurrent", "drain", "add-remove", "seed-failover", "wrong-secret", "anti-entropy", "wal-catchup", "large-multipart", "rolling-restart", "majority-kill", "long-run"} {
 			fmt.Printf("\n==== SCENARIO: %s ====\n", s)

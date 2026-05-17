@@ -39,7 +39,7 @@ type step struct {
 func main() {
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
-		case "basic", "drain", "concurrent", "seed-failover", "wrong-secret", "anti-entropy", "add-remove", "long-run", "wal-catchup", "large-multipart", "rolling-restart", "majority-kill", "sustained", "soak", "ec", "ec-ae", "all":
+		case "basic", "drain", "concurrent", "seed-failover", "wrong-secret", "anti-entropy", "add-remove", "long-run", "wal-catchup", "large-multipart", "rolling-restart", "majority-kill", "sustained", "soak", "ec", "ec-ae", "ec-4plus3", "ec-6plus3", "zone-spread", "all":
 			dispatchScenario(os.Args[1])
 			return
 		}
