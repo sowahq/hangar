@@ -33,6 +33,14 @@ aws --endpoint-url http://localhost:9000 \
 
 `GET /:bucket?cors` returns the config; `DELETE /:bucket?cors` drops it.
 
+Or via CLI (with a JSON file like `{"rules":[{"allowed_origins":["*"],"allowed_methods":["GET"]}]}`):
+
+```bash
+hangar bucket cors set photos --file cors.json
+hangar bucket cors get photos
+hangar bucket cors delete photos
+```
+
 ## Preflight & response
 
 The S3 router has two pieces:

@@ -31,6 +31,14 @@ Example PUT body:
 </Tagging>
 ```
 
+Or via CLI:
+
+```bash
+hangar bucket tagging set mybucket --tag env=prod --tag team=platform
+hangar bucket tagging get mybucket
+hangar bucket tagging delete mybucket
+```
+
 Tags are removed when the bucket is deleted.
 
 ## Object tagging

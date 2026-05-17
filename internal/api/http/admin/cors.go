@@ -1,28 +1,15 @@
 package admin
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 
 	"github.com/anhostfr/hangar/internal/api/http/response"
 	bucketService "github.com/anhostfr/hangar/internal/service/bucket"
-	"github.com/anhostfr/hangar/internal/service/lifecycle"
 	"github.com/gofiber/fiber/v2"
 )
 
-func RunLifecycle(c *fiber.Ctx) error {
-	stats, err := lifecycle.Run(context.Background())
-
-	recordAdmin(c, "lifecycle.run", "system", "", err)
-
-	if err != nil {
-		return response.Error(c, fiber.StatusInternalServerError, err.Error())
-	}
-	return response.JSON(c, stats)
-}
-
-func PutBucketLifecycleAdmin(c *fiber.Ctx) error {
+func PutBucketCORS(c *fiber.Ctx) error {
 	bucketName := c.Params("bucket")
 
 	body := c.Body()
@@ -30,13 +17,13 @@ func PutBucketLifecycleAdmin(c *fiber.Ctx) error {
 		return response.Error(c, fiber.StatusBadRequest, "Body required")
 	}
 
-	var cfg bucketService.LifecycleConfiguration
+	var cfg bucketService.CORSConfiguration
 	if err := json.Unmarshal(body, &cfg); err != nil {
 		return response.Error(c, fiber.StatusBadRequest, "Invalid JSON body")
 	}
 
-	err := bucketService.PutLifecycle(bucketName, &cfg)
-	recordAdmin(c, "lifecycle.set", "bucket", bucketName, err)
+	err := bucketService.PutCORS(bucketName, &cfg)
+	recordAdmin(c, "cors.set", "bucket", bucketName, err)
 
 	if err != nil {
 		return response.Error(c, fiber.StatusBadRequest, err.Error())
@@ -44,12 +31,12 @@ func PutBucketLifecycleAdmin(c *fiber.Ctx) error {
 	return response.JSON(c, &cfg)
 }
 
-func GetBucketLifecycleAdmin(c *fiber.Ctx) error {
+func GetBucketCORS(c *fiber.Ctx) error {
 	bucketName := c.Params("bucket")
 
-	cfg, err := bucketService.GetLifecycle(bucketName)
+	cfg, err := bucketService.GetCORS(bucketName)
 	if err != nil {
-		if errors.Is(err, bucketService.ErrLifecycleNotFound) {
+		if errors.Is(err, bucketService.ErrCORSNotFound) {
 			return response.Error(c, fiber.StatusNotFound, err.Error())
 		}
 		return response.Error(c, fiber.StatusInternalServerError, err.Error())
@@ -57,11 +44,11 @@ func GetBucketLifecycleAdmin(c *fiber.Ctx) error {
 	return response.JSON(c, cfg)
 }
 
-func DeleteBucketLifecycleAdmin(c *fiber.Ctx) error {
+func DeleteBucketCORS(c *fiber.Ctx) error {
 	bucketName := c.Params("bucket")
 
-	err := bucketService.DeleteLifecycle(bucketName)
-	recordAdmin(c, "lifecycle.delete", "bucket", bucketName, err)
+	err := bucketService.DeleteCORS(bucketName)
+	recordAdmin(c, "cors.delete", "bucket", bucketName, err)
 
 	if err != nil {
 		return response.Error(c, fiber.StatusInternalServerError, err.Error())

@@ -47,6 +47,14 @@ Or raw S3 XML on `PUT /:bucket?lifecycle`:
 
 `GET /:bucket?lifecycle` returns the same document. `DELETE /:bucket?lifecycle` drops it.
 
+Or via CLI (JSON file `{"rules":[{"enabled":true,"prefix":"logs/","expiration_days":30}]}`):
+
+```bash
+hangar bucket lifecycle set mybucket --file lifecycle.json
+hangar bucket lifecycle get mybucket
+hangar bucket lifecycle delete mybucket
+```
+
 ## Supported fields
 
 | Element                                                | Status |

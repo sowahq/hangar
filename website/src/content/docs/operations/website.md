@@ -31,6 +31,14 @@ Standard S3 XML on `PUT /:bucket?website`:
 - `GET /:bucket?website` returns the current configuration.
 - `DELETE /:bucket?website` disables static hosting.
 
+Or via CLI:
+
+```bash
+hangar bucket website set mysite --index index.html --error error.html
+hangar bucket website get mysite
+hangar bucket website delete mysite
+```
+
 ## Serving behavior
 
 When the bucket is public AND a website configuration exists, anonymous GET requests bypass SigV4 and are served as follows:

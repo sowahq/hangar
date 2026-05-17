@@ -22,6 +22,14 @@ Disable by sending an empty `<BucketLoggingStatus/>` body.
 
 Read with `GET /:bucket?logging`.
 
+Or via CLI:
+
+```bash
+hangar bucket logging set mybucket --target-bucket my-logs --target-prefix access/
+hangar bucket logging get mybucket
+hangar bucket logging delete mybucket
+```
+
 ## Log delivery
 
 - Records are buffered in memory and flushed every 5 seconds (or sooner if pressure builds).

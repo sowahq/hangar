@@ -76,6 +76,11 @@ func Commands() []*cli.Command {
 		},
 		encryptionCommand(),
 		objectLockCommand(),
+		websiteCommand(),
+		loggingCommand(),
+		taggingCommand(),
+		corsCommand(),
+		lifecycleCommand(),
 	}
 }
 
