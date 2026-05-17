@@ -209,7 +209,7 @@ func (s *ClusteredChunkStore) openErasureCoded(hash string) (io.ReadCloser, erro
 	shards := make([][]byte, s.ec.Total())
 	have := 0
 	for i := 0; i < s.ec.Total() && i < len(owners); i++ {
-		if have >= s.ec.Total() {
+		if have >= s.ec.Data() {
 			break
 		}
 		rc, err := s.openFrom(owners[i], shardKey(hash, i))

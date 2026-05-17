@@ -61,6 +61,31 @@ func (e *ECEncoder) Encode(payload []byte) ([][]byte, error) {
 	return shards, nil
 }
 
+func (e *ECEncoder) Reconstruct(shards [][]byte) error {
+	if len(shards) != e.k+e.m {
+		return fmt.Errorf("ec: expected %d shards got %d", e.k+e.m, len(shards))
+	}
+	present := 0
+	var shardSize int
+	for _, s := range shards {
+		if s != nil {
+			present++
+			if shardSize == 0 {
+				shardSize = len(s)
+			} else if len(s) != shardSize {
+				return fmt.Errorf("ec: shard size mismatch %d vs %d", len(s), shardSize)
+			}
+		}
+	}
+	if present < e.k {
+		return fmt.Errorf("ec: not enough shards (%d/%d)", present, e.k)
+	}
+	if err := e.enc.Reconstruct(shards); err != nil {
+		return fmt.Errorf("ec: reconstruct: %w", err)
+	}
+	return nil
+}
+
 func (e *ECEncoder) Decode(shards [][]byte) ([]byte, error) {
 	if len(shards) != e.k+e.m {
 		return nil, fmt.Errorf("ec: expected %d shards got %d", e.k+e.m, len(shards))
