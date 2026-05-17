@@ -199,6 +199,12 @@ type ListVersionsResult struct {
 	CommonPrefixes      []CommonPrefix     `xml:"CommonPrefixes"`
 }
 
+type LocationConstraintXML struct {
+	XMLName xml.Name `xml:"LocationConstraint"`
+	Xmlns   string   `xml:"xmlns,attr,omitempty"`
+	Region  string   `xml:",chardata"`
+}
+
 type VersioningConfigurationXML struct {
 	XMLName xml.Name `xml:"VersioningConfiguration"`
 	Xmlns   string   `xml:"xmlns,attr,omitempty"`

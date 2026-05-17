@@ -32,7 +32,7 @@ Configure SDKs with `UsePathStyle: true` (Go SDK v2), `s3={"addressing_style":"p
 | `CreateBucket` (`PUT /:bucket`)              | ✅     | No location constraint, no ACL                       |
 | `DeleteBucket`                               | ✅     | Must be empty                                        |
 | `HeadBucket`                                 | ✅     |                                                      |
-| `GetBucketLocation`                          | ❌     | Returns the server's configured `region` implicitly through SigV4 |
+| `GetBucketLocation`                          | ✅     | Returns the server's configured `region` (empty for `us-east-1` per S3 spec) |
 | `GetBucketAcl` / `PutBucketAcl`              | ❌     |                                                      |
 | `GetBucketPolicy` / `PutBucketPolicy`        | ❌     |                                                      |
 | `GetBucketVersioning` / `PutBucketVersioning`| ✅     | `VersioningConfiguration` XML with `Status: Enabled` / `Suspended`     |

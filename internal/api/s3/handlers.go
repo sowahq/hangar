@@ -602,6 +602,9 @@ func handleListObjectsV2(c *fiber.Ctx) error {
 	if c.Request().URI().QueryArgs().Has("tagging") {
 		return handleGetBucketTagging(c)
 	}
+	if c.Request().URI().QueryArgs().Has("location") {
+		return handleGetBucketLocation(c)
+	}
 
 	name := c.Params("bucket")
 
