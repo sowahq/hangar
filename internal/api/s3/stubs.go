@@ -39,6 +39,21 @@ type BucketLoggingStatusXML struct {
 	LoggingEnabled *LoggingEnabledXML `xml:"LoggingEnabled,omitempty"`
 }
 
+type IndexDocumentXML struct {
+	Suffix string `xml:"Suffix"`
+}
+
+type ErrorDocumentXML struct {
+	Key string `xml:"Key"`
+}
+
+type WebsiteConfigurationXML struct {
+	XMLName       xml.Name          `xml:"WebsiteConfiguration"`
+	Xmlns         string            `xml:"xmlns,attr,omitempty"`
+	IndexDocument *IndexDocumentXML `xml:"IndexDocument,omitempty"`
+	ErrorDocument *ErrorDocumentXML `xml:"ErrorDocument,omitempty"`
+}
+
 type NotificationConfigurationXML struct {
 	XMLName xml.Name `xml:"NotificationConfiguration"`
 	Xmlns   string   `xml:"xmlns,attr,omitempty"`
@@ -198,24 +213,69 @@ func handlePutBucketLogging(c *fiber.Ctx) error {
 
 func handleGetBucketWebsite(c *fiber.Ctx) error {
 	name := c.Params("bucket")
+	if !hasPerm(c, auth.PermRead) || !keyAllowsBucket(c, name) {
+		return writeError(c, fiber.StatusForbidden, "AccessDenied", "Access denied", "/"+name)
+	}
 	if _, err := bucket.GetBucket(name); err != nil {
 		return writeError(c, fiber.StatusNotFound, "NoSuchBucket", err.Error(), "/"+name)
 	}
-	return writeError(c, fiber.StatusNotFound, "NoSuchWebsiteConfiguration", "The specified bucket does not have a website configuration", "/"+name)
+
+	cfg, err := bucket.GetWebsite(name)
+	if err != nil {
+		return writeError(c, fiber.StatusNotFound, "NoSuchWebsiteConfiguration", "The specified bucket does not have a website configuration", "/"+name)
+	}
+	out := WebsiteConfigurationXML{Xmlns: xmlNamespace}
+	if cfg.IndexDocument != "" {
+		out.IndexDocument = &IndexDocumentXML{Suffix: cfg.IndexDocument}
+	}
+	if cfg.ErrorDocument != "" {
+		out.ErrorDocument = &ErrorDocumentXML{Key: cfg.ErrorDocument}
+	}
+	return writeXML(c, fiber.StatusOK, out)
 }
 
 func handlePutBucketWebsite(c *fiber.Ctx) error {
 	name := c.Params("bucket")
+	if !hasPerm(c, auth.PermWrite) || !keyAllowsBucket(c, name) {
+		return writeError(c, fiber.StatusForbidden, "AccessDenied", "Access denied", "/"+name)
+	}
 	if _, err := bucket.GetBucket(name); err != nil {
 		return writeError(c, fiber.StatusNotFound, "NoSuchBucket", err.Error(), "/"+name)
+	}
+
+	body := c.Body()
+	if len(body) == 0 {
+		return writeError(c, fiber.StatusBadRequest, "MalformedXML", "empty website body", "/"+name)
+	}
+
+	var in WebsiteConfigurationXML
+	if err := xml.Unmarshal(body, &in); err != nil {
+		return writeError(c, fiber.StatusBadRequest, "MalformedXML", err.Error(), "/"+name)
+	}
+	if in.IndexDocument == nil || in.IndexDocument.Suffix == "" {
+		return writeError(c, fiber.StatusBadRequest, "InvalidArgument", "IndexDocument.Suffix required", "/"+name)
+	}
+
+	cfg := &bucket.WebsiteConfig{IndexDocument: in.IndexDocument.Suffix}
+	if in.ErrorDocument != nil {
+		cfg.ErrorDocument = in.ErrorDocument.Key
+	}
+	if err := bucket.PutWebsite(name, cfg); err != nil {
+		return writeError(c, fiber.StatusBadRequest, "InvalidArgument", err.Error(), "/"+name)
 	}
 	return c.SendStatus(fiber.StatusOK)
 }
 
 func handleDeleteBucketWebsite(c *fiber.Ctx) error {
 	name := c.Params("bucket")
+	if !hasPerm(c, auth.PermWrite) || !keyAllowsBucket(c, name) {
+		return writeError(c, fiber.StatusForbidden, "AccessDenied", "Access denied", "/"+name)
+	}
 	if _, err := bucket.GetBucket(name); err != nil {
 		return writeError(c, fiber.StatusNotFound, "NoSuchBucket", err.Error(), "/"+name)
+	}
+	if err := bucket.DeleteWebsite(name); err != nil {
+		return writeError(c, fiber.StatusInternalServerError, "InternalError", err.Error(), "/"+name)
 	}
 	return c.SendStatus(fiber.StatusNoContent)
 }

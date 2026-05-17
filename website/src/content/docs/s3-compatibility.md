@@ -43,7 +43,7 @@ Configure SDKs with `UsePathStyle: true` (Go SDK v2), `s3={"addressing_style":"p
 | `GetBucketEncryption` / `PutBucketEncryption` / `DeleteBucketEncryption` | ✅ | AES256 (SSE-S3) only. See [Bucket default encryption](/operations/bucket-encryption/) |
 | `GetBucketNotificationConfiguration` / `Put…`| ⚠️ stub | GET → empty config. PUT no-op. No event hooks fire                                         |
 | `PutBucketReplication` / `Get…` / `Delete…`  | ❌     | Planned with the upcoming distribution work          |
-| `GetBucketWebsite` / `PutBucketWebsite` / `DeleteBucketWebsite` | ⚠️ stub | GET → 404 NoSuchWebsiteConfiguration. PUT/DELETE no-op                                  |
+| `GetBucketWebsite` / `PutBucketWebsite` / `DeleteBucketWebsite` | ✅ | `IndexDocument` + `ErrorDocument`. Serves anonymously on public buckets. See [Static website hosting](/operations/website/) |
 | `GetBucketRequestPayment` / `PutBucketRequestPayment` | ⚠️ stub | GET → `BucketOwner` payer. PUT no-op                               |
 | `GetObjectLockConfiguration` / `PutObjectLockConfiguration` | ✅ | Requires versioning. GOVERNANCE / COMPLIANCE modes. See [Object Lock](/operations/object-lock/) |
 

@@ -38,7 +38,11 @@ type writer struct {
 	wg      sync.WaitGroup
 }
 
-var w = newWriter()
+var (
+	w        = newWriter()
+	startMu  sync.Mutex
+	running  bool
+)
 
 func newWriter() *writer {
 	return &writer{
@@ -49,11 +53,24 @@ func newWriter() *writer {
 }
 
 func Start() {
+	startMu.Lock()
+	defer startMu.Unlock()
+	if running {
+		return
+	}
+	running = true
+	w.stop = make(chan struct{})
 	w.wg.Add(1)
 	go w.loop()
 }
 
 func Stop() {
+	startMu.Lock()
+	defer startMu.Unlock()
+	if !running {
+		return
+	}
+	running = false
 	close(w.stop)
 	w.wg.Wait()
 }
@@ -89,6 +106,7 @@ func (w *writer) loop() {
 		case <-ticker.C:
 			w.flush()
 		case <-w.flushCh:
+			w.flush()
 		}
 	}
 }

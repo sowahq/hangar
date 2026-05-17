@@ -250,6 +250,7 @@ func DeleteBucket(req *DeleteBucketRequest) error {
 	_ = DeleteObjectLockConfig(req.Name)
 	_ = DeleteBucketTagging(req.Name)
 	_ = DeleteLogging(req.Name)
+	_ = DeleteWebsite(req.Name)
 
 	return db.Delete(bucketKey)
 }

@@ -60,6 +60,11 @@ func sigv4Middleware(now func() time.Time) fiber.Handler {
 			}
 		}
 
+		if (c.Method() == fiber.MethodGet || c.Method() == fiber.MethodHead) && isPublicWebsiteRequest(c) {
+			c.Locals("s3_anonymous", true)
+			return c.Next()
+		}
+
 		req := adaptRequest(c)
 
 		ah, err := Verify(req, lookup, now())

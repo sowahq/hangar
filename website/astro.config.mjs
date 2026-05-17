@@ -48,6 +48,7 @@ export default defineConfig({
             { label: "Server-side multipart copy", link: "/operations/multipart-copy/" },
             { label: "Virtual-host addressing", link: "/operations/virtual-host/" },
             { label: "Bucket access logging", link: "/operations/bucket-logging/" },
+            { label: "Static website hosting", link: "/operations/website/" },
             { label: "SSE key rotation", link: "/operations/sse-key-rotation/" },
             { label: "Disk safeguards", link: "/operations/disk-safeguards/" },
             { label: "Audit log", link: "/operations/audit/" },

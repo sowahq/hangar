@@ -656,6 +656,10 @@ func handleListObjectsV2(c *fiber.Ctx) error {
 
 	name := c.Params("bucket")
 
+	if isAnonymous(c) {
+		return websiteServeIndex(c, name)
+	}
+
 	if !hasPerm(c, auth.PermRead) || !keyAllowsBucket(c, name) {
 		return writeError(c, fiber.StatusForbidden, "AccessDenied", "Access denied", "/"+name)
 	}
@@ -787,12 +791,20 @@ func handleGetObject(c *fiber.Ctx) error {
 	name := c.Params("bucket")
 	key := c.Params("*")
 
-	if !hasPerm(c, auth.PermRead) || !keyAllowsBucket(c, name) {
+	anon := isAnonymous(c)
+	if !anon && (!hasPerm(c, auth.PermRead) || !keyAllowsBucket(c, name)) {
 		return writeError(c, fiber.StatusForbidden, "AccessDenied", "Access denied", "/"+name+"/"+key)
 	}
 
 	if _, err := bucket.GetBucket(name); err != nil {
 		return writeError(c, fiber.StatusNotFound, "NoSuchBucket", err.Error(), "/"+name)
+	}
+
+	if anon && (key == "" || strings.HasSuffix(key, "/")) {
+		cfg, cerr := bucket.GetWebsite(name)
+		if cerr == nil {
+			return websiteServeKey(c, name, key+cfg.IndexDocument, fiber.StatusOK)
+		}
 	}
 
 	versionID := c.Query("versionId")
@@ -805,10 +817,16 @@ func handleGetObject(c *fiber.Ctx) error {
 		m, err = object.GetMetadata(name, key)
 	}
 	if err != nil {
+		if anon {
+			return websiteServeError(c, name)
+		}
 		return writeError(c, fiber.StatusNotFound, "NoSuchKey", err.Error(), "/"+name+"/"+key)
 	}
 
 	if m.IsDeleteMarker {
+		if anon {
+			return websiteServeError(c, name)
+		}
 		c.Set("x-amz-delete-marker", "true")
 		return writeError(c, fiber.StatusNotFound, "NoSuchKey", "object not found", "/"+name+"/"+key)
 	}
