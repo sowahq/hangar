@@ -552,6 +552,57 @@ func runNewFeatureTests(ctx context.Context, cli *s3.Client, bucket, ak, sk, end
 		step("POST policy (SDK presigner)", err, "")
 	}
 
+	// GetBucketLocation
+	loc, err := cli.GetBucketLocation(ctx, &s3.GetBucketLocationInput{Bucket: &bucket})
+	if err == nil {
+		step("GetBucketLocation", nil, fmt.Sprintf("constraint=%q", string(loc.LocationConstraint)))
+	} else {
+		step("GetBucketLocation", err, "")
+	}
+
+	// Copy with source-if-match precondition
+	condSrc := "interop/copy-src.bin"
+	cpr, _ := cli.PutObject(ctx, &s3.PutObjectInput{Bucket: &bucket, Key: &condSrc, Body: bytes.NewReader([]byte("cp"))})
+	if cpr != nil && cpr.ETag != nil {
+		etag := aws.ToString(cpr.ETag)
+		copyDst := "interop/copy-dst.bin"
+		copySrc := bucket + "/" + condSrc
+		_, err = cli.CopyObject(ctx, &s3.CopyObjectInput{
+			Bucket: &bucket, Key: &copyDst, CopySource: &copySrc,
+			CopySourceIfMatch: &etag,
+		})
+		step("CopyObject(source-if-match ok)", err, "")
+
+		bogus := `"deadbeef"`
+		_, err = cli.CopyObject(ctx, &s3.CopyObjectInput{
+			Bucket: &bucket, Key: aws.String("interop/copy-dst-fail.bin"), CopySource: &copySrc,
+			CopySourceIfMatch: &bogus,
+		})
+		if err != nil {
+			step("CopyObject(source-if-match fail)", nil, "412 as expected")
+		} else {
+			step("CopyObject(source-if-match fail)", fmt.Errorf("accepted bad if-match"), "")
+		}
+		_, _ = cli.DeleteObject(ctx, &s3.DeleteObjectInput{Bucket: &bucket, Key: &copyDst})
+		_, _ = cli.DeleteObject(ctx, &s3.DeleteObjectInput{Bucket: &bucket, Key: &condSrc})
+	}
+
+	// ACL stubs
+	_, err = cli.GetBucketAcl(ctx, &s3.GetBucketAclInput{Bucket: &bucket})
+	step("GetBucketAcl(stub)", err, "")
+	_, err = cli.GetBucketLogging(ctx, &s3.GetBucketLoggingInput{Bucket: &bucket})
+	step("GetBucketLogging(stub)", err, "")
+	_, err = cli.GetBucketNotificationConfiguration(ctx, &s3.GetBucketNotificationConfigurationInput{Bucket: &bucket})
+	step("GetBucketNotification(stub)", err, "")
+	_, err = cli.GetBucketRequestPayment(ctx, &s3.GetBucketRequestPaymentInput{Bucket: &bucket})
+	step("GetBucketRequestPayment(stub)", err, "")
+	_, err = cli.GetBucketPolicy(ctx, &s3.GetBucketPolicyInput{Bucket: &bucket})
+	if err != nil {
+		step("GetBucketPolicy(404 stub)", nil, "404 as expected")
+	} else {
+		step("GetBucketPolicy(404 stub)", fmt.Errorf("expected 404"), "")
+	}
+
 	// cleanup
 	_, _ = cli.DeleteObject(ctx, &s3.DeleteObjectInput{Bucket: &bucket, Key: &condKey})
 	_, _ = cli.DeleteObject(ctx, &s3.DeleteObjectInput{Bucket: &bucket, Key: &tagKey})
