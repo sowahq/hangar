@@ -29,8 +29,8 @@ type ChunkHandler interface {
 }
 
 type RefcountHandler interface {
-	IncRefs(hashes []string) error
-	DecRefs(hashes []string) error
+	IncRefs(opID string, hashes []string) error
+	DecRefs(opID string, hashes []string) error
 }
 
 type LayoutHandler interface {

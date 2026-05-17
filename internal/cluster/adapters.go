@@ -62,12 +62,12 @@ func (localChunkAdapter) DeleteChunkReplica(hash string) error {
 
 type localRefcountAdapter struct{}
 
-func (localRefcountAdapter) IncRefs(hashes []string) error {
-	return storage.LocalRefcountStore{}.IncRefs(hashes)
+func (localRefcountAdapter) IncRefs(opID string, hashes []string) error {
+	return storage.ApplyRefOp(opID, true, hashes)
 }
 
-func (localRefcountAdapter) DecRefs(hashes []string) error {
-	return storage.LocalRefcountStore{}.DecRefs(hashes)
+func (localRefcountAdapter) DecRefs(opID string, hashes []string) error {
+	return storage.ApplyRefOp(opID, false, hashes)
 }
 
 type localLayoutAdapter struct{}

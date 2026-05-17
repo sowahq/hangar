@@ -3,6 +3,8 @@ package cluster
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"io"
 	"time"
@@ -10,6 +12,12 @@ import (
 	"github.com/anhostfr/hangar/internal/api/rpc"
 	"github.com/anhostfr/hangar/internal/storage"
 )
+
+func newOpID() string {
+	var b [12]byte
+	_, _ = rand.Read(b[:])
+	return hex.EncodeToString(b[:])
+}
 
 const (
 	chunkRF         = 2
@@ -248,13 +256,11 @@ func (s *ClusteredRefcountStore) deltaByOwner(hashes []string, inc bool) error {
 		}
 	}
 
+	opID := newOpID()
+
 	for id, hs := range byNode {
 		if id == s.cl.Self() {
-			if inc {
-				_ = s.local.IncRefs(hs)
-			} else {
-				_ = s.local.DecRefs(hs)
-			}
+			_ = storage.ApplyRefOp(opID, inc, hs)
 			continue
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), metadataRPCWait)
@@ -264,9 +270,9 @@ func (s *ClusteredRefcountStore) deltaByOwner(hashes []string, inc bool) error {
 			continue
 		}
 		if inc {
-			_, _ = cli.IncRefs(ctx, &rpc.RefDelta{Hashes: hs})
+			_, _ = cli.IncRefs(ctx, &rpc.RefDelta{OpId: opID, Hashes: hs})
 		} else {
-			_, _ = cli.DecRefs(ctx, &rpc.RefDelta{Hashes: hs})
+			_, _ = cli.DecRefs(ctx, &rpc.RefDelta{OpId: opID, Hashes: hs})
 		}
 		cancel()
 	}

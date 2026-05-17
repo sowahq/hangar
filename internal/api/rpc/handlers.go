@@ -219,7 +219,7 @@ func (s *Server) IncRefs(ctx context.Context, d *RefDelta) (*Ack, error) {
 	if d == nil {
 		return &Ack{Ok: true}, nil
 	}
-	if err := s.Refs.IncRefs(d.Hashes); err != nil {
+	if err := s.Refs.IncRefs(d.OpId, d.Hashes); err != nil {
 		return &Ack{Ok: false, Error: err.Error()}, nil
 	}
 	return &Ack{Ok: true}, nil
@@ -232,7 +232,7 @@ func (s *Server) DecRefs(ctx context.Context, d *RefDelta) (*Ack, error) {
 	if d == nil {
 		return &Ack{Ok: true}, nil
 	}
-	if err := s.Refs.DecRefs(d.Hashes); err != nil {
+	if err := s.Refs.DecRefs(d.OpId, d.Hashes); err != nil {
 		return &Ack{Ok: false, Error: err.Error()}, nil
 	}
 	return &Ack{Ok: true}, nil
