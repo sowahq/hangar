@@ -47,6 +47,7 @@ export default defineConfig({
             { label: "Browser POST uploads", link: "/operations/post-policy/" },
             { label: "Server-side multipart copy", link: "/operations/multipart-copy/" },
             { label: "Virtual-host addressing", link: "/operations/virtual-host/" },
+            { label: "Bucket access logging", link: "/operations/bucket-logging/" },
             { label: "SSE key rotation", link: "/operations/sse-key-rotation/" },
             { label: "Disk safeguards", link: "/operations/disk-safeguards/" },
             { label: "Audit log", link: "/operations/audit/" },

@@ -17,6 +17,7 @@ import (
 	"github.com/anhostfr/hangar/internal/api/s3"
 	"github.com/anhostfr/hangar/internal/config"
 	"github.com/anhostfr/hangar/internal/database"
+	"github.com/anhostfr/hangar/internal/service/accesslog"
 	"github.com/anhostfr/hangar/internal/service/audit"
 	gcService "github.com/anhostfr/hangar/internal/service/gc"
 	lifecycleService "github.com/anhostfr/hangar/internal/service/lifecycle"
@@ -141,6 +142,7 @@ func Execute() {
 					}
 
 					ctx, cancel := context.WithCancel(context.Background())
+					accesslog.Start()
 					gcDone := make(chan struct{})
 					go gcService.StartScheduledGC(ctx, gcDone)
 
@@ -188,6 +190,7 @@ func Execute() {
 					}
 
 					cancel()
+					accesslog.Stop()
 					select {
 					case <-gcDone:
 					case <-time.After(shutdownTimeout):

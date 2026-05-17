@@ -249,6 +249,7 @@ func DeleteBucket(req *DeleteBucketRequest) error {
 	_ = DeleteEncryption(req.Name)
 	_ = DeleteObjectLockConfig(req.Name)
 	_ = DeleteBucketTagging(req.Name)
+	_ = DeleteLogging(req.Name)
 
 	return db.Delete(bucketKey)
 }

@@ -27,8 +27,6 @@ func TestS3StubsBucket(t *testing.T) {
 		{"get policy 404", http.MethodGet, "policy=", nil, http.StatusNotFound},
 		{"put policy", http.MethodPut, "policy=", []byte("{}"), http.StatusNoContent},
 		{"delete policy", http.MethodDelete, "policy=", nil, http.StatusNoContent},
-		{"get logging", http.MethodGet, "logging=", nil, http.StatusOK},
-		{"put logging", http.MethodPut, "logging=", []byte("<x/>"), http.StatusOK},
 		{"get website 404", http.MethodGet, "website=", nil, http.StatusNotFound},
 		{"put website", http.MethodPut, "website=", []byte("<x/>"), http.StatusOK},
 		{"delete website", http.MethodDelete, "website=", nil, http.StatusNoContent},

@@ -28,9 +28,15 @@ type AccessControlPolicyXML struct {
 	AccessControlList []GrantXML `xml:"AccessControlList>Grant"`
 }
 
+type LoggingEnabledXML struct {
+	TargetBucket string `xml:"TargetBucket"`
+	TargetPrefix string `xml:"TargetPrefix,omitempty"`
+}
+
 type BucketLoggingStatusXML struct {
-	XMLName xml.Name `xml:"BucketLoggingStatus"`
-	Xmlns   string   `xml:"xmlns,attr,omitempty"`
+	XMLName        xml.Name           `xml:"BucketLoggingStatus"`
+	Xmlns          string             `xml:"xmlns,attr,omitempty"`
+	LoggingEnabled *LoggingEnabledXML `xml:"LoggingEnabled,omitempty"`
 }
 
 type NotificationConfigurationXML struct {
@@ -136,16 +142,56 @@ func handleDeleteBucketPolicy(c *fiber.Ctx) error {
 
 func handleGetBucketLogging(c *fiber.Ctx) error {
 	name := c.Params("bucket")
+	if !hasPerm(c, auth.PermRead) || !keyAllowsBucket(c, name) {
+		return writeError(c, fiber.StatusForbidden, "AccessDenied", "Access denied", "/"+name)
+	}
 	if _, err := bucket.GetBucket(name); err != nil {
 		return writeError(c, fiber.StatusNotFound, "NoSuchBucket", err.Error(), "/"+name)
 	}
-	return writeXML(c, fiber.StatusOK, BucketLoggingStatusXML{Xmlns: xmlNamespace})
+
+	out := BucketLoggingStatusXML{Xmlns: xmlNamespace}
+	cfg, err := bucket.GetLogging(name)
+	if err == nil && cfg != nil {
+		out.LoggingEnabled = &LoggingEnabledXML{
+			TargetBucket: cfg.TargetBucket,
+			TargetPrefix: cfg.TargetPrefix,
+		}
+	}
+	return writeXML(c, fiber.StatusOK, out)
 }
 
 func handlePutBucketLogging(c *fiber.Ctx) error {
 	name := c.Params("bucket")
+	if !hasPerm(c, auth.PermWrite) || !keyAllowsBucket(c, name) {
+		return writeError(c, fiber.StatusForbidden, "AccessDenied", "Access denied", "/"+name)
+	}
 	if _, err := bucket.GetBucket(name); err != nil {
 		return writeError(c, fiber.StatusNotFound, "NoSuchBucket", err.Error(), "/"+name)
+	}
+
+	body := c.Body()
+	if len(body) == 0 {
+		return writeError(c, fiber.StatusBadRequest, "MalformedXML", "empty logging body", "/"+name)
+	}
+
+	var in BucketLoggingStatusXML
+	if err := xml.Unmarshal(body, &in); err != nil {
+		return writeError(c, fiber.StatusBadRequest, "MalformedXML", err.Error(), "/"+name)
+	}
+
+	if in.LoggingEnabled == nil {
+		if err := bucket.DeleteLogging(name); err != nil {
+			return writeError(c, fiber.StatusInternalServerError, "InternalError", err.Error(), "/"+name)
+		}
+		return c.SendStatus(fiber.StatusOK)
+	}
+
+	cfg := &bucket.LoggingConfig{
+		TargetBucket: in.LoggingEnabled.TargetBucket,
+		TargetPrefix: in.LoggingEnabled.TargetPrefix,
+	}
+	if err := bucket.PutLogging(name, cfg); err != nil {
+		return writeError(c, fiber.StatusBadRequest, "InvalidArgument", err.Error(), "/"+name)
 	}
 	return c.SendStatus(fiber.StatusOK)
 }

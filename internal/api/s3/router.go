@@ -131,6 +131,7 @@ func NewRouter(now func() time.Time) *fiber.App {
 		app.Use(metrics.Middleware("s3"))
 	}
 
+	app.Use(accessLogMiddleware)
 	app.Use(sigv4Middleware(now))
 	app.Use(corsResponseMiddleware)
 

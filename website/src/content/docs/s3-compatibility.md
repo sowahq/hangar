@@ -37,7 +37,7 @@ Configure SDKs with `UsePathStyle: true` (Go SDK v2), `s3={"addressing_style":"p
 | `GetBucketPolicy` / `PutBucketPolicy` / `DeleteBucketPolicy` | ⚠️ stub | GET → 404 NoSuchBucketPolicy. PUT/DELETE no-op. Bucket policy not enforced |
 | `GetBucketVersioning` / `PutBucketVersioning`| ✅     | `VersioningConfiguration` XML with `Status: Enabled` / `Suspended`     |
 | `GetBucketTagging` / `PutBucketTagging` / `DeleteBucketTagging` | ✅ | Max 10 tags. Key ≤ 128, Value ≤ 256                                                  |
-| `GetBucketLogging` / `PutBucketLogging`      | ⚠️ stub | GET → empty `BucketLoggingStatus`. PUT no-op. Server logs unrelated to bucket logging                                  |
+| `GetBucketLogging` / `PutBucketLogging`      | ✅     | Async access log batches written to target bucket every 5s. See [Bucket logging](/operations/bucket-logging/) |
 | `GetBucketCors` / `PutBucketCors` / `DeleteBucketCors` | ✅ | See [CORS](/operations/cors/)                  |
 | `GetBucketLifecycleConfiguration` / `PutBucketLifecycleConfiguration` / `DeleteBucketLifecycle` | ✅ | Expiration + AbortIncompleteMultipartUpload. See [Lifecycle](/operations/lifecycle/) |
 | `GetBucketEncryption` / `PutBucketEncryption` / `DeleteBucketEncryption` | ✅ | AES256 (SSE-S3) only. See [Bucket default encryption](/operations/bucket-encryption/) |
