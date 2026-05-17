@@ -126,14 +126,13 @@ func TestS3RetentionEndpointPutGet(t *testing.T) {
 }
 
 func TestS3RetentionRejectsCompliancyDowngrade(t *testing.T) {
-	t.Skip("known pre-existing failure: compliance-mode downgrade returns 400 instead of 403; tracked separately, unrelated to cluster mode")
 	s := newS3TestServer(t)
 	seedLockedBucket(t, "comp")
 
 	resp := s.do(t, http.MethodPut, "/comp/x.txt", "", []byte("body"))
 	resp.Body.Close()
 
-	retainUntil := s.now.Add(72 * time.Hour).UTC().Format(time.RFC3339)
+	retainUntil := time.Now().Add(72 * time.Hour).UTC().Format(time.RFC3339)
 	body, _ := xml.Marshal(RetentionXML{Mode: "COMPLIANCE", RetainUntilDate: retainUntil})
 	resp = s.do(t, http.MethodPut, "/comp/x.txt", "retention=", body)
 	resp.Body.Close()
@@ -141,7 +140,7 @@ func TestS3RetentionRejectsCompliancyDowngrade(t *testing.T) {
 		t.Fatalf("put compliance: %d", resp.StatusCode)
 	}
 
-	earlier := s.now.Add(24 * time.Hour).UTC().Format(time.RFC3339)
+	earlier := time.Now().Add(24 * time.Hour).UTC().Format(time.RFC3339)
 	body, _ = xml.Marshal(RetentionXML{Mode: "GOVERNANCE", RetainUntilDate: earlier})
 	resp = s.do(t, http.MethodPut, "/comp/x.txt", "retention=", body)
 	resp.Body.Close()

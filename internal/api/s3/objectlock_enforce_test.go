@@ -11,7 +11,7 @@ import (
 
 func putLocked(t *testing.T, s *s3TestServer, path string, mode string, retainHours int) {
 	t.Helper()
-	retain := s.now.Add(time.Duration(retainHours) * time.Hour).UTC().Format(time.RFC3339)
+	retain := time.Now().Add(time.Duration(retainHours) * time.Hour).UTC().Format(time.RFC3339)
 	req := s.sign(t, http.MethodPut, path, "", []byte("locked-body"))
 	req.Header.Set(hdrObjectLockMode, mode)
 	req.Header.Set(hdrObjectLockRetainUntilDate, retain)
@@ -41,7 +41,6 @@ func TestS3DeleteGovernanceRefused(t *testing.T) {
 }
 
 func TestS3DeleteVersionGovernanceRefused(t *testing.T) {
-	t.Skip("known pre-existing failure: version-id propagation through put/head pipeline drops governance lock metadata; tracked separately, unrelated to cluster mode")
 	s := newS3TestServer(t)
 	seedLockedBucket(t, "govver")
 	putLocked(t, s, "/govver/k.txt", "GOVERNANCE", 24)
@@ -61,7 +60,6 @@ func TestS3DeleteVersionGovernanceRefused(t *testing.T) {
 }
 
 func TestS3DeleteComplianceNeverBypassable(t *testing.T) {
-	t.Skip("known pre-existing failure: same root cause as TestS3DeleteVersionGovernanceRefused")
 	s := newS3TestServer(t)
 	seedLockedBucket(t, "compdel")
 	putLocked(t, s, "/compdel/k.txt", "COMPLIANCE", 24)
@@ -129,7 +127,6 @@ func TestS3LegalHoldBlocksVersionDelete(t *testing.T) {
 }
 
 func TestS3OverwriteRefusedWhenLockedNoVersioning(t *testing.T) {
-	t.Skip("known pre-existing failure: overwrite-when-locked path returns 200 instead of 403; tracked separately")
 	s := newS3TestServer(t)
 
 	if _, err := bucket.CreateBucket(&bucket.CreateBucketRequest{Name: "lknover"}); err != nil {
@@ -145,7 +142,7 @@ func TestS3OverwriteRefusedWhenLockedNoVersioning(t *testing.T) {
 		t.Fatalf("ver off: %v", err)
 	}
 
-	retain := s.now.Add(24 * time.Hour).UTC().Format(time.RFC3339)
+	retain := time.Now().Add(24 * time.Hour).UTC().Format(time.RFC3339)
 	req := s.sign(t, http.MethodPut, "/lknover/k.txt", "", []byte("v1"))
 	req.Header.Set(hdrObjectLockMode, "GOVERNANCE")
 	req.Header.Set(hdrObjectLockRetainUntilDate, retain)
