@@ -15,6 +15,7 @@ require (
 	github.com/urfave/cli/v2 v2.27.7
 	github.com/valyala/fasthttp v1.51.0
 	github.com/zeebo/blake3 v0.2.4
+	github.com/zeebo/xxh3 v1.1.0
 	golang.org/x/crypto v0.41.0
 	golang.org/x/sys v0.44.0
 	google.golang.org/protobuf v1.36.11
