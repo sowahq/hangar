@@ -64,6 +64,12 @@ enabled   = false
 bind_addr = ":9000"
 region    = "us-east-1"
 
+# Optional virtual-host addressing. When set, requests with
+# `Host: <bucket>.<virtual_host_base>` route as `/<bucket><path>`.
+# Path-style continues to work in parallel. Leave empty to disable.
+# See /operations/virtual-host/
+virtual_host_base = ""
+
 [security]
 # Server master key for SSE-S3. Base64-encoded, must decode to 32 bytes.
 # Empty disables SSE-S3 — PUT with `x-amz-server-side-encryption: AES256` returns 503.
