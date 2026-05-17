@@ -959,6 +959,15 @@ func runScenarioSoak() {
 	}
 
 	ecMode := os.Getenv("SOAK_EC") == "1"
+	churnMode := os.Getenv("SOAK_CHURN") == "1"
+	churnPeriod := 60 * time.Second
+	if env := os.Getenv("SOAK_CHURN_PERIOD"); env != "" {
+		var p int
+		fmt.Sscanf(env, "%d", &p)
+		if p > 0 {
+			churnPeriod = time.Duration(p) * time.Second
+		}
+	}
 
 	h := newHarness("soak")
 	defer h.cleanup()
@@ -1014,6 +1023,7 @@ func runScenarioSoak() {
 	}()
 
 	var puts, gets, dels, errs int64
+	var churnEvents int64
 	var errSamplesMu sync.Mutex
 	errSamples := []string{}
 	addErrSample := func(kind, msg string) {
@@ -1026,6 +1036,41 @@ func runScenarioSoak() {
 
 	start := time.Now()
 	var wg sync.WaitGroup
+
+	if churnMode {
+		fmt.Printf("SOAK_CHURN=1 → random kill+restart every %s\n", churnPeriod)
+		go func() {
+			t := time.NewTicker(churnPeriod)
+			defer t.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-t.C:
+				}
+				idx := int(time.Now().UnixNano() % int64(len(nodeIDs)))
+				victim := nodeIDs[idx]
+				fmt.Printf("[%s] churn: kill %s\n", time.Now().Format("15:04:05"), victim)
+				h.stop(victim)
+				downFor := time.Duration(5+int(time.Now().UnixNano()%10)) * time.Second
+				select {
+				case <-ctx.Done():
+					return
+				case <-time.After(downFor):
+				}
+				fmt.Printf("[%s] churn: restart %s (down %s)\n", time.Now().Format("15:04:05"), victim, downFor)
+				h.start(victim)
+				if err := waitHTTP(h.adminURL(victim)+"/status", 30*time.Second); err != nil {
+					fmt.Printf("[%s] churn: %s restart failed: %v\n", time.Now().Format("15:04:05"), victim, err)
+					continue
+				}
+				if err := waitCluster(h.adminURL(victim), len(nodeIDs), 30*time.Second); err != nil {
+					fmt.Printf("[%s] churn: %s converge slow: %v\n", time.Now().Format("15:04:05"), victim, err)
+				}
+				atomic.AddInt64(&churnEvents, 1)
+			}
+		}()
+	}
 
 	for w := 0; w < workers; w++ {
 		wg.Add(1)
@@ -1125,6 +1170,9 @@ func runScenarioSoak() {
 	fmt.Printf("gets:       %d\n", g)
 	fmt.Printf("deletes:    %d\n", d)
 	fmt.Printf("errors:     %d (%.3f%%)\n", e, errRate)
+	if churnMode {
+		fmt.Printf("churn:      %d kill+restart cycles\n", atomic.LoadInt64(&churnEvents))
+	}
 	if elapsed.Seconds() > 0 {
 		fmt.Printf("throughput: %.1f ops/s\n", float64(total)/elapsed.Seconds())
 	}
@@ -1134,8 +1182,12 @@ func runScenarioSoak() {
 			fmt.Println("  -", s)
 		}
 	}
-	if errRate > 1.0 {
-		log.Fatalf("SOAK FAIL: error rate %.3f%% exceeds 1%%", errRate)
+	threshold := 1.0
+	if churnMode {
+		threshold = 5.0
+	}
+	if errRate > threshold {
+		log.Fatalf("SOAK FAIL: error rate %.3f%% exceeds %.1f%%", errRate, threshold)
 	}
 	fmt.Println("SOAK OK")
 }
