@@ -1,105 +1,102 @@
 ---
 title: Cluster mode
-description: Distributed Hangar with HRW chunk placement, sharded metadata, replicated KV.
+description: Distributed Hangar with HRW chunk placement, sharded metadata, WAL catchup, anti-entropy.
 ---
 
-Hangar can run as a multi-node cluster where chunks and metadata are distributed across peers. Cluster mode is opt-in and disabled by default.
+Hangar can run as a multi-node cluster where chunks and metadata are distributed across peers. Cluster mode is opt-in and disabled by default. A single binary handles both modes; flipping `cluster.enabled = true` and adding a `[cluster]` section is the entire delta.
+
+## TL;DR
+
+- One binary, one TOML section, no external coordination service (no Raft, no etcd, no Zookeeper).
+- Chunks placed via HRW (Rendezvous Hashing) with RF=2 synchronous fan-out.
+- Object metadata key-sharded by HRW; primary synchronous + secondary async fan-out + per-primary write-ahead log for catchup.
+- System state (buckets, S3 keys, SSE keyring, configs, layout) replicated to all peers via a Pebble write hook; cold-start nodes pull a snapshot.
+- GC, scrub and lifecycle run on the lowest-id alive node only.
+- Anti-entropy worker reconciles local chunks against HRW expectations.
+- dRPC over TCP, HMAC-SHA256 handshake, 32-byte shared secret. No TLS — deploy behind a VPN.
 
 ## What clustering gives you
 
-- **Distributed chunks** — content-addressed chunks placed via HRW (Rendezvous Hashing), replicated to peer nodes for redundancy.
-- **Sharded metadata** — per-object metadata key-sharded across peers, so list/get/put load spreads with traffic.
+- **Distributed chunks** — content-addressed chunks placed via HRW, replicated to peer owners.
+- **Sharded metadata** — per-object metadata sharded across peers, so list/get/put load spreads with traffic.
+- **Cluster-wide dedup** — BLAKE3 content addressing means identical payloads dedup across the entire cluster.
 - **Replicated system state** — buckets, S3 access keys, SSE keyring, encryption configs, object lock, lifecycle, CORS, tagging, website and logging configs replicate to all peers transparently.
-- **Cold-start bootstrap** — a new node joining an existing cluster pulls the current replicated KV snapshot at startup.
-- **Leader-gated periodic work** — GC, scrub and lifecycle run on the lowest-id alive node only, so background workers don't race.
+- **WAL catchup** — secondaries that miss writes while down catch up automatically from the primary's WAL on reconnect.
+- **Anti-entropy** — chunks pulled from owner peers if missing locally; orphans pruned after verifying a peer holds the copy.
+- **Cold-start bootstrap** — a fresh node joining an existing cluster pulls the current replicated KV snapshot.
+- **Leader-gated periodic work** — GC, scrub and lifecycle run on the lowest-id alive node only.
+- **Idempotent refcount ops** — `op_id` deduplication makes Inc/Dec retry-safe.
 
-The wire protocol is Storj dRPC over TCP. Peer connections are authenticated with a 32-byte shared secret and an HMAC-SHA256 handshake. There is no TLS layer; deploy behind a VPN or in a trusted subnet.
+## Architecture
 
-## Configuration
+### Membership
 
-Add a `[cluster]` section to each node's `config.toml`:
+Static peer list in each node's TOML. dRPC bidirectional heartbeat stream every `heartbeat_ms` (default 500ms). Three missed ticks (default 1.5s) flip a peer to `down`. Reconnect uses exponential backoff (1s → 30s).
 
-```toml
-[cluster]
-enabled            = true
-node_id            = "n1"
-listen             = "10.0.0.1:7000"
-shared_secret_b64  = "<base64 32 bytes — must match across all nodes>"
-peers              = ["n2@10.0.0.2:7000", "n3@10.0.0.3:7000"]
-heartbeat_ms       = 500
+| Status     | Meaning                                                                 |
+|------------|-------------------------------------------------------------------------|
+| `active`   | Currently sending heartbeats within the 3× window                       |
+| `suspect`  | Reserved for future use                                                 |
+| `down`     | Missed three heartbeats; not eligible for HRW until reconnect            |
+| `draining` | Manually flagged (reserved; CLI surface coming)                          |
+| `unknown`  | Listed in peers but never seen alive                                    |
+
+### Chunk placement
+
+Each chunk's content-addressed BLAKE3 hash is fed to HRW. Top `RF` candidates among alive layout nodes are selected. Default `RF = 2` (configurable EC `k+m` is on the roadmap). Write fans out synchronously to all owners — the write returns only when at least one owner stored. Reads try each owner in HRW order; first hit wins; `pebble.ErrNotFound` short-circuits.
+
+### Metadata sharding
+
+Metadata is sharded by `bucket+key` via HRW. Top 2 nodes own a key: primary + secondary. Writes:
+
+1. Primary: synchronous local Put, then WAL append.
+2. Secondary fan-out: best-effort goroutine, fire-and-forget.
+
+Reads hit owners in HRW order. If primary is down, secondary serves the read. Strong consistency in the steady state; secondaries can briefly lag during async fan-out.
+
+### Write-ahead log (WAL)
+
+Each node maintains a per-node WAL of metadata ops it accepted as primary (`mwal:e:<seq>` keys in Pebble). On peer recovery (a peer transitions `down → active`), the local node calls `ReplicaCatchup(peer, last_seq)` on the recovered peer to pull anything it missed, then advances its per-peer cursor. Entries older than 24h are purged on each tick.
+
+### Anti-entropy
+
+Hourly per-node scan: for each `chunkref:<hash>` key,
+
+- compute HRW owners
+- if self is an owner but chunk file is missing → pull from another owner via `GetChunk` stream
+- if self is not an owner but chunk file exists → delete locally, but **only after verifying at least one expected owner has the chunk** (via `HasChunk`)
+
+This converges placement after layout changes, node loss, or write failures.
+
+### Replicated KV
+
+A pebble write hook fires on every Put/Delete. Keys matching a whitelist of system prefixes are fanned out to all alive peers via `ReplicateKV` RPC. Receiving nodes apply the write via `PutSilent`/`DeleteSilent` (which bypass the hook to avoid loops). Replicated prefixes:
+
+```
+s3key:  bucket:  token:  encryption:  objectlock:
+ssekr:  lifecycle:  cors:  tagging:  website:  logging:
+cluster:layout:
 ```
 
-- `node_id` — short, stable, unique. Used by HRW.
-- `listen` — local address for the dRPC server.
-- `shared_secret_b64` — generate with `head -c 32 /dev/urandom | base64`. Same value on every node.
-- `peers` — list of `<id>@<host:port>` entries identifying the other nodes.
-- `heartbeat_ms` — heartbeat cadence. Three missed ticks (default 1.5 s) flip a peer to `down`.
+On startup, the node calls `BulkSyncKV(prefixes)` on the first alive peer to pull a full snapshot — this is how a cold-start node joins an existing cluster without manual intervention.
 
-Each node also needs the usual `data_directory`, `[api]`, `[s3]` (if you want S3) and `[storage]` sections. Nodes can be heterogeneous (different storage classes), but the cluster requires identical `shared_secret_b64`, compatible Hangar versions, and reachable peer addresses.
+### Leader gating
 
-## Status
+`Cluster.IsGCLeader()` returns true iff this node is the lowest-id `Active` peer. GC, scrub and lifecycle schedulers skip their tick body when not the leader. Switches automatically when the current leader goes down.
 
-The cluster's view is exposed on the admin HTTP API:
+### Refcount idempotency
 
-```bash
-curl -s http://10.0.0.1:8080/admin/cluster/status
-```
+Distributed refcount Inc/Dec carries an `op_id` (12-byte hex). The receiver writes a marker key `refop:<op_id>` after applying; subsequent Inc/Dec with the same `op_id` short-circuit. Markers are sweeped after a configurable retention via `PurgeOldRefOps`.
 
-```json
-{
-  "self": "n1",
-  "view_version": 7,
-  "layout_version": 0,
-  "heartbeat_ms": 500,
-  "nodes": [
-    {"id":"n1","addr":"10.0.0.1:7000","status":"active","last_seen_ms":1779025401378,"generation":1},
-    {"id":"n2","addr":"10.0.0.2:7000","status":"active","last_seen_ms":1779025401388,"generation":1},
-    {"id":"n3","addr":"10.0.0.3:7000","status":"down",  "last_seen_ms":1779024401388,"generation":1}
-  ]
-}
-```
+### Pending chunk leases
 
-`status` is one of `active`, `suspect`, `down`, `draining`, `unknown`.
+Pebble-backed `pending:<hash>` keys with a 1h TTL replaced the in-memory map. Survives restart and provides a natural GC safety window for in-flight uploads.
 
-## What replicates and how
+### Layout
 
-| Class               | Mechanism                                        | Notes                                                                  |
-|---------------------|--------------------------------------------------|------------------------------------------------------------------------|
-| Chunks              | HRW → top-2 owners, synchronous fan-out          | Both owners must succeed for the write to return                       |
-| Object metadata     | HRW shard by `bucket+key`, primary + 1 secondary | Primary write synchronous, secondary best-effort async                 |
-| Buckets, S3 keys, SSE keyring, encryption, lifecycle, CORS, tagging, website, logging, object-lock | Pebble write hook → fan-out to all alive peers | Cold-start nodes pull a snapshot on join via `BulkSyncKV` RPC |
-| Refcount (per chunk)| Routed to chunk owners                           | Local Pebble on each owner                                             |
+A signed, versioned, declarative description of cluster topology. Includes node IDs, addresses, zones, capacities, tags. HMAC-SHA256 signed with the cluster shared secret. Stored at `cluster:layout:<v>` plus `cluster:layout:current` pointer in Pebble. Layout is replicated like other system state; on receive, the node hot-reloads. HRW weighting picks up `Capacity` automatically.
 
-## Failure behaviour
-
-- A peer that misses three heartbeats flips to `down`. Active peers stop being eligible HRW owners.
-- Reads fall back from primary to secondary on metadata; chunk reads try each owner in turn.
-- When a `down` peer comes back, its first heartbeat marks it `active` again and a fresh `BulkSyncKV` pull catches it up on replicated KV state.
-- GC, scrub and lifecycle pause on non-leaders; the lowest-id alive node owns the schedule.
-
-## Cluster interop harness
-
-`tools/clusterinterop/` runs a fixed sequence of cross-node S3 scenarios against two running nodes:
-
-```bash
-cd tools/clusterinterop && go build -o /tmp/clusterinterop .
-S3_AK=<ak> S3_SK=<sk> S3_BUCKET=<bucket> \
-S3_A=http://10.0.0.1:9000 S3_B=http://10.0.0.2:9000 \
-/tmp/clusterinterop
-```
-
-Scenarios: small PUT on A → GET on B, medium PUT on B → GET on A, cross-node LIST, dedup, cross-node DELETE propagation, multipart upload on A → GET on B.
-
-## Limitations
-
-- Replication factor for chunks is fixed at 2; configurable EC `k+m` is on the roadmap.
-- Reads on metadata can briefly observe a stale value after a primary write returns before the async secondary fan-out lands. Strong reads always hit the primary.
-- No multi-DC awareness yet.
-- No TLS on the dRPC layer — use a VPN/VPC.
-- All cluster nodes must run the same Hangar version. Rolling upgrades are not supported.
-- Cluster topology is static (TOML `peers`). Adding a node requires updating every node's config and restarting.
-
-## Recipe: bring up a fresh two-node cluster
+## Setup — two-node cluster
 
 ```bash
 SECRET=$(head -c 32 /dev/urandom | base64)
@@ -119,21 +116,138 @@ interval_hours = 24
 [cluster]
 enabled = true
 node_id = "n1"
-listen = "127.0.0.1:7091"
+listen = "10.0.0.1:7000"
 shared_secret_b64 = "$SECRET"
-peers = ["n2@127.0.0.1:7092"]
-heartbeat_ms = 200
+peers = ["n2@10.0.0.2:7000"]
+heartbeat_ms = 500
 EOF
 
-# similar config for n2 with swapped ids/ports/peers
+# same for n2, with swapped node_id / listen / peers / ports
 
 hangar server --config /etc/hangar/n1.toml &
 hangar server --config /etc/hangar/n2.toml &
 
-# create state on n1, observe replication on n2
-hangar bucket  create   --server http://127.0.0.1:8091 mybucket
-hangar s3keys  create   --server http://127.0.0.1:8091 --perm admin
+# create state on n1; n2 picks it up
+hangar bucket create  --server http://10.0.0.1:8091 mybucket
+hangar s3keys create  --server http://10.0.0.1:8091 --perm admin
 
-curl http://127.0.0.1:8092/admin/buckets   # bucket mybucket present
-curl http://127.0.0.1:8092/admin/s3keys    # key replicated
+# query state
+hangar cluster status --server http://10.0.0.1:8091
+hangar cluster status --server http://10.0.0.2:8091
 ```
+
+## Configuration reference
+
+```toml
+[cluster]
+enabled                = false             # default off
+node_id                = "n1"              # unique, stable
+listen                 = "10.0.0.1:7000"   # dRPC bind
+shared_secret_b64      = "<base64 32 bytes>"
+peers                  = ["n2@10.0.0.2:7000", "n3@10.0.0.3:7000"]
+heartbeat_ms           = 500
+ec_data_shards         = 4                  # reserved (not yet wired)
+ec_parity_shards       = 2                  # reserved
+meta_shards            = 256                # reserved
+metadata_sync_quorum   = false              # reserved
+```
+
+## CLI
+
+```bash
+hangar cluster status                        # JSON view: self, view_version, layout_version, nodes
+hangar cluster layout show                   # current applied layout
+hangar cluster layout apply <path.json>      # bump layout version
+```
+
+Layout JSON:
+
+```json
+{
+  "version": 2,
+  "nodes": [
+    {"id": "n1", "addr": "10.0.0.1:7000", "capacity": 1000, "zone": "rack-a"},
+    {"id": "n2", "addr": "10.0.0.2:7000", "capacity": 1000, "zone": "rack-b"},
+    {"id": "n3", "addr": "10.0.0.3:7000", "capacity":  500, "zone": "rack-a"}
+  ]
+}
+```
+
+`version` must be strictly greater than the currently applied version. The server signs the layout with the cluster shared secret on apply.
+
+## Admin HTTP API
+
+```
+GET  /admin/cluster/status     → cluster view + layout version
+GET  /admin/cluster/layout     → current signed layout
+PUT  /admin/cluster/layout     → apply a new layout (version must increase)
+```
+
+## Observability
+
+When `metrics.enabled = true`:
+
+| Metric                                  | Type  | Meaning                                         |
+|-----------------------------------------|-------|-------------------------------------------------|
+| `hangar_cluster_view_version`           | gauge | Monotonic membership view version               |
+| `hangar_cluster_layout_version`         | gauge | Currently applied layout version                |
+| `hangar_cluster_alive_peers`            | gauge | Count of peers in `active` status               |
+| `hangar_cluster_total_peers`            | gauge | Total peers known (self included)               |
+| `hangar_cluster_gc_leader`              | gauge | 1 if this node owns GC/scrub/lifecycle, else 0  |
+| `hangar_cluster_ec_data_shards`         | gauge | Configured EC k (reserved)                      |
+| `hangar_cluster_ec_parity_shards`       | gauge | Configured EC m (reserved)                      |
+
+Sampled every 5s from the cluster runtime.
+
+## Failure scenarios
+
+| Scenario                              | Behaviour                                                                                                        |
+|---------------------------------------|------------------------------------------------------------------------------------------------------------------|
+| Peer crashes                          | Heartbeat misses → `down` in 3× `heartbeat_ms`. HRW skips it. Reads fall through to remaining owners.            |
+| Peer recovers                         | Heartbeat → `active`. The recovering node receives a `BulkSyncKV` snapshot on its end. Other nodes catch it up on per-key WAL via `ReplicaCatchup`. |
+| Peer joins fresh (empty DB)           | Same as recovery + the new node's bootstrap pull populates system state.                                          |
+| Layout change                         | New layout signed, applied on one node, replicated to peers, hot-reloaded. Anti-entropy worker rebalances chunks. |
+| Write to single-alive cluster          | RF=2 fan-out succeeds with 1/2 stored. Anti-entropy backfills the missing replica once the peer returns.         |
+| GC leader dies                        | Lowest-id alive peer takes over on the next tick. No coordination.                                                |
+| Concurrent layout apply               | The layout endpoint rejects stale versions. Last write with the highest version wins.                            |
+
+## Interop harness
+
+`tools/clusterinterop/` runs cross-node S3 scenarios against a live two-node cluster:
+
+```bash
+cd tools/clusterinterop && go build -o /tmp/clusterinterop .
+
+# normal scenarios — requires the cluster already running
+S3_AK=<ak> S3_SK=<sk> S3_BUCKET=<bucket> \
+S3_A=http://127.0.0.1:9101 S3_B=http://127.0.0.1:9102 \
+/tmp/clusterinterop
+
+# WAL catchup — orchestrates the whole scenario incl. process kill/restart
+HANGAR_BIN=/tmp/hangar CLUSTER_SECRET=$(head -c 32 /dev/urandom | base64) \
+/tmp/clusterinterop wal-catchup
+```
+
+Scenarios covered: PUT-A→GET-B small, PUT-B→GET-A medium, cross-node LIST, dedup, cross-node DELETE propagation, multipart upload on A → GET on B, kill-B-PUT-on-A-restart-B-verify-via-WAL.
+
+## Limitations & non-goals
+
+- **Replication factor** is fixed at 2 for chunks. Configurable EC `k+m` is reserved in config but not yet wired into the placement path. Storage parity with MinIO comes when EC lands.
+- **Reads on metadata** can briefly observe a stale value after a primary commit but before the async secondary fan-out lands. Strong reads always hit the primary.
+- **No multi-DC** awareness. Single-zone cluster only. Latency-sensitive WAN deployment is explicitly out of scope.
+- **No TLS** on the dRPC layer — assume VPN/WireGuard/VPC.
+- **Same version everywhere** — rolling upgrades not supported. Stop, upgrade, restart.
+- **Static topology** — adding/removing a node requires editing the peers list on every node and restarting. The layout CLI changes weighting and zone metadata but not membership.
+- **No cross-bucket transactions** — same as AWS S3.
+- **List ops are eventually consistent across nodes** when secondaries are catching up.
+- **No EC-aware repair** yet — anti-entropy currently expects whole chunks, not parity shards.
+
+## Tuning
+
+| Parameter             | Default        | When to change                                                  |
+|-----------------------|----------------|-----------------------------------------------------------------|
+| `heartbeat_ms`        | 500            | Lower for faster failure detection (LAN); raise on noisy links. |
+| Anti-entropy interval | 1h (hardcoded) | Lower on small clusters or frequent layout changes.             |
+| WAL retention         | 24h            | Raise if peers can be offline for >24h. Below 24h risks gaps.   |
+| Pending lease TTL     | 1h             | Window for in-flight uploads before GC reclaims orphans.        |
+| Catchup loop interval | 15s            | Frequency of "peer just came back, pull from it" check.         |
