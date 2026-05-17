@@ -6,6 +6,8 @@ import (
 	"time"
 )
 
+const ProtoVersion uint32 = 1
+
 type Bridge interface {
 	VerifyHello(h *Hello, now time.Time) error
 	BuildHeartbeat() *Heartbeat
@@ -73,13 +75,14 @@ func (s *Server) Handshake(ctx context.Context, h *Hello) (*HelloAck, error) {
 	}
 
 	if err := s.bridge.VerifyHello(h, time.Now()); err != nil {
-		return &HelloAck{Accepted: false, Reason: err.Error()}, nil
+		return &HelloAck{Accepted: false, Reason: err.Error(), ProtoVersion: ProtoVersion}, nil
 	}
 
 	return &HelloAck{
 		Accepted:      true,
 		ViewVersion:   s.bridge.ViewVersion(),
 		LayoutVersion: s.bridge.LayoutVersion(),
+		ProtoVersion:  ProtoVersion,
 	}, nil
 }
 

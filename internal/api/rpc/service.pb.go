@@ -27,6 +27,7 @@ type Hello struct {
 	Nonce         []byte                 `protobuf:"bytes,2,opt,name=nonce,proto3" json:"nonce,omitempty"`
 	Ts            int64                  `protobuf:"varint,3,opt,name=ts,proto3" json:"ts,omitempty"`
 	Hmac          []byte                 `protobuf:"bytes,4,opt,name=hmac,proto3" json:"hmac,omitempty"`
+	ProtoVersion  uint32                 `protobuf:"varint,5,opt,name=proto_version,json=protoVersion,proto3" json:"proto_version,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -89,12 +90,20 @@ func (x *Hello) GetHmac() []byte {
 	return nil
 }
 
+func (x *Hello) GetProtoVersion() uint32 {
+	if x != nil {
+		return x.ProtoVersion
+	}
+	return 0
+}
+
 type HelloAck struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Accepted      bool                   `protobuf:"varint,1,opt,name=accepted,proto3" json:"accepted,omitempty"`
 	Reason        string                 `protobuf:"bytes,2,opt,name=reason,proto3" json:"reason,omitempty"`
 	ViewVersion   uint64                 `protobuf:"varint,3,opt,name=view_version,json=viewVersion,proto3" json:"view_version,omitempty"`
 	LayoutVersion uint64                 `protobuf:"varint,4,opt,name=layout_version,json=layoutVersion,proto3" json:"layout_version,omitempty"`
+	ProtoVersion  uint32                 `protobuf:"varint,5,opt,name=proto_version,json=protoVersion,proto3" json:"proto_version,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -153,6 +162,13 @@ func (x *HelloAck) GetViewVersion() uint64 {
 func (x *HelloAck) GetLayoutVersion() uint64 {
 	if x != nil {
 		return x.LayoutVersion
+	}
+	return 0
+}
+
+func (x *HelloAck) GetProtoVersion() uint32 {
+	if x != nil {
+		return x.ProtoVersion
 	}
 	return 0
 }
@@ -2005,17 +2021,19 @@ var File_internal_api_rpc_service_proto protoreflect.FileDescriptor
 
 const file_internal_api_rpc_service_proto_rawDesc = "" +
 	"\n" +
-	"\x1einternal/api/rpc/service.proto\x12\x11hangar.cluster.v1\"Z\n" +
+	"\x1einternal/api/rpc/service.proto\x12\x11hangar.cluster.v1\"\x7f\n" +
 	"\x05Hello\x12\x17\n" +
 	"\anode_id\x18\x01 \x01(\tR\x06nodeId\x12\x14\n" +
 	"\x05nonce\x18\x02 \x01(\fR\x05nonce\x12\x0e\n" +
 	"\x02ts\x18\x03 \x01(\x03R\x02ts\x12\x12\n" +
-	"\x04hmac\x18\x04 \x01(\fR\x04hmac\"\x88\x01\n" +
+	"\x04hmac\x18\x04 \x01(\fR\x04hmac\x12#\n" +
+	"\rproto_version\x18\x05 \x01(\rR\fprotoVersion\"\xad\x01\n" +
 	"\bHelloAck\x12\x1a\n" +
 	"\baccepted\x18\x01 \x01(\bR\baccepted\x12\x16\n" +
 	"\x06reason\x18\x02 \x01(\tR\x06reason\x12!\n" +
 	"\fview_version\x18\x03 \x01(\x04R\vviewVersion\x12%\n" +
-	"\x0elayout_version\x18\x04 \x01(\x04R\rlayoutVersion\"\xe3\x01\n" +
+	"\x0elayout_version\x18\x04 \x01(\x04R\rlayoutVersion\x12#\n" +
+	"\rproto_version\x18\x05 \x01(\rR\fprotoVersion\"\xe3\x01\n" +
 	"\tHeartbeat\x12\x17\n" +
 	"\anode_id\x18\x01 \x01(\tR\x06nodeId\x12\x1e\n" +
 	"\n" +

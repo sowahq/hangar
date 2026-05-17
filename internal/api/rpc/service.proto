@@ -5,10 +5,11 @@ package hangar.cluster.v1;
 option go_package = "github.com/anhostfr/hangar/internal/api/rpc;rpc";
 
 message Hello {
-  string node_id = 1;
-  bytes  nonce   = 2;
-  int64  ts      = 3;
-  bytes  hmac    = 4;
+  string node_id       = 1;
+  bytes  nonce         = 2;
+  int64  ts            = 3;
+  bytes  hmac          = 4;
+  uint32 proto_version = 5;
 }
 
 message HelloAck {
@@ -16,6 +17,7 @@ message HelloAck {
   string reason         = 2;
   uint64 view_version   = 3;
   uint64 layout_version = 4;
+  uint32 proto_version  = 5;
 }
 
 message Heartbeat {

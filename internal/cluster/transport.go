@@ -17,10 +17,13 @@ import (
 
 var (
 	ErrAuthFailed      = errors.New("hmac handshake failed")
+	ErrVersionMismatch = errors.New("protocol version mismatch")
 	ErrPeerUnavailable = errors.New("peer unavailable")
 )
 
 const HandshakeWindow = 30 * time.Second
+
+const ProtoVersion = rpc.ProtoVersion
 
 func BuildHello(nodeID string, secret []byte) (*rpc.Hello, error) {
 	nonce := make([]byte, 16)
@@ -31,10 +34,11 @@ func BuildHello(nodeID string, secret []byte) (*rpc.Hello, error) {
 	ts := time.Now().UnixMilli()
 
 	return &rpc.Hello{
-		NodeId: nodeID,
-		Nonce:  nonce,
-		Ts:     ts,
-		Hmac:   helloMAC(secret, nodeID, nonce, ts),
+		NodeId:       nodeID,
+		Nonce:        nonce,
+		Ts:           ts,
+		Hmac:         helloMAC(secret, nodeID, nonce, ts),
+		ProtoVersion: ProtoVersion,
 	}, nil
 }
 
@@ -72,6 +76,14 @@ func VerifyHello(h *rpc.Hello, secret []byte, knownPeers map[string]struct{}, no
 	expected := helloMAC(secret, h.NodeId, h.Nonce, h.Ts)
 	if !hmac.Equal(expected, h.Hmac) {
 		return ErrAuthFailed
+	}
+
+	peer := h.ProtoVersion
+	if peer == 0 {
+		peer = 1
+	}
+	if peer != ProtoVersion {
+		return ErrVersionMismatch
 	}
 
 	return nil
@@ -118,6 +130,15 @@ func handshakeOver(ctx context.Context, tr net.Conn, nodeID string, secret []byt
 			return nil, nil, ErrAuthFailed
 		}
 		return nil, nil, errors.New("handshake rejected: " + reason)
+	}
+
+	peer := ack.ProtoVersion
+	if peer == 0 {
+		peer = 1
+	}
+	if peer != ProtoVersion {
+		_ = conn.Close()
+		return nil, nil, ErrVersionMismatch
 	}
 
 	return conn, ack, nil

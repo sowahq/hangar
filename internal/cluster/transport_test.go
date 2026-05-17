@@ -176,6 +176,29 @@ func TestVerifyHello(t *testing.T) {
 			secret: secret,
 			now:    now,
 		},
+		{
+			name: "proto version zero treated as v1",
+			hello: func(t *testing.T) *rpc.Hello {
+				h := mkHello(t, "n1", secret, 0)
+				h.ProtoVersion = 0
+				return h
+			},
+			peers:  peers,
+			secret: secret,
+			now:    now,
+		},
+		{
+			name: "proto version mismatch",
+			hello: func(t *testing.T) *rpc.Hello {
+				h := mkHello(t, "n1", secret, 0)
+				h.ProtoVersion = ProtoVersion + 1
+				return h
+			},
+			peers:  peers,
+			secret: secret,
+			now:    now,
+			want:   ErrVersionMismatch,
+		},
 	}
 
 	for _, tc := range cases {
@@ -285,6 +308,62 @@ func TestDialHandshakeRejected(t *testing.T) {
 	_, _, err := DialTransport(ctx, cli, "n1", wrong)
 	if err == nil {
 		t.Fatalf("expected error, got nil")
+	}
+}
+
+func TestDialHandshakeVersionMismatch(t *testing.T) {
+	secret := testSecret(0x42)
+	peers := map[string]struct{}{"n1": {}}
+
+	impl := &handshakeMismatchImpl{secret: secret, peers: peers}
+	cli, stop := startHandshakeServerVM(t, impl)
+	defer stop()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	_, _, err := DialTransport(ctx, cli, "n1", secret)
+	if err != ErrVersionMismatch {
+		t.Fatalf("got %v want %v", err, ErrVersionMismatch)
+	}
+}
+
+type handshakeMismatchImpl struct {
+	rpc.DRPCClusterUnimplementedServer
+	secret []byte
+	peers  map[string]struct{}
+}
+
+func (h *handshakeMismatchImpl) Handshake(ctx context.Context, hello *rpc.Hello) (*rpc.HelloAck, error) {
+	if err := VerifyHello(hello, h.secret, h.peers, time.Now()); err != nil {
+		return &rpc.HelloAck{Accepted: false, Reason: err.Error()}, nil
+	}
+	return &rpc.HelloAck{Accepted: true, ProtoVersion: ProtoVersion + 1}, nil
+}
+
+func startHandshakeServerVM(t *testing.T, impl *handshakeMismatchImpl) (net.Conn, func()) {
+	t.Helper()
+
+	mux := drpcmux.New()
+	if err := rpc.DRPCRegisterCluster(mux, impl); err != nil {
+		t.Fatalf("register: %v", err)
+	}
+	srv := drpcserver.New(mux)
+	c, s := net.Pipe()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		_ = srv.ServeOne(ctx, s)
+	}()
+
+	return c, func() {
+		cancel()
+		_ = s.Close()
+		_ = c.Close()
+		wg.Wait()
 	}
 }
 
