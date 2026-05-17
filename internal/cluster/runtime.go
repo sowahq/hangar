@@ -126,19 +126,31 @@ func (r *Runtime) Bootstrap(ctx context.Context, seeds []string) error {
 		return nil
 	}
 
+	const maxAttempts = 30
+	backoff := 500 * time.Millisecond
 	var lastErr error
-	for _, addr := range seeds {
-		if err := r.joinViaSeed(ctx, addr); err != nil {
-			lastErr = err
-			continue
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		for _, addr := range seeds {
+			if err := r.joinViaSeed(ctx, addr); err != nil {
+				lastErr = err
+				continue
+			}
+			r.reconcilePeers()
+			return nil
 		}
-		r.reconcilePeers()
-		return nil
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(backoff):
+		}
+		if backoff < 5*time.Second {
+			backoff += 500 * time.Millisecond
+		}
 	}
 	if lastErr == nil {
 		lastErr = errors.New("no seeds provided")
 	}
-	return fmt.Errorf("cluster: failed to join via seeds: %w", lastErr)
+	return fmt.Errorf("cluster: failed to join via seeds after %d attempts: %w", maxAttempts, lastErr)
 }
 
 func (r *Runtime) selfLayoutNode() LayoutNode {

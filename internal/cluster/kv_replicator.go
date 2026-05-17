@@ -24,6 +24,9 @@ var ReplicatedPrefixes = [][]byte{
 	[]byte("website:"),
 	[]byte("logging:"),
 	[]byte("cluster:layout:"),
+	[]byte("mpu:"),
+	[]byte("mpupart:"),
+	[]byte("version:"),
 }
 
 func isReplicated(key []byte) bool {

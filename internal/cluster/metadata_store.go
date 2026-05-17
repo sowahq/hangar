@@ -88,15 +88,20 @@ func (s *ClusteredMetadataStore) replicateAsync(targets []NodeID, bucket, key st
 func (s *ClusteredMetadataStore) GetRaw(bucket, key string) ([]byte, error) {
 	owners := s.owners(bucket, key)
 	var lastErr error
+	notFoundCount := 0
 	for _, id := range owners {
 		raw, err := s.getFrom(id, bucket, key)
 		if err == nil {
 			return raw, nil
 		}
 		if errors.Is(err, pebble.ErrNotFound) {
-			return nil, pebble.ErrNotFound
+			notFoundCount++
+			continue
 		}
 		lastErr = err
+	}
+	if notFoundCount == len(owners) {
+		return nil, pebble.ErrNotFound
 	}
 	if lastErr == nil {
 		return nil, pebble.ErrNotFound

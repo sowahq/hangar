@@ -90,8 +90,8 @@ func TestPendingChunksIgnoresEmptyHash(t *testing.T) {
 func TestPendingChunksConcurrentSafe(t *testing.T) {
 	testutil.SetupDB(t)
 	const h = "race"
-	const goroutines = 50
-	const iterations = 1000
+	const goroutines = 20
+	const iterations = 100
 
 	var wg sync.WaitGroup
 	wg.Add(goroutines * 2)

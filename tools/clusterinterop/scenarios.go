@@ -20,14 +20,18 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
 
 type clusterHarness struct {
-	binary string
-	root   string
-	secret string
-	nodes  map[string]*harnessNode
+	binary    string
+	root      string
+	secret    string
+	nodes     map[string]*harnessNode
+	portBase  int
 }
+
+var globalPortBase int64
 
 type harnessNode struct {
 	id       string
@@ -62,7 +66,12 @@ func newHarness(label string) *clusterHarness {
 	if err := os.MkdirAll(root, 0o755); err != nil {
 		log.Fatal(err)
 	}
-	return &clusterHarness{binary: binary, root: root, secret: secret, nodes: map[string]*harnessNode{}}
+	base := int(atomic.AddInt64(&globalPortBase, 100))
+	return &clusterHarness{binary: binary, root: root, secret: secret, nodes: map[string]*harnessNode{}, portBase: base}
+}
+
+func (h *clusterHarness) port(off int) int {
+	return 30000 + h.portBase + off
 }
 
 func (h *clusterHarness) addNode(id string, api, s3p, rpc int, seedAddrs []string, extraSecret ...string) *harnessNode {
@@ -206,8 +215,8 @@ func (c *cmdShim) CombinedOutput() ([]byte, error) {
 func runScenarioBasic() {
 	h := newHarness("basic")
 	defer h.cleanup()
-	h.addNode("a", 18091, 19101, 17091, nil)
-	h.addNode("b", 18092, 19102, 17092, []string{"127.0.0.1:17091"})
+	h.addNode("a", h.port(0), h.port(10), h.port(20), nil)
+	h.addNode("b", h.port(1), h.port(11), h.port(21), []string{fmt.Sprintf("127.0.0.1:%d", h.port(20))})
 	h.start("a")
 	h.waitReady("a", 5*time.Second)
 	h.start("b")
@@ -238,9 +247,9 @@ func runScenarioBasic() {
 func runScenarioDrain() {
 	h := newHarness("drain")
 	defer h.cleanup()
-	h.addNode("a", 18091, 19101, 17091, nil)
-	h.addNode("b", 18092, 19102, 17092, []string{"127.0.0.1:17091"})
-	h.addNode("c", 18093, 19103, 17093, []string{"127.0.0.1:17091"})
+	h.addNode("a", h.port(0), h.port(10), h.port(20), nil)
+	h.addNode("b", h.port(1), h.port(11), h.port(21), []string{fmt.Sprintf("127.0.0.1:%d", h.port(20))})
+	h.addNode("c", h.port(2), h.port(12), h.port(22), []string{fmt.Sprintf("127.0.0.1:%d", h.port(20))})
 	h.start("a")
 	h.waitReady("a", 5*time.Second)
 	h.start("b")
@@ -306,8 +315,8 @@ func countChunksOnNode(dataDir string) int {
 func runScenarioConcurrent() {
 	h := newHarness("concurrent")
 	defer h.cleanup()
-	h.addNode("a", 18091, 19101, 17091, nil)
-	h.addNode("b", 18092, 19102, 17092, []string{"127.0.0.1:17091"})
+	h.addNode("a", h.port(0), h.port(10), h.port(20), nil)
+	h.addNode("b", h.port(1), h.port(11), h.port(21), []string{fmt.Sprintf("127.0.0.1:%d", h.port(20))})
 	h.start("a")
 	h.waitReady("a", 5*time.Second)
 	h.start("b")
@@ -375,8 +384,8 @@ func runScenarioConcurrent() {
 func runScenarioSeedFailover() {
 	h := newHarness("seedfailover")
 	defer h.cleanup()
-	h.addNode("a", 18091, 19101, 17091, nil)
-	h.addNode("b", 18092, 19102, 17092, []string{"127.0.0.1:17091"})
+	h.addNode("a", h.port(0), h.port(10), h.port(20), nil)
+	h.addNode("b", h.port(1), h.port(11), h.port(21), []string{fmt.Sprintf("127.0.0.1:%d", h.port(20))})
 	h.start("a")
 	h.waitReady("a", 5*time.Second)
 	h.start("b")
@@ -387,7 +396,7 @@ func runScenarioSeedFailover() {
 	h.stop("a")
 	time.Sleep(1500 * time.Millisecond)
 
-	h.addNode("c", 18093, 19103, 17093, []string{"127.0.0.1:17091", "127.0.0.1:17092"})
+	h.addNode("c", h.port(2), h.port(12), h.port(22), []string{fmt.Sprintf("127.0.0.1:%d", h.port(20)), fmt.Sprintf("127.0.0.1:%d", h.port(21))})
 	h.start("c")
 	h.waitReady("c", 5*time.Second)
 	time.Sleep(2 * time.Second)
@@ -410,7 +419,7 @@ func runScenarioSeedFailover() {
 func runScenarioWrongSecret() {
 	h := newHarness("wrongsecret")
 	defer h.cleanup()
-	h.addNode("a", 18091, 19101, 17091, nil)
+	h.addNode("a", h.port(0), h.port(10), h.port(20), nil)
 	h.start("a")
 	h.waitReady("a", 5*time.Second)
 
@@ -420,7 +429,7 @@ func runScenarioWrongSecret() {
 	}
 	badSecret := base64.StdEncoding.EncodeToString(rawBad)
 
-	h.addNode("b", 18092, 19102, 17092, []string{"127.0.0.1:17091"}, badSecret)
+	h.addNode("b", h.port(1), h.port(11), h.port(21), []string{fmt.Sprintf("127.0.0.1:%d", h.port(20))}, badSecret)
 	h.start("b")
 	time.Sleep(3 * time.Second)
 
@@ -440,8 +449,8 @@ func runScenarioWrongSecret() {
 func runScenarioAntiEntropy() {
 	h := newHarness("ae")
 	defer h.cleanup()
-	h.addNode("a", 18091, 19101, 17091, nil)
-	h.addNode("b", 18092, 19102, 17092, []string{"127.0.0.1:17091"})
+	h.addNode("a", h.port(0), h.port(10), h.port(20), nil)
+	h.addNode("b", h.port(1), h.port(11), h.port(21), []string{fmt.Sprintf("127.0.0.1:%d", h.port(20))})
 	h.start("a")
 	h.waitReady("a", 5*time.Second)
 	h.start("b")
@@ -490,8 +499,8 @@ func runScenarioAntiEntropy() {
 func runScenarioAddRemove() {
 	h := newHarness("addremove")
 	defer h.cleanup()
-	h.addNode("a", 18091, 19101, 17091, nil)
-	h.addNode("b", 18092, 19102, 17092, []string{"127.0.0.1:17091"})
+	h.addNode("a", h.port(0), h.port(10), h.port(20), nil)
+	h.addNode("b", h.port(1), h.port(11), h.port(21), []string{fmt.Sprintf("127.0.0.1:%d", h.port(20))})
 	h.start("a")
 	h.waitReady("a", 5*time.Second)
 	h.start("b")
@@ -508,7 +517,7 @@ func runScenarioAddRemove() {
 		log.Fatalf("put pre-remove: %v", err)
 	}
 
-	h.addNode("c", 18093, 19103, 17093, []string{"127.0.0.1:17091"})
+	h.addNode("c", h.port(2), h.port(12), h.port(22), []string{fmt.Sprintf("127.0.0.1:%d", h.port(20))})
 	h.start("c")
 	h.waitReady("c", 5*time.Second)
 	h.waitConverge("a", 3, 10*time.Second)
@@ -539,8 +548,8 @@ func runScenarioLongRun() {
 	}
 	h := newHarness("longrun")
 	defer h.cleanup()
-	h.addNode("a", 18091, 19101, 17091, nil)
-	h.addNode("b", 18092, 19102, 17092, []string{"127.0.0.1:17091"})
+	h.addNode("a", h.port(0), h.port(10), h.port(20), nil)
+	h.addNode("b", h.port(1), h.port(11), h.port(21), []string{fmt.Sprintf("127.0.0.1:%d", h.port(20))})
 	h.start("a")
 	h.waitReady("a", 5*time.Second)
 	h.start("b")
@@ -585,6 +594,313 @@ func runScenarioLongRun() {
 	fmt.Println("LONG-RUN OK")
 }
 
+func runScenarioLargeMultipart() {
+	h := newHarness("largempu")
+	defer h.cleanup()
+	h.addNode("a", h.port(0), h.port(10), h.port(20), nil)
+	h.addNode("b", h.port(1), h.port(11), h.port(21), []string{fmt.Sprintf("127.0.0.1:%d", h.port(20))})
+	h.start("a")
+	h.waitReady("a", 5*time.Second)
+	h.start("b")
+	h.waitReady("b", 5*time.Second)
+	h.waitConverge("a", 2, 5*time.Second)
+	h.createBucket("a", "testbucket")
+	ak, sk := h.createS3Key("a")
+	time.Sleep(500 * time.Millisecond)
+
+	a := h.s3Client("a", ak, sk)
+	b := h.s3Client("b", ak, sk)
+
+	key := "large/blob.bin"
+	const totalSize = 50 * 1024 * 1024
+	const partSize = 5 * 1024 * 1024
+
+	ini, err := a.CreateMultipartUpload(context.Background(), &s3.CreateMultipartUploadInput{Bucket: aws.String("testbucket"), Key: aws.String(key)})
+	if err != nil {
+		log.Fatalf("init mpu: %v", err)
+	}
+
+	parts := []s3types.CompletedPart{}
+	fullBody := make([]byte, totalSize)
+	if _, err := rand.Read(fullBody); err != nil {
+		log.Fatal(err)
+	}
+	partNum := int32(1)
+	for off := 0; off < totalSize; off += partSize {
+		end := off + partSize
+		if end > totalSize {
+			end = totalSize
+		}
+		client := a
+		if partNum%2 == 0 {
+			client = b
+		}
+		up, err := client.UploadPart(context.Background(), &s3.UploadPartInput{
+			Bucket: aws.String("testbucket"), Key: aws.String(key),
+			UploadId: ini.UploadId, PartNumber: aws.Int32(partNum),
+			Body: bytes.NewReader(fullBody[off:end]),
+		})
+		if err != nil {
+			log.Fatalf("upload part %d: %v", partNum, err)
+		}
+		parts = append(parts, s3types.CompletedPart{PartNumber: aws.Int32(partNum), ETag: up.ETag})
+		partNum++
+	}
+
+	if _, err := a.CompleteMultipartUpload(context.Background(), &s3.CompleteMultipartUploadInput{
+		Bucket: aws.String("testbucket"), Key: aws.String(key), UploadId: ini.UploadId,
+		MultipartUpload: &s3types.CompletedMultipartUpload{Parts: parts},
+	}); err != nil {
+		log.Fatalf("complete: %v", err)
+	}
+
+	time.Sleep(500 * time.Millisecond)
+	got, err := b.GetObject(context.Background(), &s3.GetObjectInput{Bucket: aws.String("testbucket"), Key: aws.String(key)})
+	if err != nil {
+		log.Fatalf("get from B: %v", err)
+	}
+	body, _ := io.ReadAll(got.Body)
+	got.Body.Close()
+	if !bytes.Equal(body, fullBody) {
+		log.Fatalf("body mismatch: got %d bytes want %d", len(body), totalSize)
+	}
+	fmt.Printf("LARGE-MULTIPART OK (%d MB round-trip cross-node)\n", totalSize/1024/1024)
+}
+
+func runScenarioRollingRestart() {
+	h := newHarness("rolling")
+	defer h.cleanup()
+	h.addNode("a", h.port(0), h.port(10), h.port(20), nil)
+	h.addNode("b", h.port(1), h.port(11), h.port(21), []string{fmt.Sprintf("127.0.0.1:%d", h.port(20))})
+	h.addNode("c", h.port(2), h.port(12), h.port(22), []string{fmt.Sprintf("127.0.0.1:%d", h.port(20))})
+	for _, id := range []string{"a", "b", "c"} {
+		h.start(id)
+		h.waitReady(id, 5*time.Second)
+	}
+	h.waitConverge("a", 3, 10*time.Second)
+	h.createBucket("a", "testbucket")
+	ak, sk := h.createS3Key("a")
+	time.Sleep(500 * time.Millisecond)
+	a := h.s3Client("a", ak, sk)
+
+	payloads := map[string][]byte{}
+	for i := 0; i < 12; i++ {
+		key := fmt.Sprintf("rolling/o%d.bin", i)
+		body := make([]byte, 32*1024)
+		_, _ = rand.Read(body)
+		if _, err := a.PutObject(context.Background(), &s3.PutObjectInput{Bucket: aws.String("testbucket"), Key: aws.String(key), Body: bytes.NewReader(body)}); err != nil {
+			log.Fatalf("seed put %s: %v", key, err)
+		}
+		payloads[key] = body
+	}
+
+	for _, id := range []string{"a", "b", "c"} {
+		fmt.Printf("== restart %s ==\n", id)
+		h.stop(id)
+		time.Sleep(1500 * time.Millisecond)
+		h.start(id)
+		h.waitReady(id, 8*time.Second)
+		other := "b"
+		if id == "b" {
+			other = "c"
+		}
+		h.waitConverge(other, 3, 10*time.Second)
+		time.Sleep(2 * time.Second)
+	}
+
+	clients := []*s3.Client{
+		h.s3Client("a", ak, sk),
+		h.s3Client("b", ak, sk),
+		h.s3Client("c", ak, sk),
+	}
+	for i, cli := range clients {
+		for key, want := range payloads {
+			got, err := cli.GetObject(context.Background(), &s3.GetObjectInput{Bucket: aws.String("testbucket"), Key: aws.String(key)})
+			if err != nil {
+				log.Fatalf("get %s from node %d: %v", key, i, err)
+			}
+			body, _ := io.ReadAll(got.Body)
+			got.Body.Close()
+			if !bytes.Equal(body, want) {
+				log.Fatalf("%s body mismatch on node %d", key, i)
+			}
+		}
+	}
+	fmt.Println("ROLLING-RESTART OK (all 12 objects readable from a/b/c after sequential restarts)")
+}
+
+func runScenarioMajorityKill() {
+	h := newHarness("majkill")
+	defer h.cleanup()
+	h.addNode("a", h.port(0), h.port(10), h.port(20), nil)
+	h.addNode("b", h.port(1), h.port(11), h.port(21), []string{fmt.Sprintf("127.0.0.1:%d", h.port(20))})
+	h.addNode("c", h.port(2), h.port(12), h.port(22), []string{fmt.Sprintf("127.0.0.1:%d", h.port(20))})
+	for _, id := range []string{"a", "b", "c"} {
+		h.start(id)
+		h.waitReady(id, 5*time.Second)
+	}
+	h.waitConverge("a", 3, 10*time.Second)
+	h.createBucket("a", "testbucket")
+	ak, sk := h.createS3Key("a")
+	time.Sleep(500 * time.Millisecond)
+	a := h.s3Client("a", ak, sk)
+
+	payloads := map[string][]byte{}
+	for i := 0; i < 10; i++ {
+		key := fmt.Sprintf("majkill/o%d.bin", i)
+		body := make([]byte, 8192)
+		_, _ = rand.Read(body)
+		if _, err := a.PutObject(context.Background(), &s3.PutObjectInput{Bucket: aws.String("testbucket"), Key: aws.String(key), Body: bytes.NewReader(body)}); err != nil {
+			log.Fatalf("seed put: %v", err)
+		}
+		payloads[key] = body
+	}
+
+	rt, _ := http.Post(h.adminURL("a")+"/admin/cluster/anti-entropy/run", "application/json", nil)
+	if rt != nil {
+		rt.Body.Close()
+	}
+	time.Sleep(1 * time.Second)
+
+	fmt.Println("kill b and c")
+	h.stop("b")
+	h.stop("c")
+	time.Sleep(2 * time.Second)
+
+	missing := 0
+	mismatched := 0
+	for key, want := range payloads {
+		got, err := a.GetObject(context.Background(), &s3.GetObjectInput{Bucket: aws.String("testbucket"), Key: aws.String(key)})
+		if err != nil {
+			missing++
+			continue
+		}
+		body, rerr := io.ReadAll(got.Body)
+		got.Body.Close()
+		if rerr != nil {
+			missing++
+			continue
+		}
+		if !bytes.Equal(body, want) {
+			mismatched++
+			continue
+		}
+	}
+	total := len(payloads)
+	served := total - missing - mismatched
+	fmt.Printf("MAJORITY-KILL served=%d missing=%d mismatched=%d total=%d\n", served, missing, mismatched, total)
+	if mismatched > 0 {
+		log.Fatalf("data integrity issue: %d objects returned wrong bytes", mismatched)
+	}
+	if served < 1 {
+		log.Fatalf("survivor served nothing (expected at least some via local-owner chunks)")
+	}
+	fmt.Printf("MAJORITY-KILL OK (survivor served %d/%d objects after killing 2 of 3; %d unreachable because owned by killed peers)\n", served, total, missing)
+}
+
+func runScenarioSustainedTwoMin() {
+	dur := 120 * time.Second
+	if env := os.Getenv("SUSTAINED_SECONDS"); env != "" {
+		fmt.Sscanf(env, "%d", &dur)
+		dur = dur * time.Second
+	}
+	h := newHarness("sustained")
+	defer h.cleanup()
+	h.addNode("a", h.port(0), h.port(10), h.port(20), nil)
+	h.addNode("b", h.port(1), h.port(11), h.port(21), []string{fmt.Sprintf("127.0.0.1:%d", h.port(20))})
+	h.addNode("c", h.port(2), h.port(12), h.port(22), []string{fmt.Sprintf("127.0.0.1:%d", h.port(20))})
+	for _, id := range []string{"a", "b", "c"} {
+		h.start(id)
+		h.waitReady(id, 5*time.Second)
+	}
+	h.waitConverge("a", 3, 10*time.Second)
+	h.createBucket("a", "testbucket")
+	ak, sk := h.createS3Key("a")
+	time.Sleep(500 * time.Millisecond)
+	clients := []*s3.Client{
+		h.s3Client("a", ak, sk),
+		h.s3Client("b", ak, sk),
+		h.s3Client("c", ak, sk),
+	}
+
+	end := time.Now().Add(dur)
+	var puts, gets int64
+	var errs int64
+	var errSamplesMu sync.Mutex
+	errSamples := []string{}
+	addErrSample := func(kind, msg string) {
+		errSamplesMu.Lock()
+		if len(errSamples) < 5 {
+			errSamples = append(errSamples, kind+": "+msg)
+		}
+		errSamplesMu.Unlock()
+	}
+	var wg sync.WaitGroup
+
+	for w := 0; w < 6; w++ {
+		wg.Add(1)
+		go func(w int) {
+			defer wg.Done()
+			cli := clients[w%len(clients)]
+			seen := []string{}
+			for time.Now().Before(end) {
+				if len(seen) > 0 && time.Now().UnixNano()%3 == 0 {
+					key := seen[time.Now().UnixNano()%int64(len(seen))]
+					readCli := clients[(w+1)%len(clients)]
+					got, err := readCli.GetObject(context.Background(), &s3.GetObjectInput{Bucket: aws.String("testbucket"), Key: aws.String(key)})
+					if err != nil {
+						atomic.AddInt64(&errs, 1)
+						addErrSample("GET", err.Error())
+						continue
+					}
+					_, _ = io.Copy(io.Discard, got.Body)
+					got.Body.Close()
+					atomic.AddInt64(&gets, 1)
+					continue
+				}
+				body := make([]byte, 2048)
+				_, _ = rand.Read(body)
+				key := fmt.Sprintf("sus/w%d/%d", w, time.Now().UnixNano())
+				if _, err := cli.PutObject(context.Background(), &s3.PutObjectInput{Bucket: aws.String("testbucket"), Key: aws.String(key), Body: bytes.NewReader(body)}); err != nil {
+					atomic.AddInt64(&errs, 1)
+					addErrSample("PUT", err.Error())
+					continue
+				}
+				atomic.AddInt64(&puts, 1)
+				seen = append(seen, key)
+				if len(seen) > 50 {
+					seen = seen[len(seen)-50:]
+				}
+			}
+		}(w)
+	}
+
+	tk := time.NewTicker(15 * time.Second)
+	go func() {
+		for {
+			select {
+			case <-tk.C:
+				fmt.Printf("[%s] puts=%d gets=%d errs=%d\n", time.Now().Format("15:04:05"), atomic.LoadInt64(&puts), atomic.LoadInt64(&gets), atomic.LoadInt64(&errs))
+			case <-time.After(dur + 5*time.Second):
+				return
+			}
+		}
+	}()
+
+	wg.Wait()
+	tk.Stop()
+	fmt.Printf("SUSTAINED puts=%d gets=%d errs=%d in %s\n", puts, gets, errs, dur)
+	for _, s := range errSamples {
+		fmt.Println("err sample:", s)
+	}
+	total := puts + gets + errs
+	errRate := float64(errs) / float64(total)
+	if errRate > 0.01 {
+		log.Fatalf("SUSTAINED error rate %.3f%% exceeds 1%% threshold", errRate*100)
+	}
+	fmt.Printf("SUSTAINED OK (error rate %.3f%%)\n", errRate*100)
+}
+
 func dispatchScenario(name string) {
 	switch name {
 	case "basic":
@@ -605,10 +921,19 @@ func dispatchScenario(name string) {
 		runScenarioLongRun()
 	case "wal-catchup":
 		runWALCatchup()
+	case "large-multipart":
+		runScenarioLargeMultipart()
+	case "rolling-restart":
+		runScenarioRollingRestart()
+	case "majority-kill":
+		runScenarioMajorityKill()
+	case "sustained":
+		runScenarioSustainedTwoMin()
 	case "all":
-		for _, s := range []string{"basic", "concurrent", "drain", "add-remove", "seed-failover", "wrong-secret", "anti-entropy", "wal-catchup", "long-run"} {
+		for _, s := range []string{"basic", "concurrent", "drain", "add-remove", "seed-failover", "wrong-secret", "anti-entropy", "wal-catchup", "large-multipart", "rolling-restart", "majority-kill", "long-run"} {
 			fmt.Printf("\n==== SCENARIO: %s ====\n", s)
 			dispatchScenario(s)
+			time.Sleep(2 * time.Second)
 		}
 		fmt.Println("\nALL SCENARIOS OK")
 	default:

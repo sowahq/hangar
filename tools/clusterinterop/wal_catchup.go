@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -136,14 +137,26 @@ func runWALCatchup() {
 		}
 	}
 
+	base := int(atomic.AddInt64(&globalPortBase, 100))
+	apiA := 30000 + base + 0
+	apiB := 30000 + base + 1
+	s3A := 30000 + base + 10
+	s3B := 30000 + base + 11
+	rpcA := 30000 + base + 20
+	rpcB := 30000 + base + 21
+
 	cfgA := filepath.Join(root, "a.toml")
 	cfgB := filepath.Join(root, "b.toml")
-	if err := writeConfig(cfgA, cfgFor(dirA, "a", 18091, 19101, 17091, "", secret)); err != nil {
+	if err := writeConfig(cfgA, cfgFor(dirA, "a", apiA, s3A, rpcA, "", secret)); err != nil {
 		log.Fatal(err)
 	}
-	if err := writeConfig(cfgB, cfgFor(dirB, "b", 18092, 19102, 17092, "127.0.0.1:17091", secret)); err != nil {
+	if err := writeConfig(cfgB, cfgFor(dirB, "b", apiB, s3B, rpcB, fmt.Sprintf("127.0.0.1:%d", rpcA), secret)); err != nil {
 		log.Fatal(err)
 	}
+	adminA := fmt.Sprintf("http://127.0.0.1:%d", apiA)
+	adminB := fmt.Sprintf("http://127.0.0.1:%d", apiB)
+	s3UrlA := fmt.Sprintf("http://127.0.0.1:%d", s3A)
+	s3UrlB := fmt.Sprintf("http://127.0.0.1:%d", s3B)
 
 	procA, err := startNode(binary, cfgA, filepath.Join(root, "a.log"))
 	if err != nil {
@@ -161,23 +174,23 @@ func runWALCatchup() {
 	}()
 
 	fmt.Println("== wait for cluster converge ==")
-	if err := waitHTTP("http://127.0.0.1:18091/status", 5*time.Second); err != nil {
+	if err := waitHTTP(adminA+"/status", 5*time.Second); err != nil {
 		log.Fatal(err)
 	}
-	if err := waitHTTP("http://127.0.0.1:18092/status", 5*time.Second); err != nil {
+	if err := waitHTTP(adminB+"/status", 5*time.Second); err != nil {
 		log.Fatal(err)
 	}
-	if err := waitCluster("http://127.0.0.1:18091", 2, 5*time.Second); err != nil {
+	if err := waitCluster(adminA, 2, 5*time.Second); err != nil {
 		log.Fatal(err)
 	}
 	fmt.Println("converged")
 
-	cmd := exec.Command(binary, "bucket", "create", "--server", "http://127.0.0.1:18091", "walbucket")
+	cmd := exec.Command(binary, "bucket", "create", "--server", adminA, "walbucket")
 	if out, err := cmd.CombinedOutput(); err != nil {
 		log.Fatalf("create bucket: %v: %s", err, out)
 	}
 
-	out, err := exec.Command(binary, "s3keys", "create", "--server", "http://127.0.0.1:18091", "--perm", "admin").CombinedOutput()
+	out, err := exec.Command(binary, "s3keys", "create", "--server", adminA, "--perm", "admin").CombinedOutput()
 	if err != nil {
 		log.Fatalf("s3keys create: %v: %s", err, out)
 	}
@@ -188,15 +201,15 @@ func runWALCatchup() {
 	cfgAWS, _ := config.LoadDefaultConfig(context.Background(),
 		config.WithRegion("us-east-1"),
 		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(ak, sk, "")))
-	cliA := s3.NewFromConfig(cfgAWS, func(o *s3.Options) { o.BaseEndpoint = aws.String("http://127.0.0.1:19101"); o.UsePathStyle = true })
-	cliB := s3.NewFromConfig(cfgAWS, func(o *s3.Options) { o.BaseEndpoint = aws.String("http://127.0.0.1:19102"); o.UsePathStyle = true })
+	cliA := s3.NewFromConfig(cfgAWS, func(o *s3.Options) { o.BaseEndpoint = aws.String(s3UrlA); o.UsePathStyle = true })
+	cliB := s3.NewFromConfig(cfgAWS, func(o *s3.Options) { o.BaseEndpoint = aws.String(s3UrlB); o.UsePathStyle = true })
 
 	fmt.Println("== kill B ==")
 	procB.stop()
 	procB = nil
 	time.Sleep(1500 * time.Millisecond)
 
-	if err := waitCluster("http://127.0.0.1:18091", 1, 5*time.Second); err != nil {
+	if err := waitCluster(adminA, 1, 5*time.Second); err != nil {
 		log.Fatal(err)
 	}
 	fmt.Println("A sees B down")
@@ -218,10 +231,10 @@ func runWALCatchup() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	if err := waitHTTP("http://127.0.0.1:18092/status", 5*time.Second); err != nil {
+	if err := waitHTTP(adminB+"/status", 5*time.Second); err != nil {
 		log.Fatal(err)
 	}
-	if err := waitCluster("http://127.0.0.1:18092", 2, 10*time.Second); err != nil {
+	if err := waitCluster(adminB, 2, 10*time.Second); err != nil {
 		log.Fatal(err)
 	}
 	fmt.Println("B back up; waiting for WAL catchup loop")
