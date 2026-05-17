@@ -126,7 +126,7 @@ func Execute() {
 					if config.S3Enabled() {
 						s3Router = s3.Router()
 						go func() {
-							s3Err <- s3Router.Listen(config.S3BindAddr())
+							s3Err <- s3.Listen(s3Router, config.S3BindAddr())
 						}()
 					}
 

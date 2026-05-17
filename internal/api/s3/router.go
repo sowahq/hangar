@@ -11,6 +11,7 @@ import (
 	"github.com/anhostfr/hangar/internal/service/metrics"
 	"github.com/gofiber/fiber/v2"
 	"github.com/phuslu/log"
+	"github.com/valyala/fasthttp"
 )
 
 func adaptRequest(c *fiber.Ctx) *Request {
@@ -23,9 +24,16 @@ func adaptRequest(c *fiber.Ctx) *Request {
 		h.Set("Host", string(c.Request().Host()))
 	}
 
+	path := string(c.Request().URI().Path())
+	if v := c.Context().UserValue(vhOrigPathKey); v != nil {
+		if s, ok := v.(string); ok {
+			path = s
+		}
+	}
+
 	return &Request{
 		Method:   string(c.Method()),
-		Path:     string(c.Request().URI().Path()),
+		Path:     path,
 		RawQuery: string(c.Request().URI().QueryString()),
 		Headers:  h,
 	}
@@ -89,6 +97,24 @@ func s3AuthError(c *fiber.Ctx, err error) error {
 
 func Router() *fiber.App {
 	return NewRouter(time.Now)
+}
+
+func Listen(app *fiber.App, addr string) error {
+	base := config.S3VirtualHostBase()
+	if base == "" {
+		return app.Listen(addr)
+	}
+	handler := virtualHostWrap(base, app.Handler())
+	server := &fasthttp.Server{
+		Handler:                      handler,
+		MaxRequestBodySize:           1 << 30,
+		StreamRequestBody:            true,
+		DisablePreParseMultipartForm: true,
+		IdleTimeout:                  3 * time.Minute,
+		NoDefaultServerHeader:        true,
+	}
+	log.Info().Msgf("S3 virtual-host addressing enabled (base=%s)", base)
+	return server.ListenAndServe(addr)
 }
 
 func NewRouter(now func() time.Time) *fiber.App {

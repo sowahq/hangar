@@ -48,9 +48,10 @@ type serverConfig struct {
 	} `toml:"rate_limit"`
 
 	S3 struct {
-		Enabled  bool   `toml:"enabled"`
-		BindAddr string `toml:"bind_addr"`
-		Region   string `toml:"region"`
+		Enabled           bool   `toml:"enabled"`
+		BindAddr          string `toml:"bind_addr"`
+		Region            string `toml:"region"`
+		VirtualHostBase   string `toml:"virtual_host_base"`
 	} `toml:"s3"`
 
 	Security struct {
@@ -278,6 +279,15 @@ func S3Region() string {
 		c = DefaultServerConfig()
 	}
 	return c.S3.Region
+}
+
+func S3VirtualHostBase() string {
+	mu.RLock()
+	defer mu.RUnlock()
+	if c == nil {
+		c = DefaultServerConfig()
+	}
+	return c.S3.VirtualHostBase
 }
 
 func RateLimitEnabled() bool {

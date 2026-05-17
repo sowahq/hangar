@@ -10,7 +10,7 @@ This page is the canonical answer to "does Hangar support _X_?". For setup and S
 | Style                                               | Status |
 |-----------------------------------------------------|--------|
 | Path-style (`http://host:9000/bucket/key`)          | ✅     |
-| Virtual-host (`http://bucket.host:9000/key`)        | ❌     |
+| Virtual-host (`http://bucket.host:9000/key`)        | ✅ Set `[s3].virtual_host_base = "host"` to enable. Subdomain extracted as bucket name |
 
 Configure SDKs with `UsePathStyle: true` (Go SDK v2), `s3={"addressing_style":"path"}` (boto3), `--use-path-style` (`mc`), etc.
 
