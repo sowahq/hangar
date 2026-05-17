@@ -2,7 +2,6 @@ package cluster
 
 import (
 	"context"
-	"sync"
 	"time"
 
 	"storj.io/drpc/drpcconn"
@@ -16,45 +15,21 @@ const (
 	backoffMax     = 30 * time.Second
 )
 
-func (c *Cluster) RunHeartbeat(ctx context.Context) error {
-	var wg sync.WaitGroup
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		c.runStaleness(ctx)
-	}()
-
-	for id, addr := range c.cfg.Peers {
-		if id == c.cfg.NodeID {
-			continue
-		}
-		wg.Add(1)
-		go func(id NodeID, addr string) {
-			defer wg.Done()
-			c.peerLoop(ctx, id, addr)
-		}(id, addr)
-	}
-
-	wg.Wait()
-	return ctx.Err()
-}
-
-func (c *Cluster) runStaleness(ctx context.Context) {
+func (c *Cluster) RunStalenessLoop(ctx context.Context) error {
 	t := time.NewTicker(c.HeartbeatInterval())
 	defer t.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
-			return
+			return ctx.Err()
 		case now := <-t.C:
 			c.markStale(now)
 		}
 	}
 }
 
-func (c *Cluster) peerLoop(ctx context.Context, peerID NodeID, addr string) {
+func (c *Cluster) PeerLoop(ctx context.Context, peerID NodeID, addr string) {
 	backoff := backoffInitial
 
 	for {

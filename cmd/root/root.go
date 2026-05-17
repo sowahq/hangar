@@ -152,17 +152,14 @@ func Execute() {
 
 					var clusterRuntime *cluster.Runtime
 					if config.ClusterEnabled() {
-						peers, err := cluster.ParsePeers(config.ClusterPeers())
-						if err != nil {
-							log.Error().Err(err).Msg("Failed to parse cluster peers.")
-							cancel()
-							return err
-						}
-
+						var err error
 						clusterRuntime, err = cluster.Start(ctx, cluster.Config{
 							NodeID:      cluster.NodeID(config.ClusterNodeID()),
 							Listen:      config.ClusterListen(),
-							Peers:       peers,
+							Seeds:       config.ClusterSeeds(),
+							Zone:        config.ClusterZone(),
+							Capacity:    config.ClusterCapacity(),
+							Tags:        config.ClusterTags(),
 							Secret:      config.ClusterSharedSecret(),
 							HeartbeatMS: config.HeartbeatMS(),
 						})
@@ -172,8 +169,11 @@ func Execute() {
 							return err
 						}
 
-						if err := clusterRuntime.Cluster.LoadLayout(); err != nil {
-							log.Warn().Err(err).Msg("Failed to load persisted cluster layout.")
+						if err := clusterRuntime.Bootstrap(ctx, config.ClusterSeeds()); err != nil {
+							log.Error().Err(err).Msg("Failed to bootstrap cluster.")
+							clusterRuntime.Stop()
+							cancel()
+							return err
 						}
 
 						storage.SetMetadataStore(cluster.NewClusteredMetadataStore(clusterRuntime.Cluster, clusterRuntime.Pool))
@@ -212,7 +212,8 @@ func Execute() {
 						log.Info().
 							Str("node_id", config.ClusterNodeID()).
 							Str("listen", clusterRuntime.Addr()).
-							Int("peers", len(peers)).
+							Int("seeds", len(config.ClusterSeeds())).
+							Uint64("layout_version", clusterRuntime.Cluster.LayoutVersion()).
 							Msg("Cluster runtime started")
 					}
 

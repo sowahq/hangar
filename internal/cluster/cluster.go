@@ -178,7 +178,10 @@ func (v *View) Remove(id NodeID) bool {
 type Config struct {
 	NodeID      NodeID
 	Listen      string
-	Peers       map[NodeID]string
+	Seeds       []string
+	Zone        string
+	Capacity    int64
+	Tags        []string
 	Secret      []byte
 	HeartbeatMS int
 	Generation  uint64
@@ -189,12 +192,46 @@ type Config struct {
 type Cluster struct {
 	cfg Config
 
-	knownPeers map[string]struct{}
+	mu       sync.RWMutex
+	view     View
+	layoutV  uint64
+	layout   *Layout
+	layoutCB func()
+}
 
-	mu      sync.RWMutex
-	view    View
-	layoutV uint64
-	layout  *Layout
+func (c *Cluster) ReconcileView(want map[NodeID]string, self LayoutNode) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	now := c.cfg.NowFn()
+	selfState := c.view.Nodes[c.cfg.NodeID]
+	selfState.ID = c.cfg.NodeID
+	selfState.Addr = self.Addr
+	selfState.Zone = self.Zone
+	selfState.Capacity = self.Capacity
+	selfState.Tags = append([]string(nil), self.Tags...)
+	selfState.LastSeen = now
+	selfState.Status = StatusActive
+	c.view.Upsert(selfState)
+
+	for id, addr := range want {
+		ns, ok := c.view.Nodes[id]
+		if !ok {
+			ns = NodeState{ID: id, Addr: addr, Status: StatusUnknown}
+		} else {
+			ns.Addr = addr
+		}
+		c.view.Upsert(ns)
+	}
+
+	for id := range c.view.Nodes {
+		if id == c.cfg.NodeID {
+			continue
+		}
+		if _, ok := want[id]; !ok {
+			c.view.Remove(id)
+		}
+	}
 }
 
 func New(cfg Config) *Cluster {
@@ -205,28 +242,22 @@ func New(cfg Config) *Cluster {
 		cfg.NowFn = time.Now
 	}
 
-	known := map[string]struct{}{string(cfg.NodeID): {}}
-	for id := range cfg.Peers {
-		known[string(id)] = struct{}{}
-	}
-
 	c := &Cluster{
-		cfg:        cfg,
-		knownPeers: known,
-		view:       NewView(),
+		cfg:  cfg,
+		view: NewView(),
 	}
 
 	now := cfg.NowFn()
 	c.view.Upsert(NodeState{
 		ID:         cfg.NodeID,
 		Addr:       cfg.Listen,
+		Zone:       cfg.Zone,
+		Capacity:   cfg.Capacity,
+		Tags:       cfg.Tags,
 		Generation: cfg.Generation,
 		Status:     StatusActive,
 		LastSeen:   now,
 	})
-	for id, addr := range cfg.Peers {
-		c.view.Upsert(NodeState{ID: id, Addr: addr, Status: StatusUnknown})
-	}
 
 	return c
 }
@@ -282,7 +313,7 @@ func (c *Cluster) NodeStatus(id NodeID) Status {
 }
 
 func (c *Cluster) VerifyHello(h *rpc.Hello, now time.Time) error {
-	return VerifyHello(h, c.cfg.Secret, c.knownPeers, now)
+	return VerifyHello(h, c.cfg.Secret, nil, now)
 }
 
 func (c *Cluster) BuildHeartbeat() *rpc.Heartbeat {
@@ -303,9 +334,6 @@ func (c *Cluster) OnHeartbeat(h *rpc.Heartbeat) {
 	}
 
 	id := NodeID(h.NodeId)
-	if _, known := c.knownPeers[h.NodeId]; !known {
-		return
-	}
 	if id == c.cfg.NodeID {
 		return
 	}

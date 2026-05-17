@@ -70,7 +70,6 @@ func TestRunAntiEntropyOrphanDetection(t *testing.T) {
 	rt, err := Start(ctx, Config{
 		NodeID:      "a",
 		Listen:      freeAddrRuntime(t),
-		Peers:       map[NodeID]string{"b": "127.0.0.1:1"},
 		Secret:      secret,
 		HeartbeatMS: 50,
 	})
@@ -80,10 +79,8 @@ func TestRunAntiEntropyOrphanDetection(t *testing.T) {
 	defer rt.Stop()
 
 	rt.Cluster.mu.Lock()
-	ns := rt.Cluster.view.Nodes["b"]
-	ns.Status = StatusActive
-	ns.LastSeen = time.Now()
-	rt.Cluster.view.Nodes["b"] = ns
+	ns := NodeState{ID: "b", Addr: "127.0.0.1:1", Status: StatusActive, LastSeen: time.Now()}
+	rt.Cluster.view.Upsert(ns)
 	rt.Cluster.mu.Unlock()
 
 	stats, err := rt.RunAntiEntropy(ctx)

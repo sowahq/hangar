@@ -146,7 +146,7 @@ enabled = true
 node_id = "n1"
 listen = ":7000"
 shared_secret_b64 = %q
-peers = ["n2@10.0.0.2:7000", "n3@10.0.0.3:7000"]
+seeds = ["10.0.0.2:7000", "10.0.0.3:7000"]
 ec_data_shards = 6
 ec_parity_shards = 3
 meta_shards = 512
@@ -163,9 +163,9 @@ metadata_sync_quorum = true
 				if got := ClusterListen(); got != ":7000" {
 					t.Errorf("ClusterListen: got=%q", got)
 				}
-				peers := ClusterPeers()
-				if len(peers) != 2 || peers[0] != "n2@10.0.0.2:7000" || peers[1] != "n3@10.0.0.3:7000" {
-					t.Errorf("ClusterPeers: got=%v", peers)
+				seeds := ClusterSeeds()
+				if len(seeds) != 2 || seeds[0] != "10.0.0.2:7000" || seeds[1] != "10.0.0.3:7000" {
+					t.Errorf("ClusterSeeds: got=%v", seeds)
 				}
 				secret := ClusterSharedSecret()
 				if len(secret) != 32 {
@@ -189,14 +189,18 @@ metadata_sync_quorum = true
 			},
 		},
 		{
-			name: "enabled missing node_id errors",
+			name: "enabled missing node_id defaults to hostname",
 			extra: fmt.Sprintf(`
 [cluster]
 enabled = true
 listen = ":7000"
 shared_secret_b64 = %q
 `, validSecret),
-			wantErr: "node_id required",
+			check: func(t *testing.T) {
+				if ClusterNodeID() == "" {
+					t.Fatal("expected hostname default for node_id")
+				}
+			},
 		},
 		{
 			name: "enabled missing listen errors",

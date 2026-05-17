@@ -62,7 +62,6 @@ func startNodeOn(t *testing.T, parent context.Context, id NodeID, secret []byte,
 	cfg := Config{
 		NodeID:      id,
 		Listen:      ln.Addr().String(),
-		Peers:       peers,
 		Secret:      secret,
 		HeartbeatMS: heartbeatMS,
 	}
@@ -78,7 +77,7 @@ func startNodeOn(t *testing.T, parent context.Context, id NodeID, secret []byte,
 	ctx, cancel := context.WithCancel(parent)
 
 	var wg sync.WaitGroup
-	wg.Add(2)
+	wg.Add(2 + len(peers))
 
 	go func() {
 		defer wg.Done()
@@ -86,8 +85,18 @@ func startNodeOn(t *testing.T, parent context.Context, id NodeID, secret []byte,
 	}()
 	go func() {
 		defer wg.Done()
-		_ = c.RunHeartbeat(ctx)
+		_ = c.RunStalenessLoop(ctx)
 	}()
+
+	for peerID, peerAddr := range peers {
+		c.mu.Lock()
+		c.view.Upsert(NodeState{ID: peerID, Addr: peerAddr, Status: StatusUnknown})
+		c.mu.Unlock()
+		go func(pid NodeID, paddr string) {
+			defer wg.Done()
+			c.PeerLoop(ctx, pid, paddr)
+		}(peerID, peerAddr)
+	}
 
 	return &clusterFixture{c: c, ln: ln, cancel: cancel, wg: &wg}
 }

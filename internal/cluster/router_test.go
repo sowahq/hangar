@@ -7,18 +7,15 @@ import (
 
 func makeClusterFor(t *testing.T, ids []NodeID, alive map[NodeID]bool) *Cluster {
 	t.Helper()
-	peers := map[NodeID]string{}
-	for _, id := range ids {
-		if id != "self" {
-			peers[id] = "10.0.0.1:7"
-		}
-	}
-	c := New(Config{NodeID: "self", Listen: "127.0.0.1:1", Peers: peers, Secret: []byte("k"), HeartbeatMS: 100})
+	c := New(Config{NodeID: "self", Listen: "127.0.0.1:1", Secret: []byte("k"), HeartbeatMS: 100})
 
 	c.mu.Lock()
 	now := time.Now()
 	for _, id := range ids {
-		ns := c.view.Nodes[id]
+		ns, ok := c.view.Nodes[id]
+		if !ok {
+			ns = NodeState{ID: id, Addr: "10.0.0.1:7"}
+		}
 		ns.ID = id
 		ns.LastSeen = now
 		if alive[id] {

@@ -31,10 +31,10 @@ func setupHandlerNode(t *testing.T, listen string, peers map[NodeID]string, id N
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
+	_ = peers
 	rt, err := Start(ctx, Config{
 		NodeID:      id,
 		Listen:      listen,
-		Peers:       peers,
 		Secret:      secret,
 		HeartbeatMS: 100,
 	})

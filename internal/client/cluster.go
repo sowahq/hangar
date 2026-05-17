@@ -39,6 +39,38 @@ func (c *Client) GetClusterLayout() (map[string]any, error) {
 	return out, nil
 }
 
+func (c *Client) RemoveClusterNode(id string) (map[string]any, error) {
+	resp, err := c.doRequest("DELETE", "/admin/cluster/node/"+id, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if err := c.handleErrorResponse(resp); err != nil {
+		return nil, err
+	}
+	var out map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return nil, fmt.Errorf("decode: %w", err)
+	}
+	return out, nil
+}
+
+func (c *Client) DrainClusterNode(id string) (map[string]any, error) {
+	resp, err := c.doRequest("POST", "/admin/cluster/node/"+id+"/drain", nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if err := c.handleErrorResponse(resp); err != nil {
+		return nil, err
+	}
+	var out map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return nil, fmt.Errorf("decode: %w", err)
+	}
+	return out, nil
+}
+
 func (c *Client) ApplyClusterLayout(raw []byte) (map[string]any, error) {
 	req, err := http.NewRequest("PUT", c.baseURL+"/admin/cluster/layout", bytes.NewReader(raw))
 	if err != nil {

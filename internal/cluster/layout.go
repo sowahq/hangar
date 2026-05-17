@@ -168,6 +168,14 @@ func ApplyLayout(l *Layout, secret []byte) error {
 	return db.Put([]byte(layoutCurrentKey), buf[:])
 }
 
+func UnmarshalLayout(raw []byte) (*Layout, error) {
+	var l Layout
+	if err := json.Unmarshal(raw, &l); err != nil {
+		return nil, err
+	}
+	return &l, nil
+}
+
 func (c *Cluster) ApplyLayout(l *Layout) error {
 	if err := ApplyLayout(l, c.cfg.Secret); err != nil {
 		return err
@@ -175,8 +183,102 @@ func (c *Cluster) ApplyLayout(l *Layout) error {
 	c.mu.Lock()
 	c.layoutV = l.Version
 	c.layout = l
+	cb := c.layoutCB
 	c.mu.Unlock()
+	if cb != nil {
+		cb()
+	}
 	return nil
+}
+
+func (c *Cluster) AdoptLayout(l *Layout) error {
+	if l == nil {
+		return errors.New("nil layout")
+	}
+	if err := l.Verify(c.cfg.Secret); err != nil {
+		return err
+	}
+	db := database.LocalStore()
+	if db == nil {
+		return errors.New("database not initialized")
+	}
+	data, err := json.Marshal(l)
+	if err != nil {
+		return err
+	}
+	if err := db.PutSilent(layoutKey(l.Version), data); err != nil {
+		return err
+	}
+	var buf [8]byte
+	binary.BigEndian.PutUint64(buf[:], l.Version)
+	if err := db.PutSilent([]byte(layoutCurrentKey), buf[:]); err != nil {
+		return err
+	}
+	c.mu.Lock()
+	c.layoutV = l.Version
+	c.layout = l
+	cb := c.layoutCB
+	c.mu.Unlock()
+	if cb != nil {
+		cb()
+	}
+	return nil
+}
+
+func (c *Cluster) SetLayoutCallback(fn func()) {
+	c.mu.Lock()
+	c.layoutCB = fn
+	c.mu.Unlock()
+}
+
+func (c *Cluster) RemoveNodeFromLayout(id NodeID) error {
+	c.mu.RLock()
+	cur := c.layout
+	c.mu.RUnlock()
+	if cur == nil {
+		return errors.New("no layout applied")
+	}
+
+	out := &Layout{Version: cur.Version + 1}
+	found := false
+	for _, n := range cur.Nodes {
+		if n.ID == id {
+			found = true
+			continue
+		}
+		nn := n
+		nn.Tags = append([]string(nil), n.Tags...)
+		out.Nodes = append(out.Nodes, nn)
+	}
+	if !found {
+		return errors.New("node not in layout")
+	}
+	return c.ApplyLayout(out)
+}
+
+func (c *Cluster) DrainNodeInLayout(id NodeID) error {
+	c.mu.RLock()
+	cur := c.layout
+	c.mu.RUnlock()
+	if cur == nil {
+		return errors.New("no layout applied")
+	}
+
+	out := &Layout{Version: cur.Version + 1}
+	found := false
+	for _, n := range cur.Nodes {
+		nn := n
+		nn.Tags = append([]string(nil), n.Tags...)
+		if nn.ID == id {
+			found = true
+			nn.Status = StatusDraining
+		}
+		out.Nodes = append(out.Nodes, nn)
+	}
+	if !found {
+		return errors.New("node not in layout")
+	}
+	return c.ApplyLayout(out)
 }
 
 func (c *Cluster) Layout() *Layout {
@@ -199,6 +301,10 @@ func (c *Cluster) LoadLayout() error {
 	c.mu.Lock()
 	c.layoutV = l.Version
 	c.layout = l
+	cb := c.layoutCB
 	c.mu.Unlock()
+	if cb != nil {
+		cb()
+	}
 	return nil
 }

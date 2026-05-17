@@ -74,3 +74,36 @@ func ClusterLayoutApply(c *fiber.Ctx) error {
 	}
 	return response.JSON(c, fiber.Map{"version": l.Version, "ok": true})
 }
+
+func ClusterNodeRemove(c *fiber.Ctx) error {
+	cl := cluster.Global()
+	if cl == nil {
+		return response.Error(c, fiber.StatusServiceUnavailable, "cluster mode disabled")
+	}
+	id := cluster.NodeID(c.Params("id"))
+	if id == "" {
+		return response.Error(c, fiber.StatusBadRequest, "id required")
+	}
+	if id == cl.Self() {
+		return response.Error(c, fiber.StatusBadRequest, "cannot remove self")
+	}
+	if err := cl.RemoveNodeFromLayout(id); err != nil {
+		return response.Error(c, fiber.StatusBadRequest, err.Error())
+	}
+	return response.JSON(c, fiber.Map{"removed": string(id), "layout_version": cl.LayoutVersion()})
+}
+
+func ClusterNodeDrain(c *fiber.Ctx) error {
+	cl := cluster.Global()
+	if cl == nil {
+		return response.Error(c, fiber.StatusServiceUnavailable, "cluster mode disabled")
+	}
+	id := cluster.NodeID(c.Params("id"))
+	if id == "" {
+		return response.Error(c, fiber.StatusBadRequest, "id required")
+	}
+	if err := cl.DrainNodeInLayout(id); err != nil {
+		return response.Error(c, fiber.StatusBadRequest, err.Error())
+	}
+	return response.JSON(c, fiber.Map{"draining": string(id), "layout_version": cl.LayoutVersion()})
+}

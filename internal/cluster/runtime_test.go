@@ -7,45 +7,6 @@ import (
 	"time"
 )
 
-func TestParsePeers(t *testing.T) {
-	cases := []struct {
-		name    string
-		in      []string
-		want    map[NodeID]string
-		wantErr bool
-	}{
-		{name: "empty"},
-		{name: "single at", in: []string{"n2@10.0.0.2:7000"}, want: map[NodeID]string{"n2": "10.0.0.2:7000"}},
-		{name: "single eq", in: []string{"n2=10.0.0.2:7000"}, want: map[NodeID]string{"n2": "10.0.0.2:7000"}},
-		{name: "multi", in: []string{"a@1.1.1.1:7", "b@2.2.2.2:7"}, want: map[NodeID]string{"a": "1.1.1.1:7", "b": "2.2.2.2:7"}},
-		{name: "whitespace", in: []string{"  a @ 1.1.1.1:7  ", ""}, want: map[NodeID]string{"a": "1.1.1.1:7"}},
-		{name: "missing sep", in: []string{"abc"}, wantErr: true},
-		{name: "empty id", in: []string{"@1.1.1.1:7"}, wantErr: true},
-		{name: "empty addr", in: []string{"a@"}, wantErr: true},
-		{name: "dup id", in: []string{"a@1:1", "a@2:2"}, wantErr: true},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			got, err := ParsePeers(tc.in)
-			if (err != nil) != tc.wantErr {
-				t.Fatalf("err=%v wantErr=%v", err, tc.wantErr)
-			}
-			if tc.wantErr {
-				return
-			}
-			if len(got) != len(tc.want) {
-				t.Fatalf("len=%d want=%d", len(got), len(tc.want))
-			}
-			for k, v := range tc.want {
-				if got[k] != v {
-					t.Fatalf("%q: got %q want %q", k, got[k], v)
-				}
-			}
-		})
-	}
-}
-
 func freeAddrRuntime(t *testing.T) string {
 	t.Helper()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")

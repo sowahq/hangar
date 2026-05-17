@@ -82,7 +82,10 @@ type serverConfig struct {
 		NodeID             string   `toml:"node_id"`
 		Listen             string   `toml:"listen"`
 		SharedSecretB64    string   `toml:"shared_secret_b64"`
-		Peers              []string `toml:"peers"`
+		Seeds              []string `toml:"seeds"`
+		Zone               string   `toml:"zone"`
+		Capacity           int64    `toml:"capacity" validate:"min=0"`
+		Tags               []string `toml:"tags"`
 		ECDataShards       int      `toml:"ec_data_shards" validate:"min=0"`
 		ECParityShards     int      `toml:"ec_parity_shards" validate:"min=0"`
 		MetaShards         int      `toml:"meta_shards" validate:"min=0"`
@@ -387,7 +390,11 @@ func LoadServerConfig(path string) error {
 	clusterSharedSecret = nil
 	if c.Cluster.Enabled {
 		if c.Cluster.NodeID == "" {
-			return fmt.Errorf("cluster: node_id required when cluster.enabled=true")
+			host, err := os.Hostname()
+			if err != nil || host == "" {
+				return fmt.Errorf("cluster: node_id required (could not derive from hostname: %v)", err)
+			}
+			c.Cluster.NodeID = host
 		}
 		if c.Cluster.Listen == "" {
 			return fmt.Errorf("cluster: listen required when cluster.enabled=true")
@@ -644,13 +651,40 @@ func ClusterListen() string {
 	return c.Cluster.Listen
 }
 
-func ClusterPeers() []string {
+func ClusterSeeds() []string {
 	mu.RLock()
 	defer mu.RUnlock()
 	if c == nil {
 		c = DefaultServerConfig()
 	}
-	return c.Cluster.Peers
+	return c.Cluster.Seeds
+}
+
+func ClusterZone() string {
+	mu.RLock()
+	defer mu.RUnlock()
+	if c == nil {
+		c = DefaultServerConfig()
+	}
+	return c.Cluster.Zone
+}
+
+func ClusterCapacity() int64 {
+	mu.RLock()
+	defer mu.RUnlock()
+	if c == nil {
+		c = DefaultServerConfig()
+	}
+	return c.Cluster.Capacity
+}
+
+func ClusterTags() []string {
+	mu.RLock()
+	defer mu.RUnlock()
+	if c == nil {
+		c = DefaultServerConfig()
+	}
+	return c.Cluster.Tags
 }
 
 func ClusterSharedSecret() []byte {

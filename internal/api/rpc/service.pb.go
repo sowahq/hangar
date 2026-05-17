@@ -1865,6 +1865,142 @@ func (x *KVEntry) GetValue() []byte {
 	return nil
 }
 
+type JoinRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Addr          string                 `protobuf:"bytes,2,opt,name=addr,proto3" json:"addr,omitempty"`
+	Zone          string                 `protobuf:"bytes,3,opt,name=zone,proto3" json:"zone,omitempty"`
+	Capacity      int64                  `protobuf:"varint,4,opt,name=capacity,proto3" json:"capacity,omitempty"`
+	Tags          []string               `protobuf:"bytes,5,rep,name=tags,proto3" json:"tags,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *JoinRequest) Reset() {
+	*x = JoinRequest{}
+	mi := &file_internal_api_rpc_service_proto_msgTypes[31]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *JoinRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*JoinRequest) ProtoMessage() {}
+
+func (x *JoinRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_api_rpc_service_proto_msgTypes[31]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use JoinRequest.ProtoReflect.Descriptor instead.
+func (*JoinRequest) Descriptor() ([]byte, []int) {
+	return file_internal_api_rpc_service_proto_rawDescGZIP(), []int{31}
+}
+
+func (x *JoinRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *JoinRequest) GetAddr() string {
+	if x != nil {
+		return x.Addr
+	}
+	return ""
+}
+
+func (x *JoinRequest) GetZone() string {
+	if x != nil {
+		return x.Zone
+	}
+	return ""
+}
+
+func (x *JoinRequest) GetCapacity() int64 {
+	if x != nil {
+		return x.Capacity
+	}
+	return 0
+}
+
+func (x *JoinRequest) GetTags() []string {
+	if x != nil {
+		return x.Tags
+	}
+	return nil
+}
+
+type JoinResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Accepted      bool                   `protobuf:"varint,1,opt,name=accepted,proto3" json:"accepted,omitempty"`
+	Error         string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
+	SignedLayout  []byte                 `protobuf:"bytes,3,opt,name=signed_layout,json=signedLayout,proto3" json:"signed_layout,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *JoinResponse) Reset() {
+	*x = JoinResponse{}
+	mi := &file_internal_api_rpc_service_proto_msgTypes[32]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *JoinResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*JoinResponse) ProtoMessage() {}
+
+func (x *JoinResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_api_rpc_service_proto_msgTypes[32]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use JoinResponse.ProtoReflect.Descriptor instead.
+func (*JoinResponse) Descriptor() ([]byte, []int) {
+	return file_internal_api_rpc_service_proto_rawDescGZIP(), []int{32}
+}
+
+func (x *JoinResponse) GetAccepted() bool {
+	if x != nil {
+		return x.Accepted
+	}
+	return false
+}
+
+func (x *JoinResponse) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
+func (x *JoinResponse) GetSignedLayout() []byte {
+	if x != nil {
+		return x.SignedLayout
+	}
+	return nil
+}
+
 var File_internal_api_rpc_service_proto protoreflect.FileDescriptor
 
 const file_internal_api_rpc_service_proto_rawDesc = "" +
@@ -2000,7 +2136,17 @@ const file_internal_api_rpc_service_proto_rawDesc = "" +
 	"\bprefixes\x18\x01 \x03(\fR\bprefixes\"1\n" +
 	"\aKVEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\fR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\fR\x05value2\xf9\x0f\n" +
+	"\x05value\x18\x02 \x01(\fR\x05value\"u\n" +
+	"\vJoinRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
+	"\x04addr\x18\x02 \x01(\tR\x04addr\x12\x12\n" +
+	"\x04zone\x18\x03 \x01(\tR\x04zone\x12\x1a\n" +
+	"\bcapacity\x18\x04 \x01(\x03R\bcapacity\x12\x12\n" +
+	"\x04tags\x18\x05 \x03(\tR\x04tags\"e\n" +
+	"\fJoinResponse\x12\x1a\n" +
+	"\baccepted\x18\x01 \x01(\bR\baccepted\x12\x14\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error\x12#\n" +
+	"\rsigned_layout\x18\x03 \x01(\fR\fsignedLayout2\xc2\x10\n" +
 	"\aCluster\x12B\n" +
 	"\tHandshake\x12\x18.hangar.cluster.v1.Hello\x1a\x1b.hangar.cluster.v1.HelloAck\x12Q\n" +
 	"\x0fHeartbeatStream\x12\x1c.hangar.cluster.v1.Heartbeat\x1a\x1c.hangar.cluster.v1.Heartbeat(\x010\x01\x12I\n" +
@@ -2032,7 +2178,8 @@ const file_internal_api_rpc_service_proto_rawDesc = "" +
 	"\tGetLayout\x12 .hangar.cluster.v1.LayoutRequest\x1a!.hangar.cluster.v1.LayoutResponse\x12@\n" +
 	"\vReplicateKV\x12\x17.hangar.cluster.v1.KVOp\x1a\x18.hangar.cluster.v1.KVAck\x12L\n" +
 	"\n" +
-	"BulkSyncKV\x12 .hangar.cluster.v1.KVBulkRequest\x1a\x1a.hangar.cluster.v1.KVEntry0\x01B1Z/github.com/anhostfr/hangar/internal/api/rpc;rpcb\x06proto3"
+	"BulkSyncKV\x12 .hangar.cluster.v1.KVBulkRequest\x1a\x1a.hangar.cluster.v1.KVEntry0\x01\x12G\n" +
+	"\x04Join\x12\x1e.hangar.cluster.v1.JoinRequest\x1a\x1f.hangar.cluster.v1.JoinResponseB1Z/github.com/anhostfr/hangar/internal/api/rpc;rpcb\x06proto3"
 
 var (
 	file_internal_api_rpc_service_proto_rawDescOnce sync.Once
@@ -2046,7 +2193,7 @@ func file_internal_api_rpc_service_proto_rawDescGZIP() []byte {
 	return file_internal_api_rpc_service_proto_rawDescData
 }
 
-var file_internal_api_rpc_service_proto_msgTypes = make([]protoimpl.MessageInfo, 31)
+var file_internal_api_rpc_service_proto_msgTypes = make([]protoimpl.MessageInfo, 33)
 var file_internal_api_rpc_service_proto_goTypes = []any{
 	(*Hello)(nil),              // 0: hangar.cluster.v1.Hello
 	(*HelloAck)(nil),           // 1: hangar.cluster.v1.HelloAck
@@ -2079,6 +2226,8 @@ var file_internal_api_rpc_service_proto_goTypes = []any{
 	(*KVAck)(nil),              // 28: hangar.cluster.v1.KVAck
 	(*KVBulkRequest)(nil),      // 29: hangar.cluster.v1.KVBulkRequest
 	(*KVEntry)(nil),            // 30: hangar.cluster.v1.KVEntry
+	(*JoinRequest)(nil),        // 31: hangar.cluster.v1.JoinRequest
+	(*JoinResponse)(nil),       // 32: hangar.cluster.v1.JoinResponse
 }
 var file_internal_api_rpc_service_proto_depIdxs = []int32{
 	4,  // 0: hangar.cluster.v1.ChunkPresenceBatch.entries:type_name -> hangar.cluster.v1.ChunkPresence
@@ -2110,35 +2259,37 @@ var file_internal_api_rpc_service_proto_depIdxs = []int32{
 	25, // 26: hangar.cluster.v1.Cluster.GetLayout:input_type -> hangar.cluster.v1.LayoutRequest
 	27, // 27: hangar.cluster.v1.Cluster.ReplicateKV:input_type -> hangar.cluster.v1.KVOp
 	29, // 28: hangar.cluster.v1.Cluster.BulkSyncKV:input_type -> hangar.cluster.v1.KVBulkRequest
-	1,  // 29: hangar.cluster.v1.Cluster.Handshake:output_type -> hangar.cluster.v1.HelloAck
-	2,  // 30: hangar.cluster.v1.Cluster.HeartbeatStream:output_type -> hangar.cluster.v1.Heartbeat
-	4,  // 31: hangar.cluster.v1.Cluster.HasChunk:output_type -> hangar.cluster.v1.ChunkPresence
-	5,  // 32: hangar.cluster.v1.Cluster.HasChunks:output_type -> hangar.cluster.v1.ChunkPresenceBatch
-	8,  // 33: hangar.cluster.v1.Cluster.PutChunk:output_type -> hangar.cluster.v1.PutChunkAck
-	7,  // 34: hangar.cluster.v1.Cluster.GetChunk:output_type -> hangar.cluster.v1.ChunkData
-	9,  // 35: hangar.cluster.v1.Cluster.DeleteChunkReplica:output_type -> hangar.cluster.v1.Ack
-	9,  // 36: hangar.cluster.v1.Cluster.AcquirePending:output_type -> hangar.cluster.v1.Ack
-	9,  // 37: hangar.cluster.v1.Cluster.ReleasePending:output_type -> hangar.cluster.v1.Ack
-	13, // 38: hangar.cluster.v1.Cluster.PutMetadata:output_type -> hangar.cluster.v1.MetadataAck
-	12, // 39: hangar.cluster.v1.Cluster.GetMetadata:output_type -> hangar.cluster.v1.Metadata
-	12, // 40: hangar.cluster.v1.Cluster.DeleteMetadata:output_type -> hangar.cluster.v1.Metadata
-	15, // 41: hangar.cluster.v1.Cluster.ListMetadata:output_type -> hangar.cluster.v1.MetadataEntry
-	13, // 42: hangar.cluster.v1.Cluster.PutVersion:output_type -> hangar.cluster.v1.MetadataAck
-	12, // 43: hangar.cluster.v1.Cluster.GetVersion:output_type -> hangar.cluster.v1.Metadata
-	12, // 44: hangar.cluster.v1.Cluster.DeleteVersion:output_type -> hangar.cluster.v1.Metadata
-	9,  // 45: hangar.cluster.v1.Cluster.InitiateMPU:output_type -> hangar.cluster.v1.Ack
-	9,  // 46: hangar.cluster.v1.Cluster.PutMPUPart:output_type -> hangar.cluster.v1.Ack
-	13, // 47: hangar.cluster.v1.Cluster.CompleteMPU:output_type -> hangar.cluster.v1.MetadataAck
-	9,  // 48: hangar.cluster.v1.Cluster.AbortMPU:output_type -> hangar.cluster.v1.Ack
-	20, // 49: hangar.cluster.v1.Cluster.BucketOp:output_type -> hangar.cluster.v1.BucketOpResponse
-	9,  // 50: hangar.cluster.v1.Cluster.IncRefs:output_type -> hangar.cluster.v1.Ack
-	9,  // 51: hangar.cluster.v1.Cluster.DecRefs:output_type -> hangar.cluster.v1.Ack
-	24, // 52: hangar.cluster.v1.Cluster.ReplicaCatchup:output_type -> hangar.cluster.v1.WALEntry
-	26, // 53: hangar.cluster.v1.Cluster.GetLayout:output_type -> hangar.cluster.v1.LayoutResponse
-	28, // 54: hangar.cluster.v1.Cluster.ReplicateKV:output_type -> hangar.cluster.v1.KVAck
-	30, // 55: hangar.cluster.v1.Cluster.BulkSyncKV:output_type -> hangar.cluster.v1.KVEntry
-	29, // [29:56] is the sub-list for method output_type
-	2,  // [2:29] is the sub-list for method input_type
+	31, // 29: hangar.cluster.v1.Cluster.Join:input_type -> hangar.cluster.v1.JoinRequest
+	1,  // 30: hangar.cluster.v1.Cluster.Handshake:output_type -> hangar.cluster.v1.HelloAck
+	2,  // 31: hangar.cluster.v1.Cluster.HeartbeatStream:output_type -> hangar.cluster.v1.Heartbeat
+	4,  // 32: hangar.cluster.v1.Cluster.HasChunk:output_type -> hangar.cluster.v1.ChunkPresence
+	5,  // 33: hangar.cluster.v1.Cluster.HasChunks:output_type -> hangar.cluster.v1.ChunkPresenceBatch
+	8,  // 34: hangar.cluster.v1.Cluster.PutChunk:output_type -> hangar.cluster.v1.PutChunkAck
+	7,  // 35: hangar.cluster.v1.Cluster.GetChunk:output_type -> hangar.cluster.v1.ChunkData
+	9,  // 36: hangar.cluster.v1.Cluster.DeleteChunkReplica:output_type -> hangar.cluster.v1.Ack
+	9,  // 37: hangar.cluster.v1.Cluster.AcquirePending:output_type -> hangar.cluster.v1.Ack
+	9,  // 38: hangar.cluster.v1.Cluster.ReleasePending:output_type -> hangar.cluster.v1.Ack
+	13, // 39: hangar.cluster.v1.Cluster.PutMetadata:output_type -> hangar.cluster.v1.MetadataAck
+	12, // 40: hangar.cluster.v1.Cluster.GetMetadata:output_type -> hangar.cluster.v1.Metadata
+	12, // 41: hangar.cluster.v1.Cluster.DeleteMetadata:output_type -> hangar.cluster.v1.Metadata
+	15, // 42: hangar.cluster.v1.Cluster.ListMetadata:output_type -> hangar.cluster.v1.MetadataEntry
+	13, // 43: hangar.cluster.v1.Cluster.PutVersion:output_type -> hangar.cluster.v1.MetadataAck
+	12, // 44: hangar.cluster.v1.Cluster.GetVersion:output_type -> hangar.cluster.v1.Metadata
+	12, // 45: hangar.cluster.v1.Cluster.DeleteVersion:output_type -> hangar.cluster.v1.Metadata
+	9,  // 46: hangar.cluster.v1.Cluster.InitiateMPU:output_type -> hangar.cluster.v1.Ack
+	9,  // 47: hangar.cluster.v1.Cluster.PutMPUPart:output_type -> hangar.cluster.v1.Ack
+	13, // 48: hangar.cluster.v1.Cluster.CompleteMPU:output_type -> hangar.cluster.v1.MetadataAck
+	9,  // 49: hangar.cluster.v1.Cluster.AbortMPU:output_type -> hangar.cluster.v1.Ack
+	20, // 50: hangar.cluster.v1.Cluster.BucketOp:output_type -> hangar.cluster.v1.BucketOpResponse
+	9,  // 51: hangar.cluster.v1.Cluster.IncRefs:output_type -> hangar.cluster.v1.Ack
+	9,  // 52: hangar.cluster.v1.Cluster.DecRefs:output_type -> hangar.cluster.v1.Ack
+	24, // 53: hangar.cluster.v1.Cluster.ReplicaCatchup:output_type -> hangar.cluster.v1.WALEntry
+	26, // 54: hangar.cluster.v1.Cluster.GetLayout:output_type -> hangar.cluster.v1.LayoutResponse
+	28, // 55: hangar.cluster.v1.Cluster.ReplicateKV:output_type -> hangar.cluster.v1.KVAck
+	30, // 56: hangar.cluster.v1.Cluster.BulkSyncKV:output_type -> hangar.cluster.v1.KVEntry
+	32, // 57: hangar.cluster.v1.Cluster.Join:output_type -> hangar.cluster.v1.JoinResponse
+	30, // [30:58] is the sub-list for method output_type
+	2,  // [2:30] is the sub-list for method input_type
 	2,  // [2:2] is the sub-list for extension type_name
 	2,  // [2:2] is the sub-list for extension extendee
 	0,  // [0:2] is the sub-list for field type_name
@@ -2155,7 +2306,7 @@ func file_internal_api_rpc_service_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_internal_api_rpc_service_proto_rawDesc), len(file_internal_api_rpc_service_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   31,
+			NumMessages:   33,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

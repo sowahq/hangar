@@ -22,19 +22,15 @@ func TestIsGCLeaderLowestActive(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			peers := map[NodeID]string{}
-			for _, id := range tc.ids {
-				if id != tc.self {
-					peers[id] = "x:1"
-				}
-			}
-			c := New(Config{NodeID: tc.self, Listen: "x:0", Peers: peers, Secret: []byte("k"), HeartbeatMS: 100})
+			c := New(Config{NodeID: tc.self, Listen: "x:0", Secret: []byte("k"), HeartbeatMS: 100})
 
 			c.mu.Lock()
 			now := time.Now()
 			for _, id := range tc.ids {
-				ns := c.view.Nodes[id]
-				ns.ID = id
+				ns, ok := c.view.Nodes[id]
+				if !ok {
+					ns = NodeState{ID: id, Addr: "x:1"}
+				}
 				ns.LastSeen = now
 				if tc.alive[id] {
 					ns.Status = StatusActive

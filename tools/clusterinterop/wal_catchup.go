@@ -82,7 +82,11 @@ func writeConfig(path string, data string) error {
 	return os.WriteFile(path, []byte(data), 0644)
 }
 
-func cfgFor(dir, nodeID string, apiPort, s3Port, rpcPort int, peerEntry, secretB64 string) string {
+func cfgFor(dir, nodeID string, apiPort, s3Port, rpcPort int, seedAddr, secretB64 string) string {
+	seedsLine := ""
+	if seedAddr != "" {
+		seedsLine = fmt.Sprintf("seeds = [\"%s\"]\n", seedAddr)
+	}
 	return fmt.Sprintf(`data_directory = "%s"
 [api]
 bind_addr = ":%d"
@@ -99,9 +103,8 @@ enabled = true
 node_id = "%s"
 listen = "127.0.0.1:%d"
 shared_secret_b64 = "%s"
-peers = ["%s"]
-heartbeat_ms = 200
-`, dir, apiPort, s3Port, nodeID, rpcPort, secretB64, peerEntry)
+%sheartbeat_ms = 200
+`, dir, apiPort, s3Port, nodeID, rpcPort, secretB64, seedsLine)
 }
 
 func runWALCatchup() {
@@ -129,10 +132,10 @@ func runWALCatchup() {
 
 	cfgA := filepath.Join(root, "a.toml")
 	cfgB := filepath.Join(root, "b.toml")
-	if err := writeConfig(cfgA, cfgFor(dirA, "a", 18091, 19101, 17091, "b@127.0.0.1:17092", secret)); err != nil {
+	if err := writeConfig(cfgA, cfgFor(dirA, "a", 18091, 19101, 17091, "", secret)); err != nil {
 		log.Fatal(err)
 	}
-	if err := writeConfig(cfgB, cfgFor(dirB, "b", 18092, 19102, 17092, "a@127.0.0.1:17091", secret)); err != nil {
+	if err := writeConfig(cfgB, cfgFor(dirB, "b", 18092, 19102, 17092, "127.0.0.1:17091", secret)); err != nil {
 		log.Fatal(err)
 	}
 

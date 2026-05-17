@@ -69,6 +69,8 @@ func Router() *fiber.App {
 	adminGroup.Get("/cluster/status", admin.ClusterStatus)
 	adminGroup.Get("/cluster/layout", admin.ClusterLayoutGet)
 	adminGroup.Put("/cluster/layout", admin.ClusterLayoutApply)
+	adminGroup.Delete("/cluster/node/:id", admin.ClusterNodeRemove)
+	adminGroup.Post("/cluster/node/:id/drain", admin.ClusterNodeDrain)
 	adminGroup.Put("/buckets/:bucket/encryption", admin.PutBucketEncryption)
 	adminGroup.Get("/buckets/:bucket/encryption", admin.GetBucketEncryption)
 	adminGroup.Delete("/buckets/:bucket/encryption", admin.DeleteBucketEncryption)

@@ -65,6 +65,7 @@ type DRPCClusterClient interface {
 	GetLayout(ctx context.Context, in *LayoutRequest) (*LayoutResponse, error)
 	ReplicateKV(ctx context.Context, in *KVOp) (*KVAck, error)
 	BulkSyncKV(ctx context.Context, in *KVBulkRequest) (DRPCCluster_BulkSyncKVClient, error)
+	Join(ctx context.Context, in *JoinRequest) (*JoinResponse, error)
 }
 
 type drpcClusterClient struct {
@@ -510,6 +511,15 @@ func (x *drpcCluster_BulkSyncKVClient) RecvMsg(m *KVEntry) error {
 	return x.MsgRecv(m, drpcEncoding_File_internal_api_rpc_service_proto{})
 }
 
+func (c *drpcClusterClient) Join(ctx context.Context, in *JoinRequest) (*JoinResponse, error) {
+	out := new(JoinResponse)
+	err := c.cc.Invoke(ctx, "/hangar.cluster.v1.Cluster/Join", drpcEncoding_File_internal_api_rpc_service_proto{}, in, out)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 type DRPCClusterServer interface {
 	Handshake(context.Context, *Hello) (*HelloAck, error)
 	HeartbeatStream(DRPCCluster_HeartbeatStreamStream) error
@@ -538,6 +548,7 @@ type DRPCClusterServer interface {
 	GetLayout(context.Context, *LayoutRequest) (*LayoutResponse, error)
 	ReplicateKV(context.Context, *KVOp) (*KVAck, error)
 	BulkSyncKV(*KVBulkRequest, DRPCCluster_BulkSyncKVStream) error
+	Join(context.Context, *JoinRequest) (*JoinResponse, error)
 }
 
 type DRPCClusterUnimplementedServer struct{}
@@ -650,9 +661,13 @@ func (s *DRPCClusterUnimplementedServer) BulkSyncKV(*KVBulkRequest, DRPCCluster_
 	return drpcerr.WithCode(errors.New("Unimplemented"), drpcerr.Unimplemented)
 }
 
+func (s *DRPCClusterUnimplementedServer) Join(context.Context, *JoinRequest) (*JoinResponse, error) {
+	return nil, drpcerr.WithCode(errors.New("Unimplemented"), drpcerr.Unimplemented)
+}
+
 type DRPCClusterDescription struct{}
 
-func (DRPCClusterDescription) NumMethods() int { return 27 }
+func (DRPCClusterDescription) NumMethods() int { return 28 }
 
 func (DRPCClusterDescription) Method(n int) (string, drpc.Encoding, drpc.Receiver, interface{}, bool) {
 	switch n {
@@ -897,6 +912,15 @@ func (DRPCClusterDescription) Method(n int) (string, drpc.Encoding, drpc.Receive
 						&drpcCluster_BulkSyncKVStream{in2.(drpc.Stream)},
 					)
 			}, DRPCClusterServer.BulkSyncKV, true
+	case 27:
+		return "/hangar.cluster.v1.Cluster/Join", drpcEncoding_File_internal_api_rpc_service_proto{},
+			func(srv interface{}, ctx context.Context, in1, in2 interface{}) (drpc.Message, error) {
+				return srv.(DRPCClusterServer).
+					Join(
+						ctx,
+						in1.(*JoinRequest),
+					)
+			}, DRPCClusterServer.Join, true
 	default:
 		return "", nil, nil, nil, false
 	}
@@ -1455,4 +1479,24 @@ func (x *drpcCluster_BulkSyncKVStream) GetStream() drpc.Stream {
 
 func (x *drpcCluster_BulkSyncKVStream) Send(m *KVEntry) error {
 	return x.MsgSend(m, drpcEncoding_File_internal_api_rpc_service_proto{})
+}
+
+type DRPCCluster_JoinStream interface {
+	drpc.Stream
+	SendAndClose(*JoinResponse) error
+}
+
+type drpcCluster_JoinStream struct {
+	drpc.Stream
+}
+
+func (x *drpcCluster_JoinStream) GetStream() drpc.Stream {
+	return x.Stream
+}
+
+func (x *drpcCluster_JoinStream) SendAndClose(m *JoinResponse) error {
+	if err := x.MsgSend(m, drpcEncoding_File_internal_api_rpc_service_proto{}); err != nil {
+		return err
+	}
+	return x.CloseSend()
 }

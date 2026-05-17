@@ -29,10 +29,10 @@ func setupCatchupNode(t *testing.T, id NodeID, listen string, peers map[NodeID]s
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
+	_ = peers
 	rt, err := Start(ctx, Config{
 		NodeID:      id,
 		Listen:      listen,
-		Peers:       peers,
 		Secret:      secret,
 		HeartbeatMS: 100,
 	})

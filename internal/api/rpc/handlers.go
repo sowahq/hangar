@@ -251,6 +251,16 @@ func (s *Server) ReplicateKV(ctx context.Context, op *KVOp) (*KVAck, error) {
 	return &KVAck{Ok: true}, nil
 }
 
+func (s *Server) Join(ctx context.Context, req *JoinRequest) (*JoinResponse, error) {
+	if s.Joiner == nil {
+		return s.DRPCClusterUnimplementedServer.Join(ctx, req)
+	}
+	if req == nil {
+		return &JoinResponse{Accepted: false, Error: "nil request"}, nil
+	}
+	return s.Joiner.Join(req)
+}
+
 func (s *Server) ReplicaCatchup(cursor *CatchupCursor, stream DRPCCluster_ReplicaCatchupStream) error {
 	if s.Catchup == nil {
 		return s.DRPCClusterUnimplementedServer.ReplicaCatchup(cursor, stream)
