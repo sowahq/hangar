@@ -44,6 +44,7 @@ func (s *ClusteredMetadataStore) PutRaw(bucket, key string, raw []byte) error {
 		if err := s.local.PutRaw(bucket, key, raw); err != nil {
 			return err
 		}
+		_ = AppendWAL("put", bucket, key, raw)
 		s.replicateAsync(owners[1:], bucket, key, raw)
 		return nil
 	}
@@ -131,6 +132,9 @@ func (s *ClusteredMetadataStore) DeleteRaw(bucket, key string) ([]byte, error) {
 	var primaryErr error
 	if primary == s.cl.Self() {
 		prev, primaryErr = s.local.DeleteRaw(bucket, key)
+		if primaryErr == nil {
+			_ = AppendWAL("del", bucket, key, nil)
+		}
 	} else {
 		ctx, cancel := context.WithTimeout(context.Background(), metadataRPCWait)
 		cli, err := s.pool.Client(ctx, primary)

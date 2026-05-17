@@ -194,6 +194,7 @@ func Execute() {
 						}
 
 						go clusterRuntime.StartAntiEntropy(ctx, time.Hour)
+						go clusterRuntime.StartCatchupLoop(ctx, 15*time.Second)
 
 						go func() {
 							syncCtx, cancel := context.WithTimeout(ctx, 30*time.Second)

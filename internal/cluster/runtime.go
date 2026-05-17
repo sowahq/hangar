@@ -72,6 +72,7 @@ func Start(ctx context.Context, cfg Config) (*Runtime, error) {
 	srv.Refs = localRefcountAdapter{}
 	srv.Layout = localLayoutAdapter{}
 	srv.KV = localKVHandler{}
+	srv.Catchup = localCatchupHandler{}
 
 	mux := drpcmux.New()
 	if err := rpc.DRPCRegisterCluster(mux, srv); err != nil {

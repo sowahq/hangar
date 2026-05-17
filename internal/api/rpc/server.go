@@ -42,6 +42,10 @@ type KVHandler interface {
 	BulkSync(prefixes [][]byte, fn func(key, value []byte) bool) error
 }
 
+type CatchupHandler interface {
+	ReplicaCatchup(afterSeq uint64, fn func(*WALEntry) bool) error
+}
+
 type Server struct {
 	DRPCClusterUnimplementedServer
 
@@ -51,6 +55,7 @@ type Server struct {
 	Refs     RefcountHandler
 	Layout   LayoutHandler
 	KV       KVHandler
+	Catchup  CatchupHandler
 }
 
 func NewServer(b Bridge) *Server {

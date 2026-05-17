@@ -13,7 +13,11 @@ import (
 type localMetadataAdapter struct{}
 
 func (localMetadataAdapter) PutMetadata(bucket, key string, raw []byte) error {
-	return storage.LocalMetadataStore{}.PutRaw(bucket, key, raw)
+	if err := (storage.LocalMetadataStore{}).PutRaw(bucket, key, raw); err != nil {
+		return err
+	}
+	_ = AppendWAL("put", bucket, key, raw)
+	return nil
 }
 
 func (localMetadataAdapter) GetMetadata(bucket, key string) ([]byte, bool, error) {
@@ -35,6 +39,7 @@ func (localMetadataAdapter) DeleteMetadata(bucket, key string) ([]byte, bool, er
 		}
 		return nil, false, err
 	}
+	_ = AppendWAL("del", bucket, key, nil)
 	return prev, true, nil
 }
 

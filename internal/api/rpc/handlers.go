@@ -251,6 +251,27 @@ func (s *Server) ReplicateKV(ctx context.Context, op *KVOp) (*KVAck, error) {
 	return &KVAck{Ok: true}, nil
 }
 
+func (s *Server) ReplicaCatchup(cursor *CatchupCursor, stream DRPCCluster_ReplicaCatchupStream) error {
+	if s.Catchup == nil {
+		return s.DRPCClusterUnimplementedServer.ReplicaCatchup(cursor, stream)
+	}
+	if cursor == nil {
+		return nil
+	}
+	var sendErr error
+	err := s.Catchup.ReplicaCatchup(cursor.LastSeq, func(w *WALEntry) bool {
+		if err := stream.Send(w); err != nil {
+			sendErr = err
+			return false
+		}
+		return true
+	})
+	if sendErr != nil {
+		return sendErr
+	}
+	return err
+}
+
 func (s *Server) BulkSyncKV(req *KVBulkRequest, stream DRPCCluster_BulkSyncKVStream) error {
 	if s.KV == nil {
 		return s.DRPCClusterUnimplementedServer.BulkSyncKV(req, stream)
