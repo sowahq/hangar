@@ -3,9 +3,12 @@ package storage
 import (
 	"sync"
 	"testing"
+
+	"github.com/anhostfr/hangar/internal/testutil"
 )
 
 func TestPendingChunksMarkUnmark(t *testing.T) {
+	testutil.SetupDB(t)
 	const h = "abc123"
 
 	if IsChunkPending(h) {
@@ -26,6 +29,7 @@ func TestPendingChunksMarkUnmark(t *testing.T) {
 }
 
 func TestPendingChunksRefCount(t *testing.T) {
+	testutil.SetupDB(t)
 	const h = "ref-counted"
 
 	MarkChunkPending(h)
@@ -47,6 +51,7 @@ func TestPendingChunksRefCount(t *testing.T) {
 }
 
 func TestPendingChunksBatchOps(t *testing.T) {
+	testutil.SetupDB(t)
 	hashes := []string{"a", "b", "c"}
 
 	MarkChunksPending(hashes)
@@ -67,6 +72,7 @@ func TestPendingChunksBatchOps(t *testing.T) {
 }
 
 func TestPendingChunksIgnoresEmptyHash(t *testing.T) {
+	testutil.SetupDB(t)
 	MarkChunkPending("")
 	MarkChunksPending([]string{"", "real"})
 
@@ -82,6 +88,7 @@ func TestPendingChunksIgnoresEmptyHash(t *testing.T) {
 }
 
 func TestPendingChunksConcurrentSafe(t *testing.T) {
+	testutil.SetupDB(t)
 	const h = "race"
 	const goroutines = 50
 	const iterations = 1000
