@@ -191,11 +191,23 @@ func (c *Cluster) ApplyLayout(l *Layout) error {
 	return nil
 }
 
+func (c *Cluster) verifyLayout(l *Layout) error {
+	if err := l.Verify(c.cfg.Secret); err == nil {
+		return nil
+	} else if !errors.Is(err, ErrLayoutSignature) {
+		return err
+	}
+	if len(c.cfg.PreviousSecret) > 0 {
+		return l.Verify(c.cfg.PreviousSecret)
+	}
+	return ErrLayoutSignature
+}
+
 func (c *Cluster) AdoptLayout(l *Layout) error {
 	if l == nil {
 		return errors.New("nil layout")
 	}
-	if err := l.Verify(c.cfg.Secret); err != nil {
+	if err := c.verifyLayout(l); err != nil {
 		return err
 	}
 	db := database.LocalStore()
@@ -295,7 +307,7 @@ func (c *Cluster) LoadLayout() error {
 		}
 		return err
 	}
-	if err := l.Verify(c.cfg.Secret); err != nil {
+	if err := c.verifyLayout(l); err != nil {
 		return err
 	}
 	c.mu.Lock()

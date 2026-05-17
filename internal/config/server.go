@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"sync"
 
 	"github.com/BurntSushi/toml"
@@ -101,6 +102,7 @@ type serverConfig struct {
 var masterKey []byte
 
 var clusterSharedSecret []byte
+var clusterPreviousSecret []byte
 
 var (
 	c  *serverConfig
@@ -386,6 +388,7 @@ func LoadServerConfig(path string) error {
 	}
 
 	clusterSharedSecret = nil
+	clusterPreviousSecret = nil
 	if c.Cluster.Enabled {
 		if c.Cluster.NodeID == "" {
 			host, err := os.Hostname()
@@ -400,14 +403,28 @@ func LoadServerConfig(path string) error {
 		if c.Cluster.SharedSecretB64 == "" {
 			return fmt.Errorf("cluster: shared_secret_b64 required when cluster.enabled=true")
 		}
-		decoded, err := base64.StdEncoding.DecodeString(c.Cluster.SharedSecretB64)
-		if err != nil {
-			return fmt.Errorf("cluster: shared_secret_b64 not valid base64: %w", err)
+		parts := strings.Split(c.Cluster.SharedSecretB64, ",")
+		for i, p := range parts {
+			s := strings.TrimSpace(p)
+			if s == "" {
+				return fmt.Errorf("cluster: shared_secret_b64 entry %d is empty", i)
+			}
+			decoded, err := base64.StdEncoding.DecodeString(s)
+			if err != nil {
+				return fmt.Errorf("cluster: shared_secret_b64 entry %d not valid base64: %w", i, err)
+			}
+			if len(decoded) != 32 {
+				return fmt.Errorf("cluster: shared_secret_b64 entry %d must decode to 32 bytes (got %d)", i, len(decoded))
+			}
+			if i == 0 {
+				clusterSharedSecret = decoded
+			} else if i == 1 {
+				clusterPreviousSecret = decoded
+			}
 		}
-		if len(decoded) != 32 {
-			return fmt.Errorf("cluster: shared_secret_b64 must decode to 32 bytes (got %d)", len(decoded))
+		if len(parts) > 2 {
+			return fmt.Errorf("cluster: shared_secret_b64 supports at most 2 entries (current,previous), got %d", len(parts))
 		}
-		clusterSharedSecret = decoded
 	}
 
 	syncWrites := true
@@ -683,6 +700,12 @@ func ClusterTags() []string {
 		c = DefaultServerConfig()
 	}
 	return c.Cluster.Tags
+}
+
+func ClusterPreviousSharedSecret() []byte {
+	mu.RLock()
+	defer mu.RUnlock()
+	return clusterPreviousSecret
 }
 
 func ClusterSharedSecret() []byte {

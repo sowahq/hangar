@@ -2,6 +2,7 @@ package cluster
 
 import (
 	"crypto/tls"
+	"errors"
 	"sort"
 	"sync"
 	"time"
@@ -177,15 +178,16 @@ func (v *View) Remove(id NodeID) bool {
 }
 
 type Config struct {
-	NodeID      NodeID
-	Listen      string
-	Seeds       []string
-	Zone        string
-	Capacity    int64
-	Tags        []string
-	Secret      []byte
-	HeartbeatMS int
-	Generation  uint64
+	NodeID         NodeID
+	Listen         string
+	Seeds          []string
+	Zone           string
+	Capacity       int64
+	Tags           []string
+	Secret         []byte
+	PreviousSecret []byte
+	HeartbeatMS    int
+	Generation     uint64
 
 	ECData   int
 	ECParity int
@@ -273,6 +275,10 @@ func (c *Cluster) Self() NodeID { return c.cfg.NodeID }
 
 func (c *Cluster) Secret() []byte { return c.cfg.Secret }
 
+func (c *Cluster) PreviousSecret() []byte { return c.cfg.PreviousSecret }
+
+func (c *Cluster) HasPreviousSecret() bool { return len(c.cfg.PreviousSecret) > 0 }
+
 func (c *Cluster) ECEnabled() bool { return c.cfg.ECData > 0 && c.cfg.ECParity > 0 }
 
 func (c *Cluster) ECTotal() int {
@@ -333,7 +339,15 @@ func (c *Cluster) NodeStatus(id NodeID) Status {
 }
 
 func (c *Cluster) VerifyHello(h *rpc.Hello, now time.Time) error {
-	return VerifyHello(h, c.cfg.Secret, nil, now)
+	if err := VerifyHello(h, c.cfg.Secret, nil, now); err == nil {
+		return nil
+	} else if !errors.Is(err, ErrAuthFailed) {
+		return err
+	}
+	if len(c.cfg.PreviousSecret) > 0 {
+		return VerifyHello(h, c.cfg.PreviousSecret, nil, now)
+	}
+	return ErrAuthFailed
 }
 
 func (c *Cluster) BuildHeartbeat() *rpc.Heartbeat {

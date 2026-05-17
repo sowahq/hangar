@@ -27,6 +27,14 @@ const HandshakeWindow = 30 * time.Second
 
 const ProtoVersion = rpc.ProtoVersion
 
+func SecretFingerprint(secret []byte) string {
+	if len(secret) == 0 {
+		return ""
+	}
+	sum := sha256.Sum256(secret)
+	return fmt.Sprintf("%x", sum[:8])
+}
+
 func BuildHello(nodeID string, secret []byte) (*rpc.Hello, error) {
 	nonce := make([]byte, 16)
 	if _, err := rand.Read(nonce); err != nil {

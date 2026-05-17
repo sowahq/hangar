@@ -118,6 +118,21 @@ func ClusterAntiEntropyRun(c *fiber.Ctx) error {
 	})
 }
 
+func ClusterSecretStatus(c *fiber.Ctx) error {
+	cl := cluster.Global()
+	if cl == nil {
+		return response.Error(c, fiber.StatusServiceUnavailable, "cluster mode disabled")
+	}
+	out := fiber.Map{
+		"primary_fingerprint": cluster.SecretFingerprint(cl.Secret()),
+		"has_previous":        cl.HasPreviousSecret(),
+	}
+	if cl.HasPreviousSecret() {
+		out["previous_fingerprint"] = cluster.SecretFingerprint(cl.PreviousSecret())
+	}
+	return response.JSON(c, out)
+}
+
 func ClusterNodeDrain(c *fiber.Ctx) error {
 	cl := cluster.Global()
 	if cl == nil {
