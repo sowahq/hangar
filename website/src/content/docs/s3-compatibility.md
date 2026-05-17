@@ -126,7 +126,7 @@ Hangar trusts the client-provided value and echoes it. It does not recompute, so
 |-----------------------------------|--------|
 | `x-amz-copy-source`               | ✅     |
 | `x-amz-metadata-directive`        | ⚠️ accepted, content-type/encoding semantics best-effort |
-| `x-amz-copy-source-if-match` / `-if-none-match` / `-if-modified-since` / `-if-unmodified-since` | ❌ |
+| `x-amz-copy-source-if-match` / `-if-none-match` / `-if-modified-since` / `-if-unmodified-since` | ✅ Source preconditions, mismatch → 412 PreconditionFailed |
 
 ### Range / conditional GET
 

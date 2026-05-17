@@ -27,6 +27,8 @@ type UploadPartCopyRequest struct {
 	RangeStart int64
 	RangeEnd   int64
 	HasRange   bool
+
+	Conditions CopyConditions
 }
 
 type UploadPartCopyResponse struct {
@@ -60,6 +62,10 @@ func UploadPartCopy(req *UploadPartCopyRequest) (*UploadPartCopyResponse, error)
 		SrcVersion: req.SrcVersion,
 	})
 	if err != nil {
+		return nil, err
+	}
+
+	if err := checkCopyConditions(src, req.Conditions); err != nil {
 		return nil, err
 	}
 

@@ -78,9 +78,12 @@ func handleUploadPartCopy(c *fiber.Ctx, dstBucket, dstKey, uploadID string, part
 		RangeStart: start,
 		RangeEnd:   end,
 		HasRange:   hasRange,
+		Conditions: parseCopyConditions(c),
 	})
 	if err != nil {
 		switch {
+		case errors.Is(err, object.ErrCopyPreconditionFailed):
+			return writeError(c, fiber.StatusPreconditionFailed, "PreconditionFailed", "At least one of the preconditions you specified did not hold", "/"+srcBucket+"/"+srcKey)
 		case errors.Is(err, object.ErrCopySourceNotFound):
 			return writeError(c, fiber.StatusNotFound, "NoSuchKey", err.Error(), "/"+srcBucket+"/"+srcKey)
 		case errors.Is(err, object.ErrMultipartNotFound):

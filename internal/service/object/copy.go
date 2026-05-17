@@ -3,6 +3,7 @@ package object
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/anhostfr/hangar/internal/config"
 	"github.com/anhostfr/hangar/internal/service/bucket"
@@ -10,7 +11,17 @@ import (
 	"github.com/anhostfr/hangar/internal/storage"
 )
 
-var ErrCopySourceNotFound = errors.New("copy source not found")
+var (
+	ErrCopySourceNotFound      = errors.New("copy source not found")
+	ErrCopyPreconditionFailed  = errors.New("copy source precondition failed")
+)
+
+type CopyConditions struct {
+	IfMatch           string
+	IfNoneMatch       string
+	IfModifiedSince   int64
+	IfUnmodifiedSince int64
+}
 
 type CopyObjectRequest struct {
 	SrcBucket         string
@@ -22,6 +33,7 @@ type CopyObjectRequest struct {
 	ContentType       string
 	SrcSSE            *SSERequest
 	DstSSE            *SSERequest
+	Conditions        CopyConditions
 }
 
 func CopyObject(req *CopyObjectRequest) (*PutObjectResponse, error) {
@@ -31,6 +43,10 @@ func CopyObject(req *CopyObjectRequest) (*PutObjectResponse, error) {
 
 	src, err := loadCopySource(req)
 	if err != nil {
+		return nil, err
+	}
+
+	if err := checkCopyConditions(src, req.Conditions); err != nil {
 		return nil, err
 	}
 
@@ -191,6 +207,50 @@ func reencryptCopy(req *CopyObjectRequest, src *storage.Metadatas, contentType s
 		ChecksumAlgorithm: src.ChecksumAlgorithm,
 		ChecksumValue:     src.ChecksumValue,
 	}, nil
+}
+
+func checkCopyConditions(src *storage.Metadatas, cond CopyConditions) error {
+	etag := stripETagQuotes(src.ETag)
+
+	if cond.IfMatch != "" {
+		if !etagAnyMatch(cond.IfMatch, etag) {
+			return ErrCopyPreconditionFailed
+		}
+	}
+	if cond.IfNoneMatch != "" {
+		if etagAnyMatch(cond.IfNoneMatch, etag) {
+			return ErrCopyPreconditionFailed
+		}
+	}
+	if cond.IfUnmodifiedSince > 0 {
+		if src.CreatedAt > cond.IfUnmodifiedSince {
+			return ErrCopyPreconditionFailed
+		}
+	}
+	if cond.IfModifiedSince > 0 {
+		if src.CreatedAt <= cond.IfModifiedSince {
+			return ErrCopyPreconditionFailed
+		}
+	}
+	return nil
+}
+
+func stripETagQuotes(s string) string {
+	s = strings.TrimPrefix(s, "W/")
+	s = strings.Trim(s, `"`)
+	return s
+}
+
+func etagAnyMatch(header, etag string) bool {
+	for _, p := range strings.Split(header, ",") {
+		v := strings.TrimSpace(p)
+		v = strings.TrimPrefix(v, "W/")
+		v = strings.Trim(v, `"`)
+		if v == "*" || v == etag {
+			return true
+		}
+	}
+	return false
 }
 
 func loadCopySource(req *CopyObjectRequest) (*storage.Metadatas, error) {

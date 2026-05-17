@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/anhostfr/hangar/internal/service/object"
 	"github.com/anhostfr/hangar/internal/storage"
 	"github.com/gofiber/fiber/v2"
 )
@@ -64,6 +65,24 @@ func checkConditionalRead(c *fiber.Ctx, m *storage.Metadatas) int {
 	}
 
 	return 0
+}
+
+func parseCopyConditions(c *fiber.Ctx) object.CopyConditions {
+	cond := object.CopyConditions{
+		IfMatch:     c.Get("x-amz-copy-source-if-match"),
+		IfNoneMatch: c.Get("x-amz-copy-source-if-none-match"),
+	}
+	if v := c.Get("x-amz-copy-source-if-modified-since"); v != "" {
+		if t, ok := parseHTTPDate(v); ok {
+			cond.IfModifiedSince = t.UnixMilli()
+		}
+	}
+	if v := c.Get("x-amz-copy-source-if-unmodified-since"); v != "" {
+		if t, ok := parseHTTPDate(v); ok {
+			cond.IfUnmodifiedSince = t.UnixMilli()
+		}
+	}
+	return cond
 }
 
 func checkConditionalWrite(c *fiber.Ctx, bucketName, key string, lookup func(string, string) (*storage.Metadatas, error)) int {

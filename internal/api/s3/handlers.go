@@ -967,8 +967,12 @@ func handleCopyObject(c *fiber.Ctx, dstBucket, dstKey, source string) error {
 		ContentType:       string(c.Request().Header.ContentType()),
 		SrcSSE:            srcSSE,
 		DstSSE:            dstSSE,
+		Conditions:        parseCopyConditions(c),
 	})
 	if err != nil {
+		if errors.Is(err, object.ErrCopyPreconditionFailed) {
+			return writeError(c, fiber.StatusPreconditionFailed, "PreconditionFailed", "At least one of the preconditions you specified did not hold", "/"+srcBucket+"/"+srcKey)
+		}
 		if errors.Is(err, object.ErrCopySourceNotFound) {
 			return writeError(c, fiber.StatusNotFound, "NoSuchKey", err.Error(), "/"+srcBucket+"/"+srcKey)
 		}
