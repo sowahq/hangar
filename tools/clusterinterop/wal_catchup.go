@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"log"
@@ -118,7 +120,11 @@ func runWALCatchup() {
 
 	secret := os.Getenv("CLUSTER_SECRET")
 	if secret == "" {
-		log.Fatal("set CLUSTER_SECRET (base64 32 bytes)")
+		raw := make([]byte, 32)
+		if _, err := rand.Read(raw); err != nil {
+			log.Fatal(err)
+		}
+		secret = base64.StdEncoding.EncodeToString(raw)
 	}
 
 	root := filepath.Join(os.TempDir(), fmt.Sprintf("hangar-walcatchup-%d", time.Now().UnixNano()))

@@ -93,6 +93,24 @@ func ClusterNodeRemove(c *fiber.Ctx) error {
 	return response.JSON(c, fiber.Map{"removed": string(id), "layout_version": cl.LayoutVersion()})
 }
 
+func ClusterAntiEntropyRun(c *fiber.Ctx) error {
+	rt := cluster.GlobalRuntime()
+	if rt == nil {
+		return response.Error(c, fiber.StatusServiceUnavailable, "cluster mode disabled")
+	}
+	stats, err := rt.RunAntiEntropy(c.UserContext())
+	if err != nil {
+		return response.Error(c, fiber.StatusInternalServerError, err.Error())
+	}
+	return response.JSON(c, fiber.Map{
+		"scanned":  stats.Scanned,
+		"pulled":   stats.Pulled,
+		"deleted":  stats.Deleted,
+		"errors":   stats.Errors,
+		"duration_ms": stats.EndedAt.Sub(stats.StartedAt).Milliseconds(),
+	})
+}
+
 func ClusterNodeDrain(c *fiber.Ctx) error {
 	cl := cluster.Global()
 	if cl == nil {

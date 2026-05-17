@@ -37,9 +37,12 @@ type step struct {
 }
 
 func main() {
-	if len(os.Args) > 1 && os.Args[1] == "wal-catchup" {
-		runWALCatchup()
-		return
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "basic", "drain", "concurrent", "seed-failover", "wrong-secret", "anti-entropy", "add-remove", "long-run", "wal-catchup", "all":
+			dispatchScenario(os.Args[1])
+			return
+		}
 	}
 
 	ak := os.Getenv("S3_AK")

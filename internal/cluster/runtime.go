@@ -98,6 +98,7 @@ func Start(ctx context.Context, cfg Config) (*Runtime, error) {
 	}()
 
 	SetGlobal(cl)
+	SetGlobalRuntime(rt)
 
 	return rt, nil
 }
@@ -268,6 +269,7 @@ func (r *Runtime) Stop() {
 		r.Pool.Close()
 	}
 	SetGlobal(nil)
+	SetGlobalRuntime(nil)
 }
 
 func (r *Runtime) BootstrapPeerSync(ctx context.Context, attempts int, delay time.Duration) (int, error) {

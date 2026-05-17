@@ -3,6 +3,7 @@ package cluster
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"time"
 
@@ -20,8 +21,8 @@ type AntiEntropyStats struct {
 	EndedAt   time.Time
 }
 
-func (r *Runtime) RunAntiEntropy(ctx context.Context) (AntiEntropyStats, error) {
-	stats := AntiEntropyStats{StartedAt: time.Now()}
+func (r *Runtime) RunAntiEntropy(ctx context.Context) (stats AntiEntropyStats, err error) {
+	stats.StartedAt = time.Now()
 	defer func() { stats.EndedAt = time.Now() }()
 
 	if r == nil || r.Cluster == nil {
@@ -45,20 +46,47 @@ func (r *Runtime) RunAntiEntropy(ctx context.Context) (AntiEntropyStats, error) 
 		return stats, nil
 	}
 
-	it, err := db.NewIteratorWithPrefix([]byte("chunkref:"))
+	seen := map[string]struct{}{}
+	hashes := make([]string, 0, 256)
+
+	metaIt, err := db.NewIteratorWithPrefix([]byte("metadata:"))
 	if err != nil {
 		return stats, err
 	}
+	for metaIt.First(); metaIt.Valid(); metaIt.Next() {
+		var m storage.Metadatas
+		if err := json.Unmarshal(metaIt.Value(), &m); err != nil {
+			continue
+		}
+		for _, h := range m.ChunkHashes {
+			if _, ok := seen[h]; ok {
+				continue
+			}
+			seen[h] = struct{}{}
+			hashes = append(hashes, h)
+		}
+	}
+	if err := metaIt.Close(); err != nil {
+		return stats, err
+	}
 
-	hashes := make([]string, 0, 256)
-	for it.First(); it.Valid(); it.Next() {
-		k := it.Key()
+	refIt, err := db.NewIteratorWithPrefix([]byte("chunkref:"))
+	if err != nil {
+		return stats, err
+	}
+	for refIt.First(); refIt.Valid(); refIt.Next() {
+		k := refIt.Key()
 		if !bytes.HasPrefix(k, []byte("chunkref:")) {
 			continue
 		}
-		hashes = append(hashes, string(k[len("chunkref:"):]))
+		h := string(k[len("chunkref:"):])
+		if _, ok := seen[h]; ok {
+			continue
+		}
+		seen[h] = struct{}{}
+		hashes = append(hashes, h)
 	}
-	if err := it.Close(); err != nil {
+	if err := refIt.Close(); err != nil {
 		return stats, err
 	}
 
