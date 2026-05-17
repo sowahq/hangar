@@ -129,7 +129,7 @@ func ListObjectsV2(req *ListObjectsV2Request) (*ListObjectsV2Result, error) {
 
 	result := &ListObjectsV2Result{}
 	seenPrefixes := map[string]struct{}{}
-	skipFirst := req.ContinuationToken != "" || req.StartAfter != ""
+	skipFirst := req.StartAfter != "" && req.ContinuationToken == ""
 
 	for iter.First(); iter.Valid(); iter.Next() {
 		fullKey := string(iter.Key())
