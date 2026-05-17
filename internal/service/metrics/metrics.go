@@ -39,6 +39,14 @@ var (
 
 	multipartInflight prometheus.Gauge
 
+	clusterViewVersion   prometheus.Gauge
+	clusterLayoutVersion prometheus.Gauge
+	clusterAlivePeers    prometheus.Gauge
+	clusterTotalPeers    prometheus.Gauge
+	clusterGCLeader      prometheus.Gauge
+	clusterECDataShards  prometheus.Gauge
+	clusterECParityShards prometheus.Gauge
+
 	initOnce sync.Once
 )
 
@@ -146,6 +154,35 @@ func Init() {
 			Help:      "Multipart uploads currently in flight.",
 		})
 
+		clusterViewVersion = prometheus.NewGauge(prometheus.GaugeOpts{
+			Namespace: "hangar", Subsystem: "cluster", Name: "view_version",
+			Help: "Cluster membership view version (monotonic).",
+		})
+		clusterLayoutVersion = prometheus.NewGauge(prometheus.GaugeOpts{
+			Namespace: "hangar", Subsystem: "cluster", Name: "layout_version",
+			Help: "Cluster layout version currently applied.",
+		})
+		clusterAlivePeers = prometheus.NewGauge(prometheus.GaugeOpts{
+			Namespace: "hangar", Subsystem: "cluster", Name: "alive_peers",
+			Help: "Number of cluster peers currently Active.",
+		})
+		clusterTotalPeers = prometheus.NewGauge(prometheus.GaugeOpts{
+			Namespace: "hangar", Subsystem: "cluster", Name: "total_peers",
+			Help: "Number of cluster peers configured (self included).",
+		})
+		clusterGCLeader = prometheus.NewGauge(prometheus.GaugeOpts{
+			Namespace: "hangar", Subsystem: "cluster", Name: "gc_leader",
+			Help: "1 if this node is the cluster GC leader (lowest-id alive), 0 otherwise.",
+		})
+		clusterECDataShards = prometheus.NewGauge(prometheus.GaugeOpts{
+			Namespace: "hangar", Subsystem: "cluster", Name: "ec_data_shards",
+			Help: "Configured erasure-coding data shards (k).",
+		})
+		clusterECParityShards = prometheus.NewGauge(prometheus.GaugeOpts{
+			Namespace: "hangar", Subsystem: "cluster", Name: "ec_parity_shards",
+			Help: "Configured erasure-coding parity shards (m).",
+		})
+
 		registry.MustRegister(
 			requestsTotal,
 			requestDuration,
@@ -155,6 +192,8 @@ func Init() {
 			scrubMissingFiles, scrubDanglingRefs, scrubBytesScanned,
 			diskFreeBytes, diskTotalBytes, nodeUsedBytes, nodeMaxBytesGauge,
 			multipartInflight,
+			clusterViewVersion, clusterLayoutVersion, clusterAlivePeers, clusterTotalPeers,
+			clusterGCLeader, clusterECDataShards, clusterECParityShards,
 			collectors.NewGoCollector(),
 			collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
 		)
@@ -256,6 +295,21 @@ func MultipartInflightInc() {
 func MultipartInflightDec() {
 	Init()
 	multipartInflight.Dec()
+}
+
+func ObserveCluster(viewVersion, layoutVersion uint64, alivePeers, totalPeers int, gcLeader bool, ecData, ecParity int) {
+	Init()
+	clusterViewVersion.Set(float64(viewVersion))
+	clusterLayoutVersion.Set(float64(layoutVersion))
+	clusterAlivePeers.Set(float64(alivePeers))
+	clusterTotalPeers.Set(float64(totalPeers))
+	if gcLeader {
+		clusterGCLeader.Set(1)
+	} else {
+		clusterGCLeader.Set(0)
+	}
+	clusterECDataShards.Set(float64(ecData))
+	clusterECParityShards.Set(float64(ecParity))
 }
 
 func ResetForTest() {

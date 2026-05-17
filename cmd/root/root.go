@@ -179,6 +179,14 @@ func Execute() {
 						scrubService.SetClusterLeaderCheck(cl.IsGCLeader)
 						lifecycleService.SetClusterLeaderCheck(cl.IsGCLeader)
 
+						if config.MetricsEnabled() {
+							ecData := config.ECDataShards()
+							ecParity := config.ECParityShards()
+							go cl.StartMetricsSampler(ctx, 5*time.Second, func(vv, lv uint64, alive, total int, leader bool) {
+								metricsService.ObserveCluster(vv, lv, alive, total, leader, ecData, ecParity)
+							})
+						}
+
 						go func() {
 							syncCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 							defer cancel()
