@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/anhostfr/hangar/internal/api/rpc"
+	"github.com/sowahq/hangar/internal/api/rpc"
 )
 
 type NodeID string

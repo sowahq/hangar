@@ -12,11 +12,11 @@ import (
 	"time"
 
 	"encoding/hex"
-	"github.com/anhostfr/hangar/internal/config"
-	"github.com/anhostfr/hangar/internal/database"
-	"github.com/anhostfr/hangar/internal/service/metrics"
-	"github.com/anhostfr/hangar/internal/storage"
-	dbutils "github.com/anhostfr/hangar/pkg/database"
+	"github.com/sowahq/hangar/internal/config"
+	"github.com/sowahq/hangar/internal/database"
+	"github.com/sowahq/hangar/internal/service/metrics"
+	"github.com/sowahq/hangar/internal/storage"
+	dbutils "github.com/sowahq/hangar/pkg/database"
 	"github.com/phuslu/log"
 	"github.com/zeebo/blake3"
 )

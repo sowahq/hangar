@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/anhostfr/hangar/internal/database"
-	"github.com/anhostfr/hangar/internal/storage"
-	dbutils "github.com/anhostfr/hangar/pkg/database"
-	"github.com/anhostfr/hangar/pkg/pathutil"
+	"github.com/sowahq/hangar/internal/database"
+	"github.com/sowahq/hangar/internal/storage"
+	dbutils "github.com/sowahq/hangar/pkg/database"
+	"github.com/sowahq/hangar/pkg/pathutil"
 )
 
 type ObjectInfo struct {

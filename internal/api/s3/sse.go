@@ -3,8 +3,8 @@ package s3
 import (
 	"errors"
 
-	"github.com/anhostfr/hangar/internal/service/object"
-	"github.com/anhostfr/hangar/internal/storage"
+	"github.com/sowahq/hangar/internal/service/object"
+	"github.com/sowahq/hangar/internal/storage"
 	"github.com/gofiber/fiber/v2"
 )
 

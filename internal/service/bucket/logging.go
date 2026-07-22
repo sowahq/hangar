@@ -7,7 +7,7 @@ import (
 
 	"github.com/cockroachdb/pebble"
 
-	"github.com/anhostfr/hangar/internal/database"
+	"github.com/sowahq/hangar/internal/database"
 )
 
 var ErrLoggingNotFound = errors.New("logging configuration not found")

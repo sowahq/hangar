@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/anhostfr/hangar/internal/config"
-	"github.com/anhostfr/hangar/pkg/sysinfo"
+	"github.com/sowahq/hangar/internal/config"
+	"github.com/sowahq/hangar/pkg/sysinfo"
 )
 
 var ErrInsufficientStorage = errors.New("insufficient storage")

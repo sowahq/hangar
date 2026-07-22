@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 
-	"github.com/anhostfr/hangar/internal/api/http/response"
-	bucketService "github.com/anhostfr/hangar/internal/service/bucket"
+	"github.com/sowahq/hangar/internal/api/http/response"
+	bucketService "github.com/sowahq/hangar/internal/service/bucket"
 	"github.com/gofiber/fiber/v2"
 )
 

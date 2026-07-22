@@ -1,4 +1,4 @@
-module github.com/anhostfr/hangar/tools/s3interop
+module github.com/sowahq/hangar/tools/s3interop
 
 go 1.25.0
 

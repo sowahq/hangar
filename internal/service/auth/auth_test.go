@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/anhostfr/hangar/internal/testutil"
+	"github.com/sowahq/hangar/internal/testutil"
 )
 
 func TestCreateAndVerifyToken(t *testing.T) {

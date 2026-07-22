@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package hangar.cluster.v1;
 
-option go_package = "github.com/anhostfr/hangar/internal/api/rpc;rpc";
+option go_package = "github.com/sowahq/hangar/internal/api/rpc;rpc";
 
 message Hello {
   string node_id       = 1;

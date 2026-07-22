@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/anhostfr/hangar/internal/config"
-	"github.com/anhostfr/hangar/internal/storage"
-	"github.com/anhostfr/hangar/internal/testutil"
+	"github.com/sowahq/hangar/internal/config"
+	"github.com/sowahq/hangar/internal/storage"
+	"github.com/sowahq/hangar/internal/testutil"
 )
 
 func writeChunkFile(t *testing.T, hash string, age time.Duration) string {

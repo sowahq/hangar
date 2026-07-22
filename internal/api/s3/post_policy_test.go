@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/anhostfr/hangar/internal/service/bucket"
+	"github.com/sowahq/hangar/internal/service/bucket"
 )
 
 func buildPostPolicyForm(t *testing.T, accessKey, secret, bucketName, keyName string, fileBody []byte) (*bytes.Buffer, string) {

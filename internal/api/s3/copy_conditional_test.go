@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/anhostfr/hangar/internal/service/bucket"
+	"github.com/sowahq/hangar/internal/service/bucket"
 )
 
 func TestS3CopyObjectConditionalHeaders(t *testing.T) {

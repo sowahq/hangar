@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/anhostfr/hangar/internal/testutil"
+	"github.com/sowahq/hangar/internal/testutil"
 )
 
 func TestKeyringBootstrapAndRotate(t *testing.T) {

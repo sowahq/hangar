@@ -6,10 +6,10 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/phuslu/log"
 
-	"github.com/anhostfr/hangar/internal/api/http/response"
-	"github.com/anhostfr/hangar/internal/api/http/validation"
-	"github.com/anhostfr/hangar/internal/service/bucket"
-	"github.com/anhostfr/hangar/internal/service/object"
+	"github.com/sowahq/hangar/internal/api/http/response"
+	"github.com/sowahq/hangar/internal/api/http/validation"
+	"github.com/sowahq/hangar/internal/service/bucket"
+	"github.com/sowahq/hangar/internal/service/object"
 )
 
 func Upload(c *fiber.Ctx) error {

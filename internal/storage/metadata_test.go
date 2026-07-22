@@ -6,7 +6,7 @@ import (
 
 	"github.com/cockroachdb/pebble"
 
-	"github.com/anhostfr/hangar/internal/testutil"
+	"github.com/sowahq/hangar/internal/testutil"
 )
 
 func TestDeleteMetadataFromBucket(t *testing.T) {

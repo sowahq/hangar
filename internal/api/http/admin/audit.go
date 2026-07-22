@@ -1,8 +1,8 @@
 package admin
 
 import (
-	"github.com/anhostfr/hangar/internal/service/audit"
 	"github.com/gofiber/fiber/v2"
+	"github.com/sowahq/hangar/internal/service/audit"
 )
 
 func recordAdmin(c *fiber.Ctx, action, targetType, target string, err error) {

@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/anhostfr/hangar/internal/api/rpc"
-	"github.com/anhostfr/hangar/internal/config"
-	"github.com/anhostfr/hangar/internal/database"
-	"github.com/anhostfr/hangar/internal/storage"
+	"github.com/sowahq/hangar/internal/api/rpc"
+	"github.com/sowahq/hangar/internal/config"
+	"github.com/sowahq/hangar/internal/database"
+	"github.com/sowahq/hangar/internal/storage"
 )
 
 func setupCatchupNode(t *testing.T, id NodeID, listen string, peers map[NodeID]string) (*Runtime, func()) {

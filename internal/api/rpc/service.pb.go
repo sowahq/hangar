@@ -2197,7 +2197,7 @@ const file_internal_api_rpc_service_proto_rawDesc = "" +
 	"\vReplicateKV\x12\x17.hangar.cluster.v1.KVOp\x1a\x18.hangar.cluster.v1.KVAck\x12L\n" +
 	"\n" +
 	"BulkSyncKV\x12 .hangar.cluster.v1.KVBulkRequest\x1a\x1a.hangar.cluster.v1.KVEntry0\x01\x12G\n" +
-	"\x04Join\x12\x1e.hangar.cluster.v1.JoinRequest\x1a\x1f.hangar.cluster.v1.JoinResponseB1Z/github.com/anhostfr/hangar/internal/api/rpc;rpcb\x06proto3"
+	"\x04Join\x12\x1e.hangar.cluster.v1.JoinRequest\x1a\x1f.hangar.cluster.v1.JoinResponseB/Z-github.com/sowahq/hangar/internal/api/rpc;rpcb\x06proto3"
 
 var (
 	file_internal_api_rpc_service_proto_rawDescOnce sync.Once

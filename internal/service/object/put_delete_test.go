@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/anhostfr/hangar/internal/storage"
-	"github.com/anhostfr/hangar/internal/testutil"
+	"github.com/sowahq/hangar/internal/storage"
+	"github.com/sowahq/hangar/internal/testutil"
 )
 
 func TestPutObjectIncrementsChunkRefs(t *testing.T) {

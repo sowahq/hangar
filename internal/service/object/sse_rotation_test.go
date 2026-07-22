@@ -5,8 +5,8 @@ import (
 	"io"
 	"testing"
 
-	"github.com/anhostfr/hangar/internal/service/sse"
-	"github.com/anhostfr/hangar/internal/testutil"
+	"github.com/sowahq/hangar/internal/service/sse"
+	"github.com/sowahq/hangar/internal/testutil"
 )
 
 func TestSSES3ReadAfterRotation(t *testing.T) {

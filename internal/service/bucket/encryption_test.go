@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/anhostfr/hangar/internal/testutil"
+	"github.com/sowahq/hangar/internal/testutil"
 )
 
 func TestEncryptionPutGetDelete(t *testing.T) {

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/anhostfr/hangar/internal/database"
+	"github.com/sowahq/hangar/internal/database"
 )
 
 func UpdateVersioning(name string, enabled bool) (*BucketInfo, error) {

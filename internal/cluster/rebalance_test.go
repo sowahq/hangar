@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/anhostfr/hangar/internal/config"
+	"github.com/sowahq/hangar/internal/config"
 )
 
 func TestEagerRebalanceTriggersOnLayoutApply(t *testing.T) {

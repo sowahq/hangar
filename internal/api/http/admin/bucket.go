@@ -1,7 +1,7 @@
 package admin
 
 import (
-	bucketService "github.com/anhostfr/hangar/internal/service/bucket"
+	bucketService "github.com/sowahq/hangar/internal/service/bucket"
 	"github.com/gofiber/fiber/v2"
 )
 

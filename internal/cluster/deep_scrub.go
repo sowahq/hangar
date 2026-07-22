@@ -8,8 +8,8 @@ import (
 	"io"
 	"time"
 
-	"github.com/anhostfr/hangar/internal/database"
-	"github.com/anhostfr/hangar/internal/storage"
+	"github.com/sowahq/hangar/internal/database"
+	"github.com/sowahq/hangar/internal/storage"
 	"github.com/zeebo/blake3"
 )
 

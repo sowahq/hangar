@@ -3,7 +3,7 @@ package metrics
 import (
 	"time"
 
-	"github.com/anhostfr/hangar/internal/service/metrics"
+	"github.com/sowahq/hangar/internal/service/metrics"
 	"github.com/gofiber/fiber/v2"
 	"github.com/phuslu/log"
 )

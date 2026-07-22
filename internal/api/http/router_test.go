@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/anhostfr/hangar/internal/testutil"
+	"github.com/sowahq/hangar/internal/testutil"
 	"github.com/gofiber/fiber/v2"
 )
 

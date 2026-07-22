@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/anhostfr/hangar/internal/config"
-	"github.com/anhostfr/hangar/pkg/crypto"
+	"github.com/sowahq/hangar/internal/config"
+	"github.com/sowahq/hangar/pkg/crypto"
 	"github.com/klauspost/compress/zstd"
 	"github.com/zeebo/blake3"
 )
@@ -182,49 +182,6 @@ func writeChunkRaw(chunkPath string, data []byte) error {
 	cleanup := func() { _ = os.Remove(tmpName) }
 
 	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
-		cleanup()
-		return err
-	}
-	if err := tmp.Sync(); err != nil {
-		tmp.Close()
-		cleanup()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		cleanup()
-		return err
-	}
-	if err := os.Rename(tmpName, chunkPath); err != nil {
-		cleanup()
-		return err
-	}
-	return nil
-}
-
-func writeChunkAtomic(chunkPath string, data []byte, compress bool) error {
-	dir := filepath.Dir(chunkPath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return err
-	}
-
-	tmp, err := os.CreateTemp(dir, ".chunk-*.tmp")
-	if err != nil {
-		return err
-	}
-	tmpName := tmp.Name()
-	cleanup := func() { _ = os.Remove(tmpName) }
-
-	var payload []byte
-	if compress {
-		encoder := zstdEncoderPool.Get().(*zstd.Encoder)
-		payload = encoder.EncodeAll(data, nil)
-		zstdEncoderPool.Put(encoder)
-	} else {
-		payload = data
-	}
-
-	if _, err := tmp.Write(payload); err != nil {
 		tmp.Close()
 		cleanup()
 		return err

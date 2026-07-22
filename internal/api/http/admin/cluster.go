@@ -1,8 +1,8 @@
 package admin
 
 import (
-	"github.com/anhostfr/hangar/internal/api/http/response"
-	"github.com/anhostfr/hangar/internal/cluster"
+	"github.com/sowahq/hangar/internal/api/http/response"
+	"github.com/sowahq/hangar/internal/cluster"
 	"github.com/gofiber/fiber/v2"
 )
 

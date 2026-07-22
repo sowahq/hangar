@@ -7,8 +7,8 @@ import (
 
 	"github.com/cockroachdb/pebble"
 
-	"github.com/anhostfr/hangar/internal/service/bucket"
-	"github.com/anhostfr/hangar/internal/storage"
+	"github.com/sowahq/hangar/internal/service/bucket"
+	"github.com/sowahq/hangar/internal/storage"
 )
 
 type DeleteObjectRequest struct {

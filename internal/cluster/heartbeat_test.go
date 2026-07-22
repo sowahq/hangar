@@ -10,7 +10,7 @@ import (
 	"storj.io/drpc/drpcmux"
 	"storj.io/drpc/drpcserver"
 
-	"github.com/anhostfr/hangar/internal/api/rpc"
+	"github.com/sowahq/hangar/internal/api/rpc"
 )
 
 type clusterFixture struct {

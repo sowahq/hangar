@@ -3,7 +3,7 @@ package http
 import (
 	"testing"
 
-	"github.com/anhostfr/hangar/internal/database"
+	"github.com/sowahq/hangar/internal/database"
 )
 
 func writeBucketDB(name string, data []byte) error {

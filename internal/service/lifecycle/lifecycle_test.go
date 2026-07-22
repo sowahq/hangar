@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/anhostfr/hangar/internal/service/bucket"
-	"github.com/anhostfr/hangar/internal/service/object"
-	"github.com/anhostfr/hangar/internal/storage"
-	"github.com/anhostfr/hangar/internal/testutil"
+	"github.com/sowahq/hangar/internal/service/bucket"
+	"github.com/sowahq/hangar/internal/service/object"
+	"github.com/sowahq/hangar/internal/storage"
+	"github.com/sowahq/hangar/internal/testutil"
 )
 
 func putOld(t *testing.T, name, key string, ageDays int) {

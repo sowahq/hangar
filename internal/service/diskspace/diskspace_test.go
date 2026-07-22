@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/anhostfr/hangar/internal/config"
+	"github.com/sowahq/hangar/internal/config"
 )
 
 func setDataDir(t *testing.T) string {

@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"testing"
 
-	bucketSvc "github.com/anhostfr/hangar/internal/service/bucket"
-	"github.com/anhostfr/hangar/internal/storage"
-	"github.com/anhostfr/hangar/internal/testutil"
+	bucketSvc "github.com/sowahq/hangar/internal/service/bucket"
+	"github.com/sowahq/hangar/internal/storage"
+	"github.com/sowahq/hangar/internal/testutil"
 )
 
 func enableVersioning(t *testing.T, name string) {

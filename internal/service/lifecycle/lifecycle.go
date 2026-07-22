@@ -7,11 +7,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/anhostfr/hangar/internal/config"
-	"github.com/anhostfr/hangar/internal/database"
-	"github.com/anhostfr/hangar/internal/service/bucket"
-	"github.com/anhostfr/hangar/internal/service/object"
-	"github.com/anhostfr/hangar/internal/storage"
+	"github.com/sowahq/hangar/internal/config"
+	"github.com/sowahq/hangar/internal/database"
+	"github.com/sowahq/hangar/internal/service/bucket"
+	"github.com/sowahq/hangar/internal/service/object"
+	"github.com/sowahq/hangar/internal/storage"
 	"github.com/phuslu/log"
 )
 

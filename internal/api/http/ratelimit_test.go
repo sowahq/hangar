@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/anhostfr/hangar/internal/config"
+	"github.com/sowahq/hangar/internal/config"
 )
 
 func TestRateLimitBurst(t *testing.T) {

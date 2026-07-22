@@ -6,9 +6,9 @@ import (
 	"io"
 	"time"
 
-	"github.com/anhostfr/hangar/internal/config"
-	"github.com/anhostfr/hangar/internal/service/diskspace"
-	"github.com/anhostfr/hangar/internal/storage"
+	"github.com/sowahq/hangar/internal/config"
+	"github.com/sowahq/hangar/internal/service/diskspace"
+	"github.com/sowahq/hangar/internal/storage"
 )
 
 type UploadPartCopyRequest struct {

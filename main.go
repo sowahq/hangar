@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"github.com/anhostfr/hangar/cmd/root"
+	"github.com/sowahq/hangar/cmd/root"
 	"github.com/phuslu/log"
 )
 

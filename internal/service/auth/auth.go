@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/anhostfr/hangar/internal/database"
+	"github.com/sowahq/hangar/internal/database"
 	"github.com/cockroachdb/pebble"
 	"golang.org/x/crypto/argon2"
 )

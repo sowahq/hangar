@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/anhostfr/hangar/internal/service/accesslog"
-	"github.com/anhostfr/hangar/internal/service/bucket"
-	"github.com/anhostfr/hangar/internal/service/object"
+	"github.com/sowahq/hangar/internal/service/accesslog"
+	"github.com/sowahq/hangar/internal/service/bucket"
+	"github.com/sowahq/hangar/internal/service/object"
 )
 
 func TestS3BucketLoggingXML(t *testing.T) {

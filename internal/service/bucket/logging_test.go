@@ -3,7 +3,7 @@ package bucket
 import (
 	"testing"
 
-	"github.com/anhostfr/hangar/internal/testutil"
+	"github.com/sowahq/hangar/internal/testutil"
 )
 
 func TestBucketLoggingCRUD(t *testing.T) {

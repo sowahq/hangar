@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/anhostfr/hangar/internal/database"
+	"github.com/sowahq/hangar/internal/database"
 )
 
 const ManifestFile = "manifest.json"

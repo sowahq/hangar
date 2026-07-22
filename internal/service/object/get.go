@@ -5,9 +5,9 @@ import (
 	"io"
 	"path/filepath"
 
-	"github.com/anhostfr/hangar/internal/config"
-	"github.com/anhostfr/hangar/internal/storage"
-	"github.com/anhostfr/hangar/pkg/crypto"
+	"github.com/sowahq/hangar/internal/config"
+	"github.com/sowahq/hangar/internal/storage"
+	"github.com/sowahq/hangar/pkg/crypto"
 )
 
 type GetObjectRequest struct {

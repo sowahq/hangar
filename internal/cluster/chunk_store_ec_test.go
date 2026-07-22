@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/anhostfr/hangar/internal/config"
-	"github.com/anhostfr/hangar/internal/database"
-	"github.com/anhostfr/hangar/internal/storage"
+	"github.com/sowahq/hangar/internal/config"
+	"github.com/sowahq/hangar/internal/database"
+	"github.com/sowahq/hangar/internal/storage"
 )
 
 func ecTestCluster(t *testing.T, ecData, ecParity int, ids []NodeID) *Cluster {

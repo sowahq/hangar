@@ -1,4 +1,4 @@
-module github.com/anhostfr/hangar
+module github.com/sowahq/hangar
 
 go 1.25.0
 

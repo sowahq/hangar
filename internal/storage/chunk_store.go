@@ -6,7 +6,7 @@ import (
 	"os"
 	"sync"
 
-	"github.com/anhostfr/hangar/internal/config"
+	"github.com/sowahq/hangar/internal/config"
 )
 
 var ErrDatabaseClosed = errors.New("database not initialized")

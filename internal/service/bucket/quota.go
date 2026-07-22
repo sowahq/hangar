@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/anhostfr/hangar/internal/database"
-	"github.com/anhostfr/hangar/internal/storage"
+	"github.com/sowahq/hangar/internal/database"
+	"github.com/sowahq/hangar/internal/storage"
 )
 
 var ErrQuotaExceeded = errors.New("quota exceeded")

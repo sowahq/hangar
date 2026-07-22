@@ -3,8 +3,8 @@ package object
 import (
 	"fmt"
 
-	"github.com/anhostfr/hangar/internal/service/bucket"
-	"github.com/anhostfr/hangar/internal/storage"
+	"github.com/sowahq/hangar/internal/service/bucket"
+	"github.com/sowahq/hangar/internal/storage"
 )
 
 func loadObjectForTagging(bucketName, key, versionID string) (*storage.Metadatas, error) {

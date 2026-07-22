@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/anhostfr/hangar/internal/service/object"
+	"github.com/sowahq/hangar/internal/service/object"
 	"github.com/gofiber/fiber/v2"
 )
 

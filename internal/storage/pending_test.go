@@ -4,7 +4,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/anhostfr/hangar/internal/testutil"
+	"github.com/sowahq/hangar/internal/testutil"
 )
 
 func TestPendingChunksMarkUnmark(t *testing.T) {

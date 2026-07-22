@@ -7,11 +7,11 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
-	"github.com/anhostfr/hangar/internal/api/http/response"
-	"github.com/anhostfr/hangar/internal/config"
-	"github.com/anhostfr/hangar/internal/database"
-	"github.com/anhostfr/hangar/internal/service/gc"
-	"github.com/anhostfr/hangar/pkg/sysinfo"
+	"github.com/sowahq/hangar/internal/api/http/response"
+	"github.com/sowahq/hangar/internal/config"
+	"github.com/sowahq/hangar/internal/database"
+	"github.com/sowahq/hangar/internal/service/gc"
+	"github.com/sowahq/hangar/pkg/sysinfo"
 )
 
 type healthCheck struct {

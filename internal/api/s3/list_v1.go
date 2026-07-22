@@ -3,7 +3,7 @@ package s3
 import (
 	"strconv"
 
-	"github.com/anhostfr/hangar/internal/service/object"
+	"github.com/sowahq/hangar/internal/service/object"
 	"github.com/gofiber/fiber/v2"
 )
 

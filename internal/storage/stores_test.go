@@ -8,7 +8,7 @@ import (
 
 	"github.com/cockroachdb/pebble"
 
-	"github.com/anhostfr/hangar/internal/config"
+	"github.com/sowahq/hangar/internal/config"
 )
 
 func setupStoresTest(t *testing.T) {

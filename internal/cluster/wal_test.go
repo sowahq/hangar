@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/anhostfr/hangar/internal/database"
+	"github.com/sowahq/hangar/internal/database"
 )
 
 func setupWALDB(t *testing.T) {

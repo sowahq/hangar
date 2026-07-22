@@ -12,9 +12,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/anhostfr/hangar/internal/config"
-	"github.com/anhostfr/hangar/internal/service/bucket"
-	"github.com/anhostfr/hangar/internal/testutil"
+	"github.com/sowahq/hangar/internal/config"
+	"github.com/sowahq/hangar/internal/service/bucket"
+	"github.com/sowahq/hangar/internal/testutil"
 )
 
 func randBytes(t *testing.T, n int) []byte {

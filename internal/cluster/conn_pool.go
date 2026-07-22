@@ -9,7 +9,7 @@ import (
 
 	"storj.io/drpc/drpcconn"
 
-	"github.com/anhostfr/hangar/internal/api/rpc"
+	"github.com/sowahq/hangar/internal/api/rpc"
 )
 
 const peerDialTimeout = 3 * time.Second

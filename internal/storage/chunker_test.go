@@ -9,8 +9,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/anhostfr/hangar/internal/config"
-	"github.com/anhostfr/hangar/internal/testutil"
+	"github.com/sowahq/hangar/internal/config"
+	"github.com/sowahq/hangar/internal/testutil"
 	"github.com/zeebo/blake3"
 )
 

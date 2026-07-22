@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/anhostfr/hangar/internal/service/bucket"
-	"github.com/anhostfr/hangar/internal/service/object"
+	"github.com/sowahq/hangar/internal/service/bucket"
+	"github.com/sowahq/hangar/internal/service/object"
 	"github.com/phuslu/log"
 )
 

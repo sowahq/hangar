@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/anhostfr/hangar/internal/service/bucket"
+	"github.com/sowahq/hangar/internal/service/bucket"
 )
 
 func putLocked(t *testing.T, s *s3TestServer, path string, mode string, retainHours int) {

@@ -3,8 +3,8 @@ package storage
 import (
 	"testing"
 
-	"github.com/anhostfr/hangar/internal/database"
-	"github.com/anhostfr/hangar/internal/testutil"
+	"github.com/sowahq/hangar/internal/database"
+	"github.com/sowahq/hangar/internal/testutil"
 )
 
 func currentCount(t *testing.T, hash string) uint64 {

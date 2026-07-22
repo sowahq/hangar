@@ -5,7 +5,7 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/anhostfr/hangar/internal/testutil"
+	"github.com/sowahq/hangar/internal/testutil"
 )
 
 func TestListObjectsInBucket(t *testing.T) {

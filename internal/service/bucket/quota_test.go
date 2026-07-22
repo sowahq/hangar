@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/anhostfr/hangar/internal/database"
-	"github.com/anhostfr/hangar/internal/storage"
-	"github.com/anhostfr/hangar/internal/testutil"
+	"github.com/sowahq/hangar/internal/database"
+	"github.com/sowahq/hangar/internal/storage"
+	"github.com/sowahq/hangar/internal/testutil"
 )
 
 func writeMeta(t *testing.T, bucket, key string, size int64) {

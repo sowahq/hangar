@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/anhostfr/hangar/internal/service/diskspace"
+	"github.com/sowahq/hangar/internal/service/diskspace"
 )
 
 const diskSampleInterval = 30 * time.Second

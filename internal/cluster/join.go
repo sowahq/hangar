@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"sync"
 
-	"github.com/anhostfr/hangar/internal/api/rpc"
+	"github.com/sowahq/hangar/internal/api/rpc"
 )
 
 var joinMu sync.Mutex

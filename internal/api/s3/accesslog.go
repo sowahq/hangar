@@ -5,8 +5,8 @@ import (
 	"encoding/hex"
 	"time"
 
-	"github.com/anhostfr/hangar/internal/service/accesslog"
-	"github.com/anhostfr/hangar/internal/service/auth"
+	"github.com/sowahq/hangar/internal/service/accesslog"
+	"github.com/sowahq/hangar/internal/service/auth"
 	"github.com/gofiber/fiber/v2"
 )
 

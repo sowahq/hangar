@@ -7,9 +7,9 @@ import (
 	"io"
 	"time"
 
-	"github.com/anhostfr/hangar/internal/api/rpc"
-	"github.com/anhostfr/hangar/internal/database"
-	"github.com/anhostfr/hangar/internal/storage"
+	"github.com/sowahq/hangar/internal/api/rpc"
+	"github.com/sowahq/hangar/internal/database"
+	"github.com/sowahq/hangar/internal/storage"
 )
 
 type AntiEntropyStats struct {

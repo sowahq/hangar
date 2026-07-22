@@ -4,9 +4,9 @@ import (
 	"encoding/xml"
 	"errors"
 
-	"github.com/anhostfr/hangar/internal/service/auth"
-	"github.com/anhostfr/hangar/internal/service/bucket"
-	"github.com/anhostfr/hangar/internal/service/object"
+	"github.com/sowahq/hangar/internal/service/auth"
+	"github.com/sowahq/hangar/internal/service/bucket"
+	"github.com/sowahq/hangar/internal/service/object"
 	"github.com/gofiber/fiber/v2"
 )
 

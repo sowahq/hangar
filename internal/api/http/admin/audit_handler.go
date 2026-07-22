@@ -4,9 +4,9 @@ import (
 	"errors"
 	"strconv"
 
-	"github.com/anhostfr/hangar/internal/api/http/response"
-	"github.com/anhostfr/hangar/internal/service/audit"
 	"github.com/gofiber/fiber/v2"
+	"github.com/sowahq/hangar/internal/api/http/response"
+	"github.com/sowahq/hangar/internal/service/audit"
 )
 
 func TailAudit(c *fiber.Ctx) error {

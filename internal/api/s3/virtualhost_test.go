@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/anhostfr/hangar/internal/service/auth"
-	"github.com/anhostfr/hangar/internal/service/bucket"
-	"github.com/anhostfr/hangar/internal/testutil"
+	"github.com/sowahq/hangar/internal/service/auth"
+	"github.com/sowahq/hangar/internal/service/bucket"
+	"github.com/sowahq/hangar/internal/testutil"
 	"github.com/valyala/fasthttp"
 )
 

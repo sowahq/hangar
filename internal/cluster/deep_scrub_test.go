@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/anhostfr/hangar/internal/storage"
+	"github.com/sowahq/hangar/internal/storage"
 	"github.com/zeebo/blake3"
 )
 

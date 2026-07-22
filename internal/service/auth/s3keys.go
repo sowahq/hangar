@@ -8,7 +8,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/anhostfr/hangar/internal/database"
+	"github.com/sowahq/hangar/internal/database"
 	"github.com/cockroachdb/pebble"
 )
 

@@ -20,4 +20,3 @@ func JoinBucketKey(bucket, objectKey string) string {
 	}
 	return bucket + "/" + objectKey
 }
-

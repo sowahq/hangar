@@ -3,7 +3,7 @@ package validation
 import (
 	"strings"
 
-	"github.com/anhostfr/hangar/internal/api/http/response"
+	"github.com/sowahq/hangar/internal/api/http/response"
 	"github.com/gofiber/fiber/v2"
 )
 

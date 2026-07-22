@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/anhostfr/hangar/internal/database"
+	"github.com/sowahq/hangar/internal/database"
 )
 
 func TestSyncWrites(t *testing.T) {

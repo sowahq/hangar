@@ -11,12 +11,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/anhostfr/hangar/internal/config"
-	"github.com/anhostfr/hangar/internal/service/auth"
-	"github.com/anhostfr/hangar/internal/service/bucket"
-	"github.com/anhostfr/hangar/internal/service/object"
-	"github.com/anhostfr/hangar/internal/storage"
-	"github.com/anhostfr/hangar/pkg/ioutils"
+	"github.com/sowahq/hangar/internal/config"
+	"github.com/sowahq/hangar/internal/service/auth"
+	"github.com/sowahq/hangar/internal/service/bucket"
+	"github.com/sowahq/hangar/internal/service/object"
+	"github.com/sowahq/hangar/internal/storage"
+	"github.com/sowahq/hangar/pkg/ioutils"
 	"github.com/gofiber/fiber/v2"
 )
 

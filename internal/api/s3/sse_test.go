@@ -9,8 +9,8 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/anhostfr/hangar/internal/config"
-	"github.com/anhostfr/hangar/internal/service/bucket"
+	"github.com/sowahq/hangar/internal/config"
+	"github.com/sowahq/hangar/internal/service/bucket"
 )
 
 func randKey(t *testing.T) []byte {
