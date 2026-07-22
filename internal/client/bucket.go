@@ -67,6 +67,28 @@ func (c *Client) GetBucket(name string) (*bucket.BucketInfo, error) {
 	return &result, nil
 }
 
+// UpdateBucketPublic toggles anonymous read access on a bucket via API.
+func (c *Client) UpdateBucketPublic(name string, public bool) (*bucket.BucketInfo, error) {
+	req := map[string]bool{"public": public}
+
+	resp, err := c.doRequest("PUT", fmt.Sprintf("/admin/buckets/%s/public", name), req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if err := c.handleErrorResponse(resp); err != nil {
+		return nil, err
+	}
+
+	var result bucket.BucketInfo
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	return &result, nil
+}
+
 // UpdateBucketQuota sets the bucket quota via API. Zero values mean unlimited.
 func (c *Client) UpdateBucketQuota(name string, maxBytes, maxObjects int64) (*bucket.BucketInfo, error) {
 	req := map[string]int64{

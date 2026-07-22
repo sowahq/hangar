@@ -56,6 +56,19 @@ func Commands() []*cli.Command {
 			Action: deleteBucket,
 		},
 		{
+			Name:      "public",
+			Usage:     "Make a bucket public, or private with --off",
+			ArgsUsage: "<bucket-name>",
+			Flags: []cli.Flag{
+				common.ServerFlag(),
+				&cli.BoolFlag{
+					Name:  "off",
+					Usage: "Make the bucket private again",
+				},
+			},
+			Action: updatePublic,
+		},
+		{
 			Name:      "quota",
 			Usage:     "Set bucket quota (0 = unlimited)",
 			ArgsUsage: "<bucket-name>",
@@ -143,6 +156,25 @@ func getBucket(c *cli.Context) error {
 
 	data, _ := json.MarshalIndent(result, "", "  ")
 	fmt.Printf("Bucket information:\n%s\n", data)
+
+	return nil
+}
+
+func updatePublic(c *cli.Context) error {
+	if c.NArg() == 0 {
+		return fmt.Errorf("bucket name is required")
+	}
+
+	apiClient := client.NewClient(c.String("server"))
+
+	name := c.Args().First()
+	result, err := apiClient.UpdateBucketPublic(name, !c.Bool("off"))
+	if err != nil {
+		return fmt.Errorf("failed to update bucket visibility: %w", err)
+	}
+
+	data, _ := json.MarshalIndent(result, "", "  ")
+	fmt.Printf("Bucket visibility updated:\n%s\n", data)
 
 	return nil
 }
