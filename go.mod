@@ -7,7 +7,7 @@ require (
 	github.com/bytedance/sonic v1.14.0
 	github.com/cockroachdb/pebble v1.1.5
 	github.com/go-playground/validator/v10 v10.27.0
-	github.com/gofiber/fiber/v2 v2.52.9
+	github.com/gofiber/fiber/v2 v2.52.12
 	github.com/klauspost/compress v1.18.0
 	github.com/klauspost/reedsolomon v1.14.0
 	github.com/phuslu/log v1.0.119
@@ -16,7 +16,7 @@ require (
 	github.com/valyala/fasthttp v1.51.0
 	github.com/zeebo/blake3 v0.2.4
 	github.com/zeebo/xxh3 v1.1.0
-	golang.org/x/crypto v0.41.0
+	golang.org/x/crypto v0.50.0
 	golang.org/x/sys v0.44.0
 	google.golang.org/protobuf v1.36.11
 	storj.io/drpc v1.0.0
@@ -67,6 +67,6 @@ require (
 	go.yaml.in/yaml/v2 v2.4.2 // indirect
 	golang.org/x/arch v0.0.0-20210923205945-b76863e36670 // indirect
 	golang.org/x/exp v0.0.0-20230626212559-97b1e661b5df // indirect
-	golang.org/x/net v0.43.0 // indirect
-	golang.org/x/text v0.28.0 // indirect
+	golang.org/x/net v0.53.0 // indirect
+	golang.org/x/text v0.36.0 // indirect
 )
