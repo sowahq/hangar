@@ -1003,3 +1003,36 @@ func TestS3GetPartNumberSinglePart(t *testing.T) {
 		t.Fatalf("partNumber=2 single-part status=%d want 416", r.StatusCode)
 	}
 }
+
+func TestS3CacheControlByVisibility(t *testing.T) {
+	s := newS3TestServer(t)
+	if _, err := bucket.CreateBucket(&bucket.CreateBucketRequest{Name: "ccpub", Public: true}); err != nil {
+		t.Fatalf("bucket pub: %v", err)
+	}
+	if _, err := bucket.CreateBucket(&bucket.CreateBucketRequest{Name: "ccpriv"}); err != nil {
+		t.Fatalf("bucket priv: %v", err)
+	}
+
+	resp := s.do(t, http.MethodPut, "/ccpub/o.txt", "", []byte("x"))
+	resp.Body.Close()
+	resp = s.do(t, http.MethodPut, "/ccpriv/o.txt", "", []byte("x"))
+	resp.Body.Close()
+
+	resp = s.do(t, http.MethodGet, "/ccpub/o.txt", "", nil)
+	resp.Body.Close()
+	if cc := resp.Header.Get("Cache-Control"); cc != "public, max-age=3600" {
+		t.Fatalf("public bucket Cache-Control=%q want public, max-age=3600", cc)
+	}
+
+	resp = s.do(t, http.MethodGet, "/ccpriv/o.txt", "", nil)
+	resp.Body.Close()
+	if cc := resp.Header.Get("Cache-Control"); cc != "private, no-store" {
+		t.Fatalf("private bucket Cache-Control=%q want private, no-store", cc)
+	}
+
+	resp = s.do(t, http.MethodHead, "/ccpriv/o.txt", "", nil)
+	resp.Body.Close()
+	if cc := resp.Header.Get("Cache-Control"); cc != "private, no-store" {
+		t.Fatalf("private HEAD Cache-Control=%q want private, no-store", cc)
+	}
+}

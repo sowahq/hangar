@@ -865,6 +865,14 @@ func applyResponseOverrides(c *fiber.Ctx) {
 	}
 }
 
+func setCacheControl(c *fiber.Ctx, public bool) {
+	if public {
+		c.Set("Cache-Control", "public, max-age=3600")
+		return
+	}
+	c.Set("Cache-Control", "private, no-store")
+}
+
 func setObjectHeaders(c *fiber.Ctx, m *storage.Metadatas) {
 	c.Set("Content-Type", m.ContentType)
 	c.Set("ETag", m.ETag)
@@ -934,6 +942,7 @@ func handleHeadObject(c *fiber.Ctx) error {
 	}
 
 	setObjectHeaders(c, m)
+	setCacheControl(c, info.Public)
 	applyResponseOverrides(c)
 	c.Status(fiber.StatusOK)
 	c.Response().Header.SetContentLength(int(m.Size))
@@ -1009,6 +1018,7 @@ func handleGetObject(c *fiber.Ctx) error {
 	}
 
 	setObjectHeaders(c, m)
+	setCacheControl(c, info.Public)
 	applyResponseOverrides(c)
 
 	if pn := c.Query("partNumber"); pn != "" {
