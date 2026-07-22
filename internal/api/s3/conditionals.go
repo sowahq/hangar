@@ -37,29 +37,32 @@ func parseHTTPDate(s string) (time.Time, bool) {
 	return time.Time{}, false
 }
 
+func setNotModifiedHeaders(c *fiber.Ctx, m *storage.Metadatas) {
+	c.Set("ETag", m.ETag)
+	c.Set("Last-Modified", time.UnixMilli(m.CreatedAt).UTC().Format(http.TimeFormat))
+}
+
 func checkConditionalRead(c *fiber.Ctx, m *storage.Metadatas) int {
 	lastMod := time.UnixMilli(m.CreatedAt).UTC().Truncate(time.Second)
 
-	if v := c.Get("If-Match"); v != "" {
-		if !etagMatches(v, m.ETag) {
+	if ifMatch := c.Get("If-Match"); ifMatch != "" {
+		if !etagMatches(ifMatch, m.ETag) {
 			return fiber.StatusPreconditionFailed
 		}
-	}
-
-	if v := c.Get("If-Unmodified-Since"); v != "" {
+	} else if v := c.Get("If-Unmodified-Since"); v != "" {
 		if t, ok := parseHTTPDate(v); ok && lastMod.After(t) {
 			return fiber.StatusPreconditionFailed
 		}
 	}
 
-	if v := c.Get("If-None-Match"); v != "" {
-		if etagMatches(v, m.ETag) {
+	if ifNoneMatch := c.Get("If-None-Match"); ifNoneMatch != "" {
+		if etagMatches(ifNoneMatch, m.ETag) {
+			setNotModifiedHeaders(c, m)
 			return fiber.StatusNotModified
 		}
-	}
-
-	if v := c.Get("If-Modified-Since"); v != "" {
+	} else if v := c.Get("If-Modified-Since"); v != "" {
 		if t, ok := parseHTTPDate(v); ok && !lastMod.After(t) {
+			setNotModifiedHeaders(c, m)
 			return fiber.StatusNotModified
 		}
 	}

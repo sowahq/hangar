@@ -21,7 +21,7 @@ func virtualHostBucket(host, base string) string {
 		return ""
 	}
 	bucket := strings.TrimSuffix(host, suffix)
-	if bucket == "" || strings.ContainsAny(bucket, "./") {
+	if bucket == "" || strings.Contains(bucket, "/") {
 		return ""
 	}
 	return bucket

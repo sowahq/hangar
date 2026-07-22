@@ -125,7 +125,7 @@ func TestVirtualHostBucket(t *testing.T) {
 		{"mybucket.s3.example.com:8443", "s3.example.com", "mybucket"},
 		{"localhost", "localhost", ""},
 		{"foo.bar.baz", "localhost", ""},
-		{"sub.deep.localhost", "localhost", ""},
+		{"sub.deep.localhost", "localhost", "sub.deep"},
 		{"", "localhost", ""},
 		{"mybucket.localhost", "", ""},
 		{".localhost", "localhost", ""},

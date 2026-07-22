@@ -50,6 +50,8 @@ func TestS3UploadPartCopy(t *testing.T) {
 		{"missing source", 3, "/upcsrc/missing.bin", "", http.StatusNotFound, 0},
 	}
 
+	partETags := map[int]string{}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			req := s.sign(t, http.MethodPut, "/upcdst/copy.bin", "partNumber="+itoa(tt.partNumber)+"&uploadId="+init.UploadID, nil)
@@ -76,10 +78,11 @@ func TestS3UploadPartCopy(t *testing.T) {
 			if out.ETag == "" {
 				t.Fatalf("empty etag")
 			}
+			partETags[tt.partNumber] = out.ETag
 		})
 	}
 
-	completeXML := `<CompleteMultipartUpload><Part><PartNumber>1</PartNumber><ETag>x</ETag></Part><Part><PartNumber>2</PartNumber><ETag>y</ETag></Part></CompleteMultipartUpload>`
+	completeXML := `<CompleteMultipartUpload><Part><PartNumber>1</PartNumber><ETag>` + partETags[1] + `</ETag></Part><Part><PartNumber>2</PartNumber><ETag>` + partETags[2] + `</ETag></Part></CompleteMultipartUpload>`
 	resp = s.do(t, http.MethodPost, "/upcdst/copy.bin", "uploadId="+init.UploadID, []byte(completeXML))
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {

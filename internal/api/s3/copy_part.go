@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/sowahq/hangar/internal/service/object"
 	"github.com/gofiber/fiber/v2"
@@ -109,6 +108,6 @@ func handleUploadPartCopy(c *fiber.Ctx, dstBucket, dstKey, uploadID string, part
 	return writeXML(c, fiber.StatusOK, CopyPartResult{
 		Xmlns:        xmlNamespace,
 		ETag:         res.ETag,
-		LastModified: time.UnixMilli(res.LastModified).UTC().Format(time.RFC3339),
+		LastModified: formatS3Time(res.LastModified),
 	})
 }

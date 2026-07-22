@@ -130,6 +130,11 @@ func handlePutObjectACL(c *fiber.Ctx) error {
 
 func handleGetBucketPolicy(c *fiber.Ctx) error {
 	name := c.Params("bucket")
+
+	if !hasPerm(c, auth.PermRead) || !keyAllowsBucket(c, name) {
+		return writeError(c, fiber.StatusForbidden, "AccessDenied", "Access denied", "/"+name)
+	}
+
 	if _, err := bucket.GetBucket(name); err != nil {
 		return writeError(c, fiber.StatusNotFound, "NoSuchBucket", err.Error(), "/"+name)
 	}
@@ -282,6 +287,11 @@ func handleDeleteBucketWebsite(c *fiber.Ctx) error {
 
 func handleGetBucketNotification(c *fiber.Ctx) error {
 	name := c.Params("bucket")
+
+	if !hasPerm(c, auth.PermRead) || !keyAllowsBucket(c, name) {
+		return writeError(c, fiber.StatusForbidden, "AccessDenied", "Access denied", "/"+name)
+	}
+
 	if _, err := bucket.GetBucket(name); err != nil {
 		return writeError(c, fiber.StatusNotFound, "NoSuchBucket", err.Error(), "/"+name)
 	}
@@ -298,6 +308,11 @@ func handlePutBucketNotification(c *fiber.Ctx) error {
 
 func handleGetBucketRequestPayment(c *fiber.Ctx) error {
 	name := c.Params("bucket")
+
+	if !hasPerm(c, auth.PermRead) || !keyAllowsBucket(c, name) {
+		return writeError(c, fiber.StatusForbidden, "AccessDenied", "Access denied", "/"+name)
+	}
+
 	if _, err := bucket.GetBucket(name); err != nil {
 		return writeError(c, fiber.StatusNotFound, "NoSuchBucket", err.Error(), "/"+name)
 	}

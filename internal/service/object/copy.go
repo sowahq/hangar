@@ -146,12 +146,14 @@ func reencryptCopy(req *CopyObjectRequest, src *storage.Metadatas, contentType s
 		return nil, err
 	}
 
-	chunks, fileHash, size, err := storage.ChunkAndHashOpts(reader, config.ChunksPath(), sse.encParams)
+	teeReader, etagFn := newMD5ETagReader(reader)
+
+	chunks, fileHash, size, err := storage.ChunkAndHashOpts(teeReader, config.ChunksPath(), sse.encParams)
 	if err != nil {
 		return nil, fmt.Errorf("copy chunk: %w", err)
 	}
 
-	etag := fmt.Sprintf("%q", fileHash)
+	etag := etagFn()
 
 	dst := &storage.Metadatas{
 		Key:               req.DstKey,

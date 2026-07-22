@@ -22,6 +22,8 @@ func handleGetBucketVersioning(c *fiber.Ctx) error {
 	out := VersioningConfigurationXML{Xmlns: xmlNamespace}
 	if info.VersioningEnabled {
 		out.Status = "Enabled"
+	} else if info.VersioningConfigured {
+		out.Status = "Suspended"
 	}
 
 	return writeXML(c, fiber.StatusOK, out)

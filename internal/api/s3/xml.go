@@ -45,6 +45,7 @@ type ListBucketResultV2 struct {
 	ContinuationToken     string         `xml:"ContinuationToken,omitempty"`
 	NextContinuationToken string         `xml:"NextContinuationToken,omitempty"`
 	StartAfter            string         `xml:"StartAfter,omitempty"`
+	EncodingType          string         `xml:"EncodingType,omitempty"`
 	Contents              []Contents     `xml:"Contents"`
 	CommonPrefixes        []CommonPrefix `xml:"CommonPrefixes"`
 }
@@ -58,6 +59,7 @@ type ListBucketResultV1 struct {
 	NextMarker     string         `xml:"NextMarker,omitempty"`
 	MaxKeys        int            `xml:"MaxKeys"`
 	Delimiter      string         `xml:"Delimiter,omitempty"`
+	EncodingType   string         `xml:"EncodingType,omitempty"`
 	IsTruncated    bool           `xml:"IsTruncated"`
 	Contents       []Contents     `xml:"Contents"`
 	CommonPrefixes []CommonPrefix `xml:"CommonPrefixes"`
@@ -144,10 +146,19 @@ type MultipartUploadEntry struct {
 }
 
 type ListMultipartUploadsResult struct {
-	XMLName xml.Name               `xml:"ListMultipartUploadsResult"`
-	Xmlns   string                 `xml:"xmlns,attr"`
-	Bucket  string                 `xml:"Bucket"`
-	Uploads []MultipartUploadEntry `xml:"Upload"`
+	XMLName            xml.Name               `xml:"ListMultipartUploadsResult"`
+	Xmlns              string                 `xml:"xmlns,attr"`
+	Bucket             string                 `xml:"Bucket"`
+	KeyMarker          string                 `xml:"KeyMarker"`
+	UploadIDMarker     string                 `xml:"UploadIdMarker"`
+	NextKeyMarker      string                 `xml:"NextKeyMarker,omitempty"`
+	NextUploadIDMarker string                 `xml:"NextUploadIdMarker,omitempty"`
+	Prefix             string                 `xml:"Prefix"`
+	Delimiter          string                 `xml:"Delimiter,omitempty"`
+	MaxUploads         int                    `xml:"MaxUploads"`
+	IsTruncated        bool                   `xml:"IsTruncated"`
+	Uploads            []MultipartUploadEntry `xml:"Upload"`
+	CommonPrefixes     []CommonPrefix         `xml:"CommonPrefixes"`
 }
 
 type CopyPartResult struct {
@@ -193,6 +204,7 @@ type ListVersionsResult struct {
 	NextVersionIDMarker string             `xml:"NextVersionIdMarker,omitempty"`
 	MaxKeys             int                `xml:"MaxKeys"`
 	Delimiter           string             `xml:"Delimiter,omitempty"`
+	EncodingType        string             `xml:"EncodingType,omitempty"`
 	IsTruncated         bool               `xml:"IsTruncated"`
 	Versions            []ObjectVersionXML `xml:"Version"`
 	DeleteMarkers       []DeleteMarkerXML  `xml:"DeleteMarker"`

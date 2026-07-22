@@ -121,12 +121,14 @@ func PutObject(req *PutObjectRequest) (*PutObjectResponse, error) {
 		return nil, err
 	}
 
-	chunks, fileHash, size, err := storage.ChunkAndHashOpts(fullReader, config.ChunksPath(), sse.encParams)
+	teeReader, etagFn := newMD5ETagReader(fullReader)
+
+	chunks, fileHash, size, err := storage.ChunkAndHashOpts(teeReader, config.ChunksPath(), sse.encParams)
 	if err != nil {
 		return nil, fmt.Errorf("failed to chunk and hash object: %w", err)
 	}
 
-	etag := fmt.Sprintf("%q", fileHash)
+	etag := etagFn()
 	createdAt := time.Now().UnixMilli()
 
 	versioning := info != nil && info.VersioningEnabled

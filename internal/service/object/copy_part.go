@@ -101,7 +101,9 @@ func UploadPartCopy(req *UploadPartCopyRequest) (*UploadPartCopyResponse, error)
 		return nil, encErr
 	}
 
-	chunks, partHash, size, chErr := storage.ChunkAndHashOpts(reader, config.ChunksPath(), encParams)
+	teeReader, etagFn := newMD5ETagReader(reader)
+
+	chunks, _, size, chErr := storage.ChunkAndHashOpts(teeReader, config.ChunksPath(), encParams)
 	_ = srcReader.Close()
 	if chErr != nil {
 		return nil, fmt.Errorf("chunk part copy: %w", chErr)
@@ -114,7 +116,7 @@ func UploadPartCopy(req *UploadPartCopyRequest) (*UploadPartCopyResponse, error)
 
 	storage.UnmarkChunksPending(chunks)
 
-	etag := fmt.Sprintf("%q", partHash)
+	etag := etagFn()
 
 	if existing, gErr := storage.GetMultipartPart(req.DstBucket, req.DstKey, req.UploadID, req.PartNumber); gErr == nil {
 		if dErr := storage.DecrementChunkRefs(existing.ChunkHashes); dErr != nil {

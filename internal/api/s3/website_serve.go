@@ -3,7 +3,6 @@ package s3
 import (
 	"io"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/sowahq/hangar/internal/config"
@@ -13,31 +12,6 @@ import (
 	"github.com/sowahq/hangar/pkg/ioutils"
 	"github.com/gofiber/fiber/v2"
 )
-
-func isPublicWebsiteRequest(c *fiber.Ctx) bool {
-	path := string(c.Request().URI().Path())
-	path = strings.TrimPrefix(path, "/")
-	if path == "" {
-		return false
-	}
-	slash := strings.IndexByte(path, '/')
-	bucketName := path
-	if slash >= 0 {
-		bucketName = path[:slash]
-	}
-	if bucketName == "" {
-		return false
-	}
-
-	info, err := bucket.GetBucket(bucketName)
-	if err != nil || info == nil || !info.Public {
-		return false
-	}
-	if _, err := bucket.GetWebsite(bucketName); err != nil {
-		return false
-	}
-	return true
-}
 
 func isAnonymous(c *fiber.Ctx) bool {
 	v, _ := c.Locals("s3_anonymous").(bool)

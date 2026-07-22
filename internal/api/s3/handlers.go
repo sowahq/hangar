@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -34,15 +35,17 @@ func writeXML(c *fiber.Ctx, status int, v any) error {
 }
 
 func writeError(c *fiber.Ctx, status int, code, message, resource string) error {
+	reqID, _ := c.Locals("s3_req_id").(string)
 	return writeXML(c, status, ErrorXML{
-		Code:     code,
-		Message:  message,
-		Resource: resource,
+		Code:      code,
+		Message:   message,
+		Resource:  resource,
+		RequestID: reqID,
 	})
 }
 
 func formatS3Time(unixMilli int64) string {
-	return time.UnixMilli(unixMilli).UTC().Format(time.RFC3339)
+	return time.UnixMilli(unixMilli).UTC().Format("2006-01-02T15:04:05.000Z")
 }
 
 func currentKey(c *fiber.Ctx) string {
@@ -146,7 +149,8 @@ func handleCreateBucket(c *fiber.Ctx) error {
 	_, err := bucket.CreateBucket(&bucket.CreateBucketRequest{Name: name})
 	if err != nil {
 		if strings.Contains(err.Error(), "already exists") {
-			return writeError(c, fiber.StatusConflict, "BucketAlreadyOwnedByYou", err.Error(), "/"+name)
+			c.Set("Location", "/"+name)
+			return c.SendStatus(fiber.StatusOK)
 		}
 		return writeError(c, fiber.StatusBadRequest, "InvalidBucketName", err.Error(), "/"+name)
 	}
@@ -378,24 +382,33 @@ func handleCompleteMultipart(c *fiber.Ctx, bucketName, key, uploadID string) err
 	}
 
 	body := c.Body()
+	if len(body) == 0 {
+		return writeError(c, fiber.StatusBadRequest, "MalformedXML", "missing CompleteMultipartUpload body", "/"+bucketName+"/"+key)
+	}
 
-	var parts []int
-	if len(body) > 0 {
-		var req CompleteMultipartUpload
-		if err := xml.Unmarshal(body, &req); err != nil {
-			return writeError(c, fiber.StatusBadRequest, "MalformedXML", err.Error(), "/"+bucketName+"/"+key)
-		}
+	var req CompleteMultipartUpload
+	if err := xml.Unmarshal(body, &req); err != nil {
+		return writeError(c, fiber.StatusBadRequest, "MalformedXML", err.Error(), "/"+bucketName+"/"+key)
+	}
+	if len(req.Parts) == 0 {
+		return writeError(c, fiber.StatusBadRequest, "MalformedXML", "no parts specified", "/"+bucketName+"/"+key)
+	}
 
-		for _, p := range req.Parts {
-			parts = append(parts, p.PartNumber)
+	parts := make([]int, 0, len(req.Parts))
+	expectedETags := make(map[int]string, len(req.Parts))
+	for _, p := range req.Parts {
+		parts = append(parts, p.PartNumber)
+		if p.ETag != "" {
+			expectedETags[p.PartNumber] = p.ETag
 		}
 	}
 
 	res, err := object.CompleteMultipart(&object.CompleteMultipartRequest{
-		Bucket:   bucketName,
-		Key:      key,
-		UploadID: uploadID,
-		Parts:    parts,
+		Bucket:        bucketName,
+		Key:           key,
+		UploadID:      uploadID,
+		Parts:         parts,
+		ExpectedETags: expectedETags,
 	})
 	if err != nil {
 		switch {
@@ -405,6 +418,10 @@ func handleCompleteMultipart(c *fiber.Ctx, bucketName, key, uploadID string) err
 			return writeError(c, fiber.StatusBadRequest, "InvalidPart", err.Error(), "/"+bucketName+"/"+key)
 		case errors.Is(err, object.ErrPartMissing):
 			return writeError(c, fiber.StatusBadRequest, "InvalidPart", err.Error(), "/"+bucketName+"/"+key)
+		case errors.Is(err, object.ErrPartETagMismatch):
+			return writeError(c, fiber.StatusBadRequest, "InvalidPart", err.Error(), "/"+bucketName+"/"+key)
+		case errors.Is(err, object.ErrInvalidPartOrder):
+			return writeError(c, fiber.StatusBadRequest, "InvalidPartOrder", err.Error(), "/"+bucketName+"/"+key)
 		case errors.Is(err, object.ErrCompleteQuotaFail):
 			return writeError(c, fiber.StatusRequestEntityTooLarge, "EntityTooLarge", "Quota exceeded", "/"+bucketName+"/"+key)
 		}
@@ -450,13 +467,77 @@ func handleListMultipartUploads(c *fiber.Ctx, bucketName string) error {
 		return writeError(c, fiber.StatusInternalServerError, "InternalError", err.Error(), "/"+bucketName)
 	}
 
-	out := ListMultipartUploadsResult{Xmlns: xmlNamespace, Bucket: bucketName}
+	prefix := c.Query("prefix")
+	delim := c.Query("delimiter")
+	keyMarker := c.Query("key-marker")
+	uploadIDMarker := c.Query("upload-id-marker")
+
+	maxUploads, _ := strconv.Atoi(c.Query("max-uploads"))
+	if maxUploads <= 0 || maxUploads > 1000 {
+		maxUploads = 1000
+	}
+
+	sort.Slice(headers, func(i, j int) bool {
+		if headers[i].Key != headers[j].Key {
+			return headers[i].Key < headers[j].Key
+		}
+		return headers[i].UploadID < headers[j].UploadID
+	})
+
+	out := ListMultipartUploadsResult{
+		Xmlns:          xmlNamespace,
+		Bucket:         bucketName,
+		KeyMarker:      keyMarker,
+		UploadIDMarker: uploadIDMarker,
+		Prefix:         prefix,
+		Delimiter:      delim,
+		MaxUploads:     maxUploads,
+	}
+
+	commonPrefixes := map[string]bool{}
+	past := keyMarker == "" && uploadIDMarker == ""
+
 	for _, h := range headers {
+		if !past {
+			if h.Key < keyMarker || (h.Key == keyMarker && h.UploadID <= uploadIDMarker) {
+				continue
+			}
+			past = true
+		}
+
+		if prefix != "" && !strings.HasPrefix(h.Key, prefix) {
+			continue
+		}
+
+		if delim != "" {
+			rest := strings.TrimPrefix(h.Key, prefix)
+			if idx := strings.Index(rest, delim); idx >= 0 {
+				commonPrefixes[prefix+rest[:idx+len(delim)]] = true
+				continue
+			}
+		}
+
+		if len(out.Uploads) >= maxUploads {
+			out.IsTruncated = true
+			out.NextKeyMarker = out.Uploads[len(out.Uploads)-1].Key
+			out.NextUploadIDMarker = out.Uploads[len(out.Uploads)-1].UploadID
+			break
+		}
+
 		out.Uploads = append(out.Uploads, MultipartUploadEntry{
 			Key:       h.Key,
 			UploadID:  h.UploadID,
-			Initiated: time.UnixMilli(h.CreatedAt).UTC().Format(time.RFC3339),
+			Initiated: formatS3Time(h.CreatedAt),
 		})
+	}
+
+	cps := make([]string, 0, len(commonPrefixes))
+	for p := range commonPrefixes {
+		cps = append(cps, p)
+	}
+	sort.Strings(cps)
+	for _, p := range cps {
+		out.CommonPrefixes = append(out.CommonPrefixes, CommonPrefix{Prefix: p})
 	}
 
 	return writeXML(c, fiber.StatusOK, out)
@@ -490,7 +571,7 @@ func handleListParts(c *fiber.Ctx) error {
 	for _, p := range res.Parts {
 		out.Parts = append(out.Parts, ListPart{
 			PartNumber:   p.PartNumber,
-			LastModified: time.UnixMilli(p.UploadedAt).UTC().Format(time.RFC3339),
+			LastModified: formatS3Time(p.UploadedAt),
 			ETag:         p.ETag,
 			Size:         p.Size,
 		})
@@ -607,6 +688,11 @@ func handleHeadBucket(c *fiber.Ctx) error {
 		return c.SendStatus(fiber.StatusNotFound)
 	}
 
+	region := config.S3Region()
+	if region == "" {
+		region = "us-east-1"
+	}
+	c.Set("x-amz-bucket-region", region)
 	return c.SendStatus(fiber.StatusOK)
 }
 
@@ -657,7 +743,12 @@ func handleListObjectsV2(c *fiber.Ctx) error {
 	name := c.Params("bucket")
 
 	if isAnonymous(c) {
-		return websiteServeIndex(c, name)
+		if info, err := bucket.GetBucket(name); err == nil && info.Public {
+			if _, werr := bucket.GetWebsite(name); werr == nil {
+				return websiteServeIndex(c, name)
+			}
+		}
+		return writeError(c, fiber.StatusForbidden, "AccessDenied", "Access denied", "/"+name)
 	}
 
 	if !hasPerm(c, auth.PermRead) || !keyAllowsBucket(c, name) {
@@ -681,9 +772,29 @@ func handleListObjectsV2(c *fiber.Ctx) error {
 	contToken := c.Query("continuation-token")
 	startAfter := c.Query("start-after")
 
-	maxKeys, _ := strconv.Atoi(c.Query("max-keys"))
-	if maxKeys <= 0 {
-		maxKeys = 1000
+	enc, encOK := listEncoding(c)
+	if !encOK {
+		return writeError(c, fiber.StatusBadRequest, "InvalidArgument", "invalid encoding-type", "/"+name)
+	}
+
+	maxKeys, ok := parseMaxKeys(c)
+	if !ok {
+		return writeError(c, fiber.StatusBadRequest, "InvalidArgument", "max-keys must be a non-negative integer", "/"+name)
+	}
+
+	out := ListBucketResultV2{
+		Xmlns:             xmlNamespace,
+		Name:              name,
+		Prefix:            encodeListValue(enc, prefix),
+		Delimiter:         encodeListValue(enc, delim),
+		MaxKeys:           maxKeys,
+		ContinuationToken: contToken,
+		StartAfter:        encodeListValue(enc, startAfter),
+		EncodingType:      enc,
+	}
+
+	if maxKeys == 0 {
+		return writeXML(c, fiber.StatusOK, out)
 	}
 
 	res, err := object.ListObjectsV2(&object.ListObjectsV2Request{
@@ -698,22 +809,13 @@ func handleListObjectsV2(c *fiber.Ctx) error {
 		return writeError(c, fiber.StatusInternalServerError, "InternalError", err.Error(), "/"+name)
 	}
 
-	out := ListBucketResultV2{
-		Xmlns:                 xmlNamespace,
-		Name:                  name,
-		Prefix:                prefix,
-		Delimiter:             delim,
-		MaxKeys:               maxKeys,
-		IsTruncated:           res.IsTruncated,
-		ContinuationToken:     contToken,
-		NextContinuationToken: res.NextContinuationToken,
-		StartAfter:            startAfter,
-		KeyCount:              res.KeyCount,
-	}
+	out.IsTruncated = res.IsTruncated
+	out.NextContinuationToken = res.NextContinuationToken
+	out.KeyCount = res.KeyCount
 
 	for _, o := range res.Objects {
 		out.Contents = append(out.Contents, Contents{
-			Key:          o.Key,
+			Key:          encodeListValue(enc, o.Key),
 			LastModified: formatS3Time(o.CreatedAt),
 			ETag:         o.ETag,
 			Size:         o.Size,
@@ -722,10 +824,45 @@ func handleListObjectsV2(c *fiber.Ctx) error {
 	}
 
 	for _, p := range res.CommonPrefixes {
-		out.CommonPrefixes = append(out.CommonPrefixes, CommonPrefix{Prefix: p})
+		out.CommonPrefixes = append(out.CommonPrefixes, CommonPrefix{Prefix: encodeListValue(enc, p)})
 	}
 
 	return writeXML(c, fiber.StatusOK, out)
+}
+
+func parseMaxKeys(c *fiber.Ctx) (int, bool) {
+	raw := c.Query("max-keys")
+	if raw == "" {
+		return 1000, true
+	}
+
+	n, err := strconv.Atoi(raw)
+	if err != nil || n < 0 {
+		return 0, false
+	}
+
+	if n > 1000 {
+		n = 1000
+	}
+
+	return n, true
+}
+
+var responseOverrideHeaders = map[string]string{
+	"response-content-type":        "Content-Type",
+	"response-content-language":    "Content-Language",
+	"response-expires":             "Expires",
+	"response-cache-control":       "Cache-Control",
+	"response-content-disposition": "Content-Disposition",
+	"response-content-encoding":    "Content-Encoding",
+}
+
+func applyResponseOverrides(c *fiber.Ctx) {
+	for param, header := range responseOverrideHeaders {
+		if v := c.Query(param); v != "" {
+			c.Set(header, v)
+		}
+	}
 }
 
 func setObjectHeaders(c *fiber.Ctx, m *storage.Metadatas) {
@@ -748,15 +885,31 @@ func handleHeadObject(c *fiber.Ctx) error {
 	name := c.Params("bucket")
 	key := c.Params("*")
 
-	if !hasPerm(c, auth.PermRead) || !keyAllowsBucket(c, name) {
+	anon := isAnonymous(c)
+	if !anon && (!hasPerm(c, auth.PermRead) || !keyAllowsBucket(c, name)) {
 		return c.SendStatus(fiber.StatusForbidden)
 	}
 
-	if _, err := bucket.GetBucket(name); err != nil {
+	info, err := bucket.GetBucket(name)
+	if err != nil {
+		if anon {
+			return c.SendStatus(fiber.StatusForbidden)
+		}
 		return c.SendStatus(fiber.StatusNotFound)
 	}
 
-	m, err := object.GetMetadata(name, key)
+	if anon && !info.Public {
+		return c.SendStatus(fiber.StatusForbidden)
+	}
+
+	versionID := c.Query("versionId")
+
+	var m *storage.Metadatas
+	if versionID != "" {
+		m, err = object.GetVersionMetadata(name, key, versionID)
+	} else {
+		m, err = object.GetMetadata(name, key)
+	}
 	if err != nil {
 		return c.SendStatus(fiber.StatusNotFound)
 	}
@@ -781,6 +934,7 @@ func handleHeadObject(c *fiber.Ctx) error {
 	}
 
 	setObjectHeaders(c, m)
+	applyResponseOverrides(c)
 	c.Status(fiber.StatusOK)
 	c.Response().Header.SetContentLength(int(m.Size))
 
@@ -796,8 +950,16 @@ func handleGetObject(c *fiber.Ctx) error {
 		return writeError(c, fiber.StatusForbidden, "AccessDenied", "Access denied", "/"+name+"/"+key)
 	}
 
-	if _, err := bucket.GetBucket(name); err != nil {
-		return writeError(c, fiber.StatusNotFound, "NoSuchBucket", err.Error(), "/"+name)
+	info, bErr := bucket.GetBucket(name)
+	if bErr != nil {
+		if anon {
+			return writeError(c, fiber.StatusForbidden, "AccessDenied", "Access denied", "/"+name+"/"+key)
+		}
+		return writeError(c, fiber.StatusNotFound, "NoSuchBucket", bErr.Error(), "/"+name)
+	}
+
+	if anon && !info.Public {
+		return writeError(c, fiber.StatusForbidden, "AccessDenied", "Access denied", "/"+name+"/"+key)
 	}
 
 	if anon && (key == "" || strings.HasSuffix(key, "/")) {
@@ -847,10 +1009,15 @@ func handleGetObject(c *fiber.Ctx) error {
 	}
 
 	setObjectHeaders(c, m)
+	applyResponseOverrides(c)
+
+	if pn := c.Query("partNumber"); pn != "" {
+		return serveObjectPart(c, name, key, m, sseReq, pn)
+	}
 
 	rangeHeader := c.Get("Range")
 
-	if rangeHeader == "" {
+	if rangeHeader == "" || strings.Contains(rangeHeader, ",") {
 		reader, rErr := object.NewChunkReaderAtWithSSE(m, 0, sseReq)
 		if rErr != nil {
 			if ok, r := sseErrorResponse(c, rErr, "/"+name+"/"+key); ok {
@@ -868,6 +1035,47 @@ func handleGetObject(c *fiber.Ctx) error {
 		return writeError(c, fiber.StatusRequestedRangeNotSatisfiable, "InvalidRange", parseErr.Error(), "/"+name+"/"+key)
 	}
 
+	return serveByteRange(c, name, key, m, sseReq, start, end)
+}
+
+func serveObjectPart(c *fiber.Ctx, name, key string, m *storage.Metadatas, sseReq *object.SSERequest, pn string) error {
+	partNum, err := strconv.Atoi(pn)
+	if err != nil || partNum < 1 {
+		return writeError(c, fiber.StatusBadRequest, "InvalidPartNumber", "invalid part number", "/"+name+"/"+key)
+	}
+
+	partCount := len(m.PartSizes)
+	if partCount == 0 {
+		if partNum != 1 {
+			return writeError(c, fiber.StatusRequestedRangeNotSatisfiable, "InvalidPartNumber", "object has a single part", "/"+name+"/"+key)
+		}
+		c.Set("x-amz-mp-parts-count", "1")
+		reader, rErr := object.NewChunkReaderAtWithSSE(m, 0, sseReq)
+		if rErr != nil {
+			if ok, r := sseErrorResponse(c, rErr, "/"+name+"/"+key); ok {
+				return r
+			}
+			return writeError(c, fiber.StatusInternalServerError, "InternalError", rErr.Error(), "/"+name+"/"+key)
+		}
+		ctx := c.Context()
+		return c.SendStream(ioutils.NewCancelableReader(ctx, io.NopCloser(reader)), int(m.Size))
+	}
+
+	if partNum > partCount {
+		return writeError(c, fiber.StatusRequestedRangeNotSatisfiable, "InvalidPartNumber", "part number out of range", "/"+name+"/"+key)
+	}
+
+	var start int64
+	for i := 0; i < partNum-1; i++ {
+		start += m.PartSizes[i]
+	}
+	end := start + m.PartSizes[partNum-1] - 1
+
+	c.Set("x-amz-mp-parts-count", strconv.Itoa(partCount))
+	return serveByteRange(c, name, key, m, sseReq, start, end)
+}
+
+func serveByteRange(c *fiber.Ctx, name, key string, m *storage.Metadatas, sseReq *object.SSERequest, start, end int64) error {
 	chunkSize := int64(config.ChunkSize())
 	startIdx := int(start / chunkSize)
 	offsetInFirst := start % chunkSize
@@ -940,6 +1148,12 @@ func handlePutObject(c *fiber.Ctx) error {
 
 	bodyStream, contentLength := requestBody(c)
 
+	streaming := false
+	if ah, ok := c.Locals("s3_auth").(*AuthHeader); ok && ah != nil && ah.Streaming {
+		streaming = true
+	}
+	bodyStream = maybeValidatingBody(c, bodyStream, streaming)
+
 	checksumAlgo, checksumVal := parseChecksum(c)
 
 	tags, tagErr := parseTaggingHeader(c.Get("x-amz-tagging"))
@@ -977,6 +1191,12 @@ func handlePutObject(c *fiber.Ctx) error {
 		}
 		if errors.Is(err, object.ErrObjectLockHeld) {
 			return writeError(c, fiber.StatusForbidden, "AccessDenied", err.Error(), "/"+name+"/"+key)
+		}
+		if errors.Is(err, ErrContentSHA256Mismatch) {
+			return writeError(c, fiber.StatusBadRequest, "XAmzContentSHA256Mismatch", err.Error(), "/"+name+"/"+key)
+		}
+		if errors.Is(err, ErrBadDigest) {
+			return writeError(c, fiber.StatusBadRequest, "BadDigest", err.Error(), "/"+name+"/"+key)
 		}
 		if ok, r := sseErrorResponse(c, err, "/"+name+"/"+key); ok {
 			return r
@@ -1063,7 +1283,7 @@ func handleCopyObject(c *fiber.Ctx, dstBucket, dstKey, source string) error {
 
 	return writeXML(c, fiber.StatusOK, CopyObjectResult{
 		ETag:         res.ETag,
-		LastModified: time.UnixMilli(res.CreatedAt).UTC().Format(time.RFC3339),
+		LastModified: formatS3Time(res.CreatedAt),
 	})
 }
 
@@ -1089,7 +1309,7 @@ func parseCopySource(src string) (bucket, key, version string, err error) {
 	bucket = s[:slash]
 	rawKey := s[slash+1:]
 
-	decoded, decErr := url.QueryUnescape(rawKey)
+	decoded, decErr := url.PathUnescape(rawKey)
 	if decErr != nil {
 		return "", "", "", fmt.Errorf("invalid copy source key: %w", decErr)
 	}
@@ -1104,6 +1324,10 @@ func handleDeleteObject(c *fiber.Ctx) error {
 
 	if !hasPerm(c, auth.PermDelete) || !keyAllowsBucket(c, name) {
 		return writeError(c, fiber.StatusForbidden, "AccessDenied", "Access denied", "/"+name+"/"+key)
+	}
+
+	if _, err := bucket.GetBucket(name); err != nil {
+		return writeError(c, fiber.StatusNotFound, "NoSuchBucket", err.Error(), "/"+name)
 	}
 
 	versionID := c.Query("versionId")
@@ -1183,7 +1407,15 @@ func parseRange(h string, size int64) (int64, int64, error) {
 		}
 	}
 
-	if start > end || start >= size || end >= size {
+	if start >= size {
+		return 0, 0, fmt.Errorf("range not satisfiable")
+	}
+
+	if end >= size {
+		end = size - 1
+	}
+
+	if start > end {
 		return 0, 0, fmt.Errorf("range not satisfiable")
 	}
 

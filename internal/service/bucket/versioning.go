@@ -14,6 +14,7 @@ func UpdateVersioning(name string, enabled bool) (*BucketInfo, error) {
 		return nil, err
 	}
 	info.VersioningEnabled = enabled
+	info.VersioningConfigured = true
 	info.UpdatedAt = time.Now().UnixMilli()
 
 	data, err := json.Marshal(info)

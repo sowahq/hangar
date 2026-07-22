@@ -15,7 +15,6 @@ import (
 	"github.com/sowahq/hangar/internal/service/metrics"
 	"github.com/sowahq/hangar/internal/storage"
 	"github.com/sowahq/hangar/pkg/pathutil"
-	"github.com/zeebo/blake3"
 )
 
 const (
@@ -24,11 +23,13 @@ const (
 )
 
 var (
-	ErrInvalidPartNumber  = errors.New("invalid part number")
-	ErrMultipartNotFound  = errors.New("multipart upload not found")
-	ErrNoPartsToComplete  = errors.New("no parts to complete")
-	ErrPartMissing        = errors.New("part missing")
-	ErrCompleteQuotaFail  = errors.New("quota exceeded on complete")
+	ErrInvalidPartNumber = errors.New("invalid part number")
+	ErrMultipartNotFound = errors.New("multipart upload not found")
+	ErrNoPartsToComplete = errors.New("no parts to complete")
+	ErrPartMissing       = errors.New("part missing")
+	ErrInvalidPartOrder  = errors.New("part numbers must be in ascending order")
+	ErrPartETagMismatch  = errors.New("part etag mismatch")
+	ErrCompleteQuotaFail = errors.New("quota exceeded on complete")
 )
 
 type InitiateMultipartRequest struct {
@@ -132,7 +133,9 @@ func UploadPart(req *UploadPartRequest) (*UploadPartResponse, error) {
 		return nil, encErr
 	}
 
-	chunks, partHash, size, err := storage.ChunkAndHashOpts(req.Body, config.ChunksPath(), encParams)
+	teeReader, etagFn := newMD5ETagReader(req.Body)
+
+	chunks, _, size, err := storage.ChunkAndHashOpts(teeReader, config.ChunksPath(), encParams)
 	if err != nil {
 		return nil, fmt.Errorf("failed to chunk part: %w", err)
 	}
@@ -144,7 +147,7 @@ func UploadPart(req *UploadPartRequest) (*UploadPartResponse, error) {
 
 	storage.UnmarkChunksPending(chunks)
 
-	etag := fmt.Sprintf("%q", partHash)
+	etag := etagFn()
 
 	if existing, err := storage.GetMultipartPart(req.Bucket, req.Key, req.UploadID, req.PartNumber); err == nil {
 		if err := storage.DecrementChunkRefs(existing.ChunkHashes); err != nil {
@@ -178,10 +181,11 @@ func UploadPart(req *UploadPartRequest) (*UploadPartResponse, error) {
 }
 
 type CompleteMultipartRequest struct {
-	Bucket   string
-	Key      string
-	UploadID string
-	Parts    []int
+	Bucket        string
+	Key           string
+	UploadID      string
+	Parts         []int
+	ExpectedETags map[int]string
 }
 
 func CompleteMultipart(req *CompleteMultipartRequest) (*PutObjectResponse, error) {
@@ -217,11 +221,24 @@ func CompleteMultipart(req *CompleteMultipartRequest) (*PutObjectResponse, error
 			ordered = append(ordered, byNum[n])
 		}
 	} else {
+		prev := 0
 		for _, n := range req.Parts {
+			if n <= prev {
+				return nil, fmt.Errorf("%w: %d after %d", ErrInvalidPartOrder, n, prev)
+			}
+			prev = n
+
 			p, ok := byNum[n]
 			if !ok {
 				return nil, fmt.Errorf("%w: %d", ErrPartMissing, n)
 			}
+
+			if want, has := req.ExpectedETags[n]; has {
+				if stripETagQuotes(want) != stripETagQuotes(p.ETag) {
+					return nil, fmt.Errorf("%w: part %d", ErrPartETagMismatch, n)
+				}
+			}
+
 			ordered = append(ordered, p)
 		}
 	}
@@ -230,13 +247,15 @@ func CompleteMultipart(req *CompleteMultipartRequest) (*PutObjectResponse, error
 	var allChunks []string
 	var partNumbers []int
 	var partChunkCounts []int
-	etagHasher := blake3.New()
+	var partETags []string
+	var partSizes []int64
 	for _, p := range ordered {
 		totalSize += p.Size
 		allChunks = append(allChunks, p.ChunkHashes...)
 		partNumbers = append(partNumbers, p.PartNumber)
 		partChunkCounts = append(partChunkCounts, len(p.ChunkHashes))
-		etagHasher.Write([]byte(p.ETag))
+		partETags = append(partETags, p.ETag)
+		partSizes = append(partSizes, p.Size)
 	}
 
 	info, _ := bucket.GetBucket(req.Bucket)
@@ -254,8 +273,12 @@ func CompleteMultipart(req *CompleteMultipartRequest) (*PutObjectResponse, error
 		}
 	}
 
-	combinedHash := fmt.Sprintf("%x", etagHasher.Sum(nil))
-	finalETag := fmt.Sprintf("\"%s-%d\"", combinedHash, len(ordered))
+	finalETag, etagErr := combineMD5PartETags(partETags)
+	if etagErr != nil {
+		return nil, etagErr
+	}
+
+	combinedHash := stripETagQuotes(finalETag)
 	createdAt := time.Now().UnixMilli()
 
 	versioning := info != nil && info.VersioningEnabled
@@ -278,6 +301,7 @@ func CompleteMultipart(req *CompleteMultipartRequest) (*PutObjectResponse, error
 		ObjectHash:        combinedHash,
 		ChunkHashes:       allChunks,
 		VersionID:         versionID,
+		PartSizes:         partSizes,
 		SSEAlgorithm:      header.SSEAlgorithm,
 		SSECustomerKeyMD5: header.SSECustomerKeyMD5,
 		SSESalt:           header.SSESalt,

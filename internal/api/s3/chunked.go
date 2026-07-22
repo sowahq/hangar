@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -26,6 +27,7 @@ type chunkedReader struct {
 	leftover   []byte
 	eof        bool
 	verify     bool
+	trailer    bool
 }
 
 func newChunkedReader(src io.Reader, ah *AuthHeader) *chunkedReader {
@@ -36,7 +38,8 @@ func newChunkedReader(src io.Reader, ah *AuthHeader) *chunkedReader {
 		signingKey: ah.SigningKey,
 		amzDate:    ah.AmzDate,
 		scope:      scope,
-		verify:     true,
+		verify:     !ah.UnsignedChunks,
+		trailer:    ah.Trailer,
 	}
 }
 
@@ -83,6 +86,9 @@ func (cr *chunkedReader) readChunk() error {
 	}
 
 	chunkSig := parseChunkSig(sigPart)
+	if cr.verify && chunkSig == "" {
+		return fmt.Errorf("%w: missing chunk signature", ErrChunkedMalformed)
+	}
 
 	data := make([]byte, size)
 	if size > 0 {
@@ -91,15 +97,7 @@ func (cr *chunkedReader) readChunk() error {
 		}
 	}
 
-	trailer := make([]byte, 2)
-	if _, err := io.ReadFull(cr.src, trailer); err != nil {
-		return fmt.Errorf("%w: read chunk crlf: %v", ErrChunkedMalformed, err)
-	}
-	if trailer[0] != '\r' || trailer[1] != '\n' {
-		return fmt.Errorf("%w: missing crlf after chunk", ErrChunkedMalformed)
-	}
-
-	if cr.verify && chunkSig != "" {
+	if cr.verify {
 		if err := cr.verifyChunkSig(data, chunkSig); err != nil {
 			return err
 		}
@@ -108,10 +106,92 @@ func (cr *chunkedReader) readChunk() error {
 
 	if size == 0 {
 		cr.eof = true
-		return nil
+		if cr.trailer {
+			return cr.readTrailerSection()
+		}
+		return cr.readCRLF()
+	}
+
+	if err := cr.readCRLF(); err != nil {
+		return err
 	}
 
 	cr.leftover = data
+	return nil
+}
+
+func (cr *chunkedReader) readCRLF() error {
+	crlf := make([]byte, 2)
+	if _, err := io.ReadFull(cr.src, crlf); err != nil {
+		return fmt.Errorf("%w: read chunk crlf: %v", ErrChunkedMalformed, err)
+	}
+	if crlf[0] != '\r' || crlf[1] != '\n' {
+		return fmt.Errorf("%w: missing crlf after chunk", ErrChunkedMalformed)
+	}
+	return nil
+}
+
+func (cr *chunkedReader) readTrailerSection() error {
+	var trailerSig string
+	var headers []string
+
+	for {
+		line, err := cr.src.ReadString('\n')
+		trimmed := strings.TrimRight(line, "\r\n")
+
+		if err != nil {
+			if errors.Is(err, io.EOF) && trimmed == "" {
+				break
+			}
+			return fmt.Errorf("%w: read trailer: %v", ErrChunkedMalformed, err)
+		}
+
+		if trimmed == "" {
+			break
+		}
+
+		if rest, ok := strings.CutPrefix(trimmed, "x-amz-trailer-signature:"); ok {
+			trailerSig = strings.TrimSpace(rest)
+			continue
+		}
+
+		headers = append(headers, trimmed)
+	}
+
+	if cr.verify {
+		if trailerSig == "" {
+			return fmt.Errorf("%w: missing trailer signature", ErrChunkedMalformed)
+		}
+		return cr.verifyTrailerSig(headers, trailerSig)
+	}
+
+	return nil
+}
+
+func (cr *chunkedReader) verifyTrailerSig(headers []string, trailerSig string) error {
+	canonical := make([]string, 0, len(headers))
+	for _, h := range headers {
+		name, value, found := strings.Cut(h, ":")
+		if !found {
+			return fmt.Errorf("%w: bad trailer header %q", ErrChunkedMalformed, h)
+		}
+		canonical = append(canonical, strings.ToLower(strings.TrimSpace(name))+":"+strings.TrimSpace(value))
+	}
+	sort.Strings(canonical)
+
+	trailerHash := sha256.Sum256([]byte(strings.Join(canonical, "\n") + "\n"))
+
+	sts := "AWS4-HMAC-SHA256-TRAILER\n" +
+		cr.amzDate + "\n" +
+		cr.scope + "\n" +
+		cr.prevSig + "\n" +
+		hex.EncodeToString(trailerHash[:])
+
+	expected := Sign(sts, cr.signingKey)
+	if subtle.ConstantTimeCompare([]byte(expected), []byte(trailerSig)) != 1 {
+		return ErrChunkedBadSignature
+	}
+
 	return nil
 }
 

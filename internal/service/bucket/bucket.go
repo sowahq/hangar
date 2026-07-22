@@ -18,8 +18,9 @@ type BucketInfo struct {
 	Public            bool   `json:"public"`
 	MaxBytes          int64  `json:"max_bytes"`
 	MaxObjects        int64  `json:"max_objects"`
-	VersioningEnabled bool   `json:"versioning_enabled,omitempty"`
-	ObjectLockEnabled bool   `json:"object_lock_enabled,omitempty"`
+	VersioningEnabled    bool `json:"versioning_enabled,omitempty"`
+	VersioningConfigured bool `json:"versioning_configured,omitempty"`
+	ObjectLockEnabled    bool `json:"object_lock_enabled,omitempty"`
 }
 
 type CreateBucketRequest struct {

@@ -60,9 +60,12 @@ func sigv4Middleware(now func() time.Time) fiber.Handler {
 			}
 		}
 
-		if (c.Method() == fiber.MethodGet || c.Method() == fiber.MethodHead) && isPublicWebsiteRequest(c) {
-			c.Locals("s3_anonymous", true)
-			return c.Next()
+		if c.Get(fiber.HeaderAuthorization) == "" && c.Query("X-Amz-Signature") == "" {
+			if c.Method() == fiber.MethodGet || c.Method() == fiber.MethodHead {
+				c.Locals("s3_anonymous", true)
+				return c.Next()
+			}
+			return writeError(c, fiber.StatusForbidden, "AccessDenied", "anonymous access denied", c.Path())
 		}
 
 		req := adaptRequest(c)
@@ -93,6 +96,8 @@ func s3AuthError(c *fiber.Ctx, err error) error {
 		return writeError(c, fiber.StatusForbidden, "RequestTimeTooSkewed", err.Error(), c.Path())
 	case errors.Is(err, ErrSigV4Expired):
 		return writeError(c, fiber.StatusForbidden, "AccessDenied", err.Error(), c.Path())
+	case errors.Is(err, ErrSigV4ExpiresOutOfRange):
+		return writeError(c, fiber.StatusBadRequest, "AuthorizationQueryParametersError", err.Error(), c.Path())
 	case errors.Is(err, ErrSigV4MissingPayloadHash), errors.Is(err, ErrSigV4MissingDate):
 		return writeError(c, fiber.StatusBadRequest, "InvalidRequest", err.Error(), c.Path())
 	default:

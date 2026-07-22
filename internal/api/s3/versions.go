@@ -2,7 +2,6 @@ package s3
 
 import (
 	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/sowahq/hangar/internal/service/auth"
@@ -27,9 +26,27 @@ func handleListObjectVersions(c *fiber.Ctx) error {
 	keyMarker := c.Query("key-marker")
 	vidMarker := c.Query("version-id-marker")
 
-	maxKeys, _ := strconv.Atoi(c.Query("max-keys"))
-	if maxKeys <= 0 {
-		maxKeys = 1000
+	enc, encOK := listEncoding(c)
+	if !encOK {
+		return writeError(c, fiber.StatusBadRequest, "InvalidArgument", "invalid encoding-type", "/"+name)
+	}
+
+	maxKeys, ok := parseMaxKeys(c)
+	if !ok {
+		return writeError(c, fiber.StatusBadRequest, "InvalidArgument", "max-keys must be a non-negative integer", "/"+name)
+	}
+
+	if maxKeys == 0 {
+		return writeXML(c, fiber.StatusOK, ListVersionsResult{
+			Xmlns:           xmlNamespace,
+			Name:            name,
+			Prefix:          encodeListValue(enc, prefix),
+			KeyMarker:       encodeListValue(enc, keyMarker),
+			VersionIDMarker: vidMarker,
+			MaxKeys:         maxKeys,
+			Delimiter:       encodeListValue(enc, delim),
+			EncodingType:    enc,
+		})
 	}
 
 	metas, _, err := storage.ScanBucketVersions(name)
@@ -56,17 +73,19 @@ func handleListObjectVersions(c *fiber.Ctx) error {
 	out := ListVersionsResult{
 		Xmlns:           xmlNamespace,
 		Name:            name,
-		Prefix:          prefix,
-		KeyMarker:       keyMarker,
+		Prefix:          encodeListValue(enc, prefix),
+		KeyMarker:       encodeListValue(enc, keyMarker),
 		VersionIDMarker: vidMarker,
 		MaxKeys:         maxKeys,
-		Delimiter:       delim,
+		Delimiter:       encodeListValue(enc, delim),
+		EncodingType:    enc,
 	}
 
 	commonPrefixes := map[string]bool{}
 	count := 0
 
 	pastMarker := keyMarker == ""
+	var lastKey, lastVID string
 
 	for _, k := range keys {
 		if !pastMarker {
@@ -75,6 +94,9 @@ func handleListObjectVersions(c *fiber.Ctx) error {
 			}
 			if k == keyMarker && vidMarker == "" {
 				continue
+			}
+			if k > keyMarker {
+				pastMarker = true
 			}
 		}
 
@@ -98,30 +120,28 @@ func handleListObjectVersions(c *fiber.Ctx) error {
 		}
 
 		for _, v := range versions {
+			vid := v.VersionID
+			if vid == "" {
+				vid = "null"
+			}
+
 			if !pastMarker {
-				if k == keyMarker && v.VersionID == vidMarker {
+				if k == keyMarker && vid == vidMarker {
 					pastMarker = true
-					continue
 				}
 				continue
 			}
 
 			if count >= maxKeys {
 				out.IsTruncated = true
-				out.NextKeyMarker = k
-				out.NextVersionIDMarker = v.VersionID
 				break
 			}
 
 			isLatest := v.VersionID == headVID
-			vid := v.VersionID
-			if vid == "" {
-				vid = "null"
-			}
 
 			if v.IsDeleteMarker {
 				out.DeleteMarkers = append(out.DeleteMarkers, DeleteMarkerXML{
-					Key:          k,
+					Key:          encodeListValue(enc, k),
 					VersionID:    vid,
 					IsLatest:     isLatest,
 					LastModified: formatS3Time(v.CreatedAt),
@@ -129,7 +149,7 @@ func handleListObjectVersions(c *fiber.Ctx) error {
 				})
 			} else {
 				out.Versions = append(out.Versions, ObjectVersionXML{
-					Key:          k,
+					Key:          encodeListValue(enc, k),
 					VersionID:    vid,
 					IsLatest:     isLatest,
 					LastModified: formatS3Time(v.CreatedAt),
@@ -140,6 +160,8 @@ func handleListObjectVersions(c *fiber.Ctx) error {
 				})
 			}
 
+			lastKey = k
+			lastVID = vid
 			count++
 		}
 
@@ -150,13 +172,18 @@ func handleListObjectVersions(c *fiber.Ctx) error {
 		}
 	}
 
+	if out.IsTruncated {
+		out.NextKeyMarker = encodeListValue(enc, lastKey)
+		out.NextVersionIDMarker = lastVID
+	}
+
 	cps := make([]string, 0, len(commonPrefixes))
 	for p := range commonPrefixes {
 		cps = append(cps, p)
 	}
 	sort.Strings(cps)
 	for _, p := range cps {
-		out.CommonPrefixes = append(out.CommonPrefixes, CommonPrefix{Prefix: p})
+		out.CommonPrefixes = append(out.CommonPrefixes, CommonPrefix{Prefix: encodeListValue(enc, p)})
 	}
 
 	return writeXML(c, fiber.StatusOK, out)

@@ -17,6 +17,9 @@ func accessLogMiddleware(c *fiber.Ctx) error {
 	reqID := hex.EncodeToString(reqIDBytes[:])
 	c.Locals("s3_req_id", reqID)
 
+	c.Set("x-amz-request-id", reqID)
+	c.Set("x-amz-id-2", reqID)
+
 	err := c.Next()
 
 	bucketName := c.Params("bucket")

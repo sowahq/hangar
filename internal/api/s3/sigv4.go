@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -19,6 +20,7 @@ const (
 	scopeTerminator  = "aws4_request"
 	scopeService     = "s3"
 	maxClockSkew     = 15 * time.Minute
+	maxPresignExpirySeconds = 604800
 
 	headerAuthorization = "Authorization"
 	headerAmzDate       = "X-Amz-Date"
@@ -26,9 +28,11 @@ const (
 	headerContentSHA256 = "X-Amz-Content-Sha256"
 	headerHost          = "Host"
 
-	PayloadUnsigned    = "UNSIGNED-PAYLOAD"
-	PayloadStreaming   = "STREAMING-AWS4-HMAC-SHA256-PAYLOAD"
-	emptyStringSHA256  = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+	PayloadUnsigned                 = "UNSIGNED-PAYLOAD"
+	PayloadStreaming                = "STREAMING-AWS4-HMAC-SHA256-PAYLOAD"
+	PayloadStreamingTrailer         = "STREAMING-AWS4-HMAC-SHA256-PAYLOAD-TRAILER"
+	PayloadStreamingUnsignedTrailer = "STREAMING-UNSIGNED-PAYLOAD-TRAILER"
+	emptyStringSHA256               = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 )
 
 var (
@@ -39,6 +43,7 @@ var (
 	ErrSigV4MissingDate       = errors.New("sigv4: missing X-Amz-Date or Date header")
 	ErrSigV4MissingPayloadHash = errors.New("sigv4: missing X-Amz-Content-Sha256 header")
 	ErrSigV4Expired           = errors.New("sigv4: presigned URL expired")
+	ErrSigV4ExpiresOutOfRange = errors.New("sigv4: X-Amz-Expires out of range")
 )
 
 type AuthHeader struct {
@@ -46,11 +51,13 @@ type AuthHeader struct {
 	Date          string
 	Region        string
 	Service       string
-	SignedHeaders []string
-	Signature     string
-	Streaming     bool
-	AmzDate       string
-	SigningKey    []byte
+	SignedHeaders  []string
+	Signature      string
+	Streaming      bool
+	Trailer        bool
+	UnsignedChunks bool
+	AmzDate        string
+	SigningKey     []byte
 }
 
 type Request struct {
@@ -386,8 +393,16 @@ func Verify(r *Request, lookup SecretLookup, now time.Time) (*AuthHeader, error)
 	if payloadHash == "" {
 		return nil, ErrSigV4MissingPayloadHash
 	}
-	if payloadHash == PayloadStreaming {
+	switch payloadHash {
+	case PayloadStreaming:
 		ah.Streaming = true
+	case PayloadStreamingTrailer:
+		ah.Streaming = true
+		ah.Trailer = true
+	case PayloadStreamingUnsignedTrailer:
+		ah.Streaming = true
+		ah.Trailer = true
+		ah.UnsignedChunks = true
 	}
 
 	secret, err := lookup(ah.AccessKeyID)
@@ -459,10 +474,11 @@ func verifyPresigned(r *Request, q url.Values, lookup SecretLookup, now time.Tim
 		return nil, ErrSigV4Malformed
 	}
 
-	expSec, err := time.ParseDuration(expiresStr + "s")
-	if err != nil {
-		return nil, fmt.Errorf("%w: bad expires %q", ErrSigV4Malformed, expiresStr)
+	expInt, err := strconv.Atoi(expiresStr)
+	if err != nil || expInt < 1 || expInt > maxPresignExpirySeconds {
+		return nil, ErrSigV4ExpiresOutOfRange
 	}
+	expSec := time.Duration(expInt) * time.Second
 
 	if !now.IsZero() && now.After(t.Add(expSec)) {
 		return nil, ErrSigV4Expired

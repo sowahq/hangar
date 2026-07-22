@@ -18,6 +18,7 @@ type Metadatas struct {
 	ChunkHashes    []string `json:"chunk_hashes"`
 	VersionID      string   `json:"version_id,omitempty"`
 	IsDeleteMarker bool     `json:"is_delete_marker,omitempty"`
+	PartSizes      []int64  `json:"part_sizes,omitempty"`
 
 	SSEAlgorithm        string  `json:"sse_algorithm,omitempty"`
 	SSECustomerKeyMD5   string  `json:"sse_customer_key_md5,omitempty"`
