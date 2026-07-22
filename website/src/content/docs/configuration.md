@@ -21,8 +21,20 @@ data_directory = "data"
 pprof = false
 
 [api]
-# Native HTTP API listen address. Admin endpoints live here unauthenticated.
+# Native HTTP API listen address. Admin endpoints live here.
 bind_addr = ":8080"
+
+# Bearer token protecting every /admin/* endpoint.
+# Empty = unauthenticated (a warning is logged at startup).
+# Override with the HANGAR_ADMIN_TOKEN env var (wins over this file).
+admin_token = ""
+
+[tls]
+# Serve the native HTTP API and the S3 API over TLS with this certificate pair.
+# Both must be set to enable TLS; leave empty to serve plain HTTP
+# (e.g. behind a TLS-terminating reverse proxy). Metrics stay plain HTTP.
+cert_file = ""
+key_file  = ""
 
 [storage]
 # Target chunk size before compression / encryption.
@@ -112,9 +124,23 @@ The first server boot with a master key configured seeds a default entry in the 
 
 When any of `min_free_bytes`, `min_free_pct`, or `node_max_bytes` is set, every `PutObject` (native + S3) checks the data filesystem before accepting the body and returns a 507-style error if the request would push past the threshold. Set them on production deployments — a full Pebble store can corrupt on the next write.
 
+## Admin API authentication
+
+Set `[api] admin_token` (or `HANGAR_ADMIN_TOKEN`) to require `Authorization: Bearer <token>` on every `/admin/*` endpoint. Generate one with:
+
+```sh
+openssl rand -hex 32
+```
+
+The CLI picks the token up automatically from the `HANGAR_ADMIN_TOKEN` env var. With no token configured the admin API stays open (previous behaviour) and the server logs a warning at startup.
+
+## Health check
+
+`GET /healthz` on the native HTTP port returns `200 {"status":"ok"}` without auth or rate limiting — point Docker `HEALTHCHECK`, Kubernetes probes, or your uptime monitor at it.
+
 ## Security notes
 
-- The `/admin/*` endpoints on the native HTTP port are **unauthenticated**. Bind the HTTP API to `127.0.0.1` and put a TLS-terminating reverse proxy with auth in front, or restrict admin routes with the proxy.
+- Protect the `/admin/*` endpoints: set `admin_token` (see above), and/or bind the HTTP API to `127.0.0.1` behind a TLS-terminating reverse proxy.
 - The S3 port can be exposed publicly; every request must carry a valid SigV4 signature against an `S3Key`.
 - The master key in `config.toml` is sensitive. Use file permissions (`chmod 600`) or inject through `HANGAR_MASTER_KEY` from a secret manager.
 - The audit log path is `chmod 0600` by default. Keep it that way.

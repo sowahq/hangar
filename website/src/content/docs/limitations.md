@@ -38,7 +38,7 @@ See [S3 compatibility](/s3-compatibility/) for the full matrix. The main gaps:
 
 ## API surface (native)
 
-- **Admin endpoints are unauthenticated.** They live under `/admin/*` on the HTTP API port. Bind that port to localhost or put a reverse proxy with auth in front. The S3 port can be exposed publicly; it requires SigV4-signed requests.
+- **Admin auth is off by default.** `/admin/*` endpoints on the HTTP API port accept unauthenticated requests unless `[api] admin_token` (or `HANGAR_ADMIN_TOKEN`) is set — set it, or bind that port to localhost behind a reverse proxy. The S3 port can be exposed publicly; it requires SigV4-signed requests.
 - **No multi-tenant model.** A token grants access to a bucket. There is no organization / project / IAM hierarchy.
 
 ## Operational

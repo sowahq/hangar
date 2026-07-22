@@ -42,6 +42,14 @@ curl -X POST http://localhost:8080/admin/buckets/photos/tokens \
 
 The token is returned **once**. Store it.
 
+The same operations are available through the built-in CLI (same binary):
+
+```sh
+./bin/hangar bucket create photos
+./bin/hangar bucket list
+./bin/hangar s3keys create -p read -p write
+```
+
 ## Upload, download, range
 
 ```sh
@@ -75,6 +83,14 @@ docker run --rm -p 8080:8080 -v $(pwd)/data:/data ghcr.io/sowahq/hangar:latest
 # or pin to a tag
 docker run --rm -p 8080:8080 -v $(pwd)/data:/data ghcr.io/sowahq/hangar:v0.9.0
 ```
+
+The container runs as `uid 10001` — the bind-mounted directory must belong to it, or startup fails with `permission denied`:
+
+```sh
+sudo chown -R 10001:10001 ./data
+```
+
+For a production-ready Compose setup (permissions, hardened config, S3 keys), see [Self-hosting with Docker](/guides/self-hosting/).
 
 Or build locally:
 

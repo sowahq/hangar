@@ -35,6 +35,7 @@ export default defineConfig({
         {
           label: "Guides",
           items: [
+            { label: "Self-hosting with Docker", link: "/guides/self-hosting/" },
             { label: "Host a SPA", link: "/guides/spa-hosting/" },
           ],
         },
