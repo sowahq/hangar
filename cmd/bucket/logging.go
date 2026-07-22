@@ -3,8 +3,9 @@ package bucket
 import (
 	"fmt"
 
-	"github.com/anhostfr/hangar/internal/client"
-	"github.com/anhostfr/hangar/internal/service/bucket"
+	"github.com/sowahq/hangar/cmd/common"
+	"github.com/sowahq/hangar/internal/client"
+	"github.com/sowahq/hangar/internal/service/bucket"
 	"github.com/urfave/cli/v2"
 )
 
@@ -18,7 +19,7 @@ func loggingCommand() *cli.Command {
 				Usage:     "Enable access logging to a target bucket",
 				ArgsUsage: "<bucket-name>",
 				Flags: []cli.Flag{
-					serverFlag(),
+					common.ServerFlag(),
 					&cli.StringFlag{Name: "target-bucket", Required: true, Usage: "Target bucket to receive log objects"},
 					&cli.StringFlag{Name: "target-prefix", Usage: "Prefix for log object keys"},
 				},
@@ -28,14 +29,14 @@ func loggingCommand() *cli.Command {
 				Name:      "get",
 				Usage:     "Get access logging configuration",
 				ArgsUsage: "<bucket-name>",
-				Flags:     []cli.Flag{serverFlag()},
+				Flags:     []cli.Flag{common.ServerFlag()},
 				Action:    getLogging,
 			},
 			{
 				Name:      "delete",
 				Usage:     "Disable access logging",
 				ArgsUsage: "<bucket-name>",
-				Flags:     []cli.Flag{serverFlag()},
+				Flags:     []cli.Flag{common.ServerFlag()},
 				Action:    deleteLogging,
 			},
 		},

@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/anhostfr/hangar/internal/service/bucket"
+	"github.com/sowahq/hangar/internal/service/bucket"
 )
 
 func (c *Client) PutBucketLifecycle(name string, cfg *bucket.LifecycleConfiguration) (*bucket.LifecycleConfiguration, error) {
@@ -46,4 +46,21 @@ func (c *Client) DeleteBucketLifecycle(name string) error {
 	}
 	defer resp.Body.Close()
 	return c.handleErrorResponse(resp)
+}
+
+// RunLifecycle triggers an immediate lifecycle sweep across all buckets.
+func (c *Client) RunLifecycle() (map[string]any, error) {
+	resp, err := c.doRequest("POST", "/admin/lifecycle/run", nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if err := c.handleErrorResponse(resp); err != nil {
+		return nil, err
+	}
+	var out map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return nil, fmt.Errorf("decode: %w", err)
+	}
+	return out, nil
 }

@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/anhostfr/hangar/internal/config"
-	"github.com/anhostfr/hangar/internal/database"
-	scrubsvc "github.com/anhostfr/hangar/internal/service/scrub"
+	"github.com/sowahq/hangar/internal/config"
+	"github.com/sowahq/hangar/internal/database"
+	scrubsvc "github.com/sowahq/hangar/internal/service/scrub"
 	"github.com/urfave/cli/v2"
 )
 

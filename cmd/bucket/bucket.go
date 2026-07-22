@@ -4,8 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/anhostfr/hangar/internal/client"
-	"github.com/anhostfr/hangar/internal/service/bucket"
+	"github.com/sowahq/hangar/cmd/common"
+	"github.com/sowahq/hangar/internal/client"
+	"github.com/sowahq/hangar/internal/service/bucket"
 	"github.com/urfave/cli/v2"
 )
 
@@ -16,12 +17,7 @@ func Commands() []*cli.Command {
 			Usage:     "Create a new bucket",
 			ArgsUsage: "<bucket-name>",
 			Flags: []cli.Flag{
-				&cli.StringFlag{
-					Name:    "server",
-					Usage:   "Server URL",
-					Aliases: []string{"s"},
-					Value:   "http://localhost:8080",
-				},
+				common.ServerFlag(),
 				&cli.BoolFlag{
 					Name:  "public",
 					Usage: "Make bucket public",
@@ -33,12 +29,7 @@ func Commands() []*cli.Command {
 			Name:  "list",
 			Usage: "List all buckets",
 			Flags: []cli.Flag{
-				&cli.StringFlag{
-					Name:    "server",
-					Usage:   "Server URL",
-					Aliases: []string{"s"},
-					Value:   "http://localhost:8080",
-				},
+				common.ServerFlag(),
 			},
 			Action: listBuckets,
 		},
@@ -47,12 +38,7 @@ func Commands() []*cli.Command {
 			Usage:     "Get bucket information",
 			ArgsUsage: "<bucket-name>",
 			Flags: []cli.Flag{
-				&cli.StringFlag{
-					Name:    "server",
-					Usage:   "Server URL",
-					Aliases: []string{"s"},
-					Value:   "http://localhost:8080",
-				},
+				common.ServerFlag(),
 			},
 			Action: getBucket,
 		},
@@ -61,18 +47,30 @@ func Commands() []*cli.Command {
 			Usage:     "Delete a bucket",
 			ArgsUsage: "<bucket-name>",
 			Flags: []cli.Flag{
-				&cli.StringFlag{
-					Name:    "server",
-					Usage:   "Server URL",
-					Aliases: []string{"s"},
-					Value:   "http://localhost:8080",
-				},
+				common.ServerFlag(),
 				&cli.BoolFlag{
 					Name:  "force",
 					Usage: "Force delete bucket even if not empty",
 				},
 			},
 			Action: deleteBucket,
+		},
+		{
+			Name:      "quota",
+			Usage:     "Set bucket quota (0 = unlimited)",
+			ArgsUsage: "<bucket-name>",
+			Flags: []cli.Flag{
+				common.ServerFlag(),
+				&cli.Int64Flag{
+					Name:  "max-bytes",
+					Usage: "Maximum total size in bytes",
+				},
+				&cli.Int64Flag{
+					Name:  "max-objects",
+					Usage: "Maximum number of objects",
+				},
+			},
+			Action: updateQuota,
 		},
 		encryptionCommand(),
 		objectLockCommand(),
@@ -81,6 +79,7 @@ func Commands() []*cli.Command {
 		taggingCommand(),
 		corsCommand(),
 		lifecycleCommand(),
+		versioningCommand(),
 	}
 }
 
@@ -144,6 +143,26 @@ func getBucket(c *cli.Context) error {
 
 	data, _ := json.MarshalIndent(result, "", "  ")
 	fmt.Printf("Bucket information:\n%s\n", data)
+
+	return nil
+}
+
+func updateQuota(c *cli.Context) error {
+	if c.NArg() == 0 {
+		return fmt.Errorf("bucket name is required")
+	}
+
+	serverURL := c.String("server")
+	apiClient := client.NewClient(serverURL)
+
+	name := c.Args().First()
+	result, err := apiClient.UpdateBucketQuota(name, c.Int64("max-bytes"), c.Int64("max-objects"))
+	if err != nil {
+		return fmt.Errorf("failed to update quota: %w", err)
+	}
+
+	data, _ := json.MarshalIndent(result, "", "  ")
+	fmt.Printf("Quota updated:\n%s\n", data)
 
 	return nil
 }

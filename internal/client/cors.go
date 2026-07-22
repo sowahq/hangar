@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/anhostfr/hangar/internal/service/bucket"
+	"github.com/sowahq/hangar/internal/service/bucket"
 )
 
 func (c *Client) PutBucketCORS(name string, cfg *bucket.CORSConfiguration) (*bucket.CORSConfiguration, error) {

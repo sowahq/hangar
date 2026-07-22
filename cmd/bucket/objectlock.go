@@ -3,8 +3,9 @@ package bucket
 import (
 	"fmt"
 
-	"github.com/anhostfr/hangar/internal/client"
-	"github.com/anhostfr/hangar/internal/service/bucket"
+	"github.com/sowahq/hangar/cmd/common"
+	"github.com/sowahq/hangar/internal/client"
+	"github.com/sowahq/hangar/internal/service/bucket"
 	"github.com/urfave/cli/v2"
 )
 
@@ -18,7 +19,7 @@ func objectLockCommand() *cli.Command {
 				Usage:     "Enable object lock on a bucket (requires versioning)",
 				ArgsUsage: "<bucket-name>",
 				Flags: []cli.Flag{
-					serverFlag(),
+					common.ServerFlag(),
 					&cli.StringFlag{Name: "default-mode", Usage: "Default retention mode (GOVERNANCE or COMPLIANCE)"},
 					&cli.IntFlag{Name: "default-days", Usage: "Default retention days"},
 					&cli.IntFlag{Name: "default-years", Usage: "Default retention years"},
@@ -29,7 +30,7 @@ func objectLockCommand() *cli.Command {
 				Name:      "get",
 				Usage:     "Get bucket object lock configuration",
 				ArgsUsage: "<bucket-name>",
-				Flags:     []cli.Flag{serverFlag()},
+				Flags:     []cli.Flag{common.ServerFlag()},
 				Action:    getObjectLock,
 			},
 		},

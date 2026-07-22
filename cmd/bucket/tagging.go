@@ -4,9 +4,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/anhostfr/hangar/internal/client"
-	"github.com/anhostfr/hangar/internal/service/bucket"
-	"github.com/anhostfr/hangar/internal/storage"
+	"github.com/sowahq/hangar/cmd/common"
+	"github.com/sowahq/hangar/internal/client"
+	"github.com/sowahq/hangar/internal/service/bucket"
+	"github.com/sowahq/hangar/internal/storage"
 	"github.com/urfave/cli/v2"
 )
 
@@ -20,7 +21,7 @@ func taggingCommand() *cli.Command {
 				Usage:     "Set bucket tags (replaces all)",
 				ArgsUsage: "<bucket-name>",
 				Flags: []cli.Flag{
-					serverFlag(),
+					common.ServerFlag(),
 					&cli.StringSliceFlag{Name: "tag", Required: true, Aliases: []string{"t"}, Usage: "Tag in key=value format (repeatable)"},
 				},
 				Action: setTagging,
@@ -29,14 +30,14 @@ func taggingCommand() *cli.Command {
 				Name:      "get",
 				Usage:     "Get bucket tags",
 				ArgsUsage: "<bucket-name>",
-				Flags:     []cli.Flag{serverFlag()},
+				Flags:     []cli.Flag{common.ServerFlag()},
 				Action:    getTagging,
 			},
 			{
 				Name:      "delete",
 				Usage:     "Remove all bucket tags",
 				ArgsUsage: "<bucket-name>",
-				Flags:     []cli.Flag{serverFlag()},
+				Flags:     []cli.Flag{common.ServerFlag()},
 				Action:    deleteTagging,
 			},
 		},

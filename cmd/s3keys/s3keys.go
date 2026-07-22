@@ -4,23 +4,18 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/anhostfr/hangar/internal/client"
+	"github.com/sowahq/hangar/cmd/common"
+	"github.com/sowahq/hangar/internal/client"
 	"github.com/urfave/cli/v2"
 )
 
 func Commands() []*cli.Command {
-	serverFlag := &cli.StringFlag{
-		Name:    "server",
-		Usage:   "Server URL",
-		Aliases: []string{"s"},
-		Value:   "http://localhost:8080",
-	}
 	return []*cli.Command{
 		{
 			Name:  "create",
 			Usage: "Create a new S3 access key",
 			Flags: []cli.Flag{
-				serverFlag,
+				common.ServerFlag(),
 				&cli.StringSliceFlag{
 					Name:     "perm",
 					Usage:    "Permission (read, write, delete, admin). Repeatable.",
@@ -38,14 +33,14 @@ func Commands() []*cli.Command {
 		{
 			Name:   "list",
 			Usage:  "List all S3 access keys",
-			Flags:  []cli.Flag{serverFlag},
+			Flags:  []cli.Flag{common.ServerFlag()},
 			Action: listS3Keys,
 		},
 		{
 			Name:      "delete",
 			Usage:     "Delete an S3 access key",
 			ArgsUsage: "<access-key-id>",
-			Flags:     []cli.Flag{serverFlag},
+			Flags:     []cli.Flag{common.ServerFlag()},
 			Action:    deleteS3Key,
 		},
 	}

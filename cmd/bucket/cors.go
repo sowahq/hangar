@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/anhostfr/hangar/internal/client"
-	"github.com/anhostfr/hangar/internal/service/bucket"
+	"github.com/sowahq/hangar/cmd/common"
+	"github.com/sowahq/hangar/internal/client"
+	"github.com/sowahq/hangar/internal/service/bucket"
 	"github.com/urfave/cli/v2"
 )
 
@@ -20,7 +21,7 @@ func corsCommand() *cli.Command {
 				Usage:     "Set CORS rules from a JSON file ({\"rules\":[...]})",
 				ArgsUsage: "<bucket-name>",
 				Flags: []cli.Flag{
-					serverFlag(),
+					common.ServerFlag(),
 					&cli.StringFlag{Name: "file", Required: true, Aliases: []string{"f"}, Usage: "Path to JSON file with CORSConfiguration"},
 				},
 				Action: setCORS,
@@ -29,14 +30,14 @@ func corsCommand() *cli.Command {
 				Name:      "get",
 				Usage:     "Get CORS configuration",
 				ArgsUsage: "<bucket-name>",
-				Flags:     []cli.Flag{serverFlag()},
+				Flags:     []cli.Flag{common.ServerFlag()},
 				Action:    getCORS,
 			},
 			{
 				Name:      "delete",
 				Usage:     "Remove CORS configuration",
 				ArgsUsage: "<bucket-name>",
-				Flags:     []cli.Flag{serverFlag()},
+				Flags:     []cli.Flag{common.ServerFlag()},
 				Action:    deleteCORS,
 			},
 		},

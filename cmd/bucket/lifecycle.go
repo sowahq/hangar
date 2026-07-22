@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/anhostfr/hangar/internal/client"
-	"github.com/anhostfr/hangar/internal/service/bucket"
+	"github.com/sowahq/hangar/cmd/common"
+	"github.com/sowahq/hangar/internal/client"
+	"github.com/sowahq/hangar/internal/service/bucket"
 	"github.com/urfave/cli/v2"
 )
 
@@ -20,7 +21,7 @@ func lifecycleCommand() *cli.Command {
 				Usage:     "Set lifecycle rules from a JSON file ({\"rules\":[...]})",
 				ArgsUsage: "<bucket-name>",
 				Flags: []cli.Flag{
-					serverFlag(),
+					common.ServerFlag(),
 					&cli.StringFlag{Name: "file", Required: true, Aliases: []string{"f"}, Usage: "Path to JSON file with LifecycleConfiguration"},
 				},
 				Action: setLifecycle,
@@ -29,18 +30,37 @@ func lifecycleCommand() *cli.Command {
 				Name:      "get",
 				Usage:     "Get lifecycle configuration",
 				ArgsUsage: "<bucket-name>",
-				Flags:     []cli.Flag{serverFlag()},
+				Flags:     []cli.Flag{common.ServerFlag()},
 				Action:    getLifecycle,
 			},
 			{
 				Name:      "delete",
 				Usage:     "Remove lifecycle configuration",
 				ArgsUsage: "<bucket-name>",
-				Flags:     []cli.Flag{serverFlag()},
+				Flags:     []cli.Flag{common.ServerFlag()},
 				Action:    deleteLifecycle,
+			},
+			{
+				Name:   "run",
+				Usage:  "Trigger an immediate lifecycle sweep across all buckets",
+				Flags:  []cli.Flag{common.ServerFlag()},
+				Action: runLifecycle,
 			},
 		},
 	}
+}
+
+func runLifecycle(c *cli.Context) error {
+	apiClient := client.NewClient(c.String("server"))
+
+	out, err := apiClient.RunLifecycle()
+	if err != nil {
+		return fmt.Errorf("failed to run lifecycle: %w", err)
+	}
+
+	printJSON("Lifecycle run:", out)
+
+	return nil
 }
 
 func setLifecycle(c *cli.Context) error {

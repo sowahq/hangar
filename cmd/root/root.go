@@ -8,25 +8,29 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/anhostfr/hangar/cmd/backup"
-	"github.com/anhostfr/hangar/cmd/bucket"
-	clusterCmd "github.com/anhostfr/hangar/cmd/cluster"
-	"github.com/anhostfr/hangar/cmd/s3keys"
-	scrubcmd "github.com/anhostfr/hangar/cmd/scrub"
-	"github.com/anhostfr/hangar/internal/api/http"
-	metricsRouter "github.com/anhostfr/hangar/internal/api/metrics"
-	"github.com/anhostfr/hangar/internal/api/s3"
-	"github.com/anhostfr/hangar/internal/cluster"
-	"github.com/anhostfr/hangar/internal/config"
-	"github.com/anhostfr/hangar/internal/database"
-	"github.com/anhostfr/hangar/internal/service/accesslog"
-	"github.com/anhostfr/hangar/internal/service/audit"
-	gcService "github.com/anhostfr/hangar/internal/service/gc"
-	lifecycleService "github.com/anhostfr/hangar/internal/service/lifecycle"
-	metricsService "github.com/anhostfr/hangar/internal/service/metrics"
-	scrubService "github.com/anhostfr/hangar/internal/service/scrub"
-	"github.com/anhostfr/hangar/internal/service/sse"
-	"github.com/anhostfr/hangar/internal/storage"
+	auditCmd "github.com/sowahq/hangar/cmd/audit"
+	"github.com/sowahq/hangar/cmd/backup"
+	"github.com/sowahq/hangar/cmd/bucket"
+	clusterCmd "github.com/sowahq/hangar/cmd/cluster"
+	"github.com/sowahq/hangar/cmd/s3keys"
+	scrubcmd "github.com/sowahq/hangar/cmd/scrub"
+	sseCmd "github.com/sowahq/hangar/cmd/sse"
+	statusCmd "github.com/sowahq/hangar/cmd/status"
+	"github.com/sowahq/hangar/cmd/tokens"
+	"github.com/sowahq/hangar/internal/api/http"
+	metricsRouter "github.com/sowahq/hangar/internal/api/metrics"
+	"github.com/sowahq/hangar/internal/api/s3"
+	"github.com/sowahq/hangar/internal/cluster"
+	"github.com/sowahq/hangar/internal/config"
+	"github.com/sowahq/hangar/internal/database"
+	"github.com/sowahq/hangar/internal/service/accesslog"
+	"github.com/sowahq/hangar/internal/service/audit"
+	gcService "github.com/sowahq/hangar/internal/service/gc"
+	lifecycleService "github.com/sowahq/hangar/internal/service/lifecycle"
+	metricsService "github.com/sowahq/hangar/internal/service/metrics"
+	scrubService "github.com/sowahq/hangar/internal/service/scrub"
+	"github.com/sowahq/hangar/internal/service/sse"
+	"github.com/sowahq/hangar/internal/storage"
 	"github.com/gofiber/fiber/v2"
 	"github.com/phuslu/log"
 	"github.com/urfave/cli/v2"
@@ -49,6 +53,22 @@ func Execute() {
 				Usage:       "Manage S3 access keys",
 				Subcommands: s3keys.Commands(),
 			},
+			{
+				Name:        "tokens",
+				Usage:       "Manage bucket access tokens",
+				Subcommands: tokens.Commands(),
+			},
+			{
+				Name:        "sse",
+				Usage:       "Manage SSE-S3 encryption keys",
+				Subcommands: sseCmd.Commands(),
+			},
+			{
+				Name:        "audit",
+				Usage:       "Inspect the audit log",
+				Subcommands: auditCmd.Commands(),
+			},
+			statusCmd.Command(),
 			{
 				Name:        "backup",
 				Usage:       "Create and restore data backups",
@@ -126,7 +146,12 @@ func Execute() {
 					httpRouter := http.Router()
 					httpErr := make(chan error, 1)
 					go func() {
-						httpErr <- httpRouter.Listen(config.ServerConfig().API.BindAddr)
+						addr := config.ServerConfig().API.BindAddr
+						if config.TLSEnabled() {
+							httpErr <- httpRouter.ListenTLS(addr, config.TLSCertFile(), config.TLSKeyFile())
+						} else {
+							httpErr <- httpRouter.Listen(addr)
+						}
 					}()
 
 					var s3Router *fiber.App
@@ -166,19 +191,19 @@ func Execute() {
 
 						var err error
 						clusterRuntime, err = cluster.Start(ctx, cluster.Config{
-							NodeID:      cluster.NodeID(config.ClusterNodeID()),
-							Listen:      config.ClusterListen(),
-							Seeds:       config.ClusterSeeds(),
-							Zone:        config.ClusterZone(),
-							Capacity:    config.ClusterCapacity(),
-							Tags:        config.ClusterTags(),
+							NodeID:         cluster.NodeID(config.ClusterNodeID()),
+							Listen:         config.ClusterListen(),
+							Seeds:          config.ClusterSeeds(),
+							Zone:           config.ClusterZone(),
+							Capacity:       config.ClusterCapacity(),
+							Tags:           config.ClusterTags(),
 							Secret:         config.ClusterSharedSecret(),
 							PreviousSecret: config.ClusterPreviousSharedSecret(),
-							HeartbeatMS: config.HeartbeatMS(),
-							ECData:      config.ECDataShards(),
-							ECParity:    config.ECParityShards(),
-							TLSServer:   tlsServer,
-							TLSClient:   tlsClient,
+							HeartbeatMS:    config.HeartbeatMS(),
+							ECData:         config.ECDataShards(),
+							ECParity:       config.ECParityShards(),
+							TLSServer:      tlsServer,
+							TLSClient:      tlsClient,
 						})
 						if err != nil {
 							log.Error().Err(err).Msg("Failed to start cluster runtime.")

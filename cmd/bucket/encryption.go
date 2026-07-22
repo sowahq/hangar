@@ -4,8 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/anhostfr/hangar/internal/client"
-	"github.com/anhostfr/hangar/internal/service/bucket"
+	"github.com/sowahq/hangar/cmd/common"
+	"github.com/sowahq/hangar/internal/client"
+	"github.com/sowahq/hangar/internal/service/bucket"
 	"github.com/urfave/cli/v2"
 )
 
@@ -19,7 +20,7 @@ func encryptionCommand() *cli.Command {
 				Usage:     "Set bucket default encryption (AES256 only)",
 				ArgsUsage: "<bucket-name>",
 				Flags: []cli.Flag{
-					serverFlag(),
+					common.ServerFlag(),
 					&cli.StringFlag{Name: "algorithm", Value: "AES256", Usage: "Algorithm (AES256 only)"},
 					&cli.StringFlag{Name: "kms-key-id", Usage: "KMS key ID (stored, not enforced)"},
 				},
@@ -29,14 +30,14 @@ func encryptionCommand() *cli.Command {
 				Name:      "get",
 				Usage:     "Get bucket default encryption",
 				ArgsUsage: "<bucket-name>",
-				Flags:     []cli.Flag{serverFlag()},
+				Flags:     []cli.Flag{common.ServerFlag()},
 				Action:    getEncryption,
 			},
 			{
 				Name:      "delete",
 				Usage:     "Remove bucket default encryption",
 				ArgsUsage: "<bucket-name>",
-				Flags:     []cli.Flag{serverFlag()},
+				Flags:     []cli.Flag{common.ServerFlag()},
 				Action:    deleteEncryption,
 			},
 		},
@@ -83,15 +84,6 @@ func deleteEncryption(c *cli.Context) error {
 	}
 	fmt.Printf("Encryption removed from bucket '%s'\n", c.Args().First())
 	return nil
-}
-
-func serverFlag() cli.Flag {
-	return &cli.StringFlag{
-		Name:    "server",
-		Usage:   "Server URL",
-		Aliases: []string{"s"},
-		Value:   "http://localhost:8080",
-	}
 }
 
 func printJSON(label string, v any) {

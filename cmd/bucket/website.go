@@ -3,8 +3,9 @@ package bucket
 import (
 	"fmt"
 
-	"github.com/anhostfr/hangar/internal/client"
-	"github.com/anhostfr/hangar/internal/service/bucket"
+	"github.com/sowahq/hangar/cmd/common"
+	"github.com/sowahq/hangar/internal/client"
+	"github.com/sowahq/hangar/internal/service/bucket"
 	"github.com/urfave/cli/v2"
 )
 
@@ -18,7 +19,7 @@ func websiteCommand() *cli.Command {
 				Usage:     "Set website configuration",
 				ArgsUsage: "<bucket-name>",
 				Flags: []cli.Flag{
-					serverFlag(),
+					common.ServerFlag(),
 					&cli.StringFlag{Name: "index", Required: true, Usage: "Index document suffix (e.g. index.html)"},
 					&cli.StringFlag{Name: "error", Usage: "Error document key (e.g. error.html)"},
 				},
@@ -28,14 +29,14 @@ func websiteCommand() *cli.Command {
 				Name:      "get",
 				Usage:     "Get website configuration",
 				ArgsUsage: "<bucket-name>",
-				Flags:     []cli.Flag{serverFlag()},
+				Flags:     []cli.Flag{common.ServerFlag()},
 				Action:    getWebsite,
 			},
 			{
 				Name:      "delete",
 				Usage:     "Disable static website hosting",
 				ArgsUsage: "<bucket-name>",
-				Flags:     []cli.Flag{serverFlag()},
+				Flags:     []cli.Flag{common.ServerFlag()},
 				Action:    deleteWebsite,
 			},
 		},

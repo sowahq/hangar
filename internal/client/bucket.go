@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/anhostfr/hangar/internal/service/bucket"
+	"github.com/sowahq/hangar/internal/service/bucket"
 )
 
 // CreateBucket creates a new bucket via API
@@ -50,6 +50,31 @@ func (c *Client) ListBuckets() (*bucket.ListBucketsResponse, error) {
 // GetBucket gets bucket information via API
 func (c *Client) GetBucket(name string) (*bucket.BucketInfo, error) {
 	resp, err := c.doRequest("GET", fmt.Sprintf("/admin/buckets/%s", name), nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if err := c.handleErrorResponse(resp); err != nil {
+		return nil, err
+	}
+
+	var result bucket.BucketInfo
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	return &result, nil
+}
+
+// UpdateBucketQuota sets the bucket quota via API. Zero values mean unlimited.
+func (c *Client) UpdateBucketQuota(name string, maxBytes, maxObjects int64) (*bucket.BucketInfo, error) {
+	req := map[string]int64{
+		"max_bytes":   maxBytes,
+		"max_objects": maxObjects,
+	}
+
+	resp, err := c.doRequest("PUT", fmt.Sprintf("/admin/buckets/%s/quota", name), req)
 	if err != nil {
 		return nil, err
 	}

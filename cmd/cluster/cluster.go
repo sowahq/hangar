@@ -8,7 +8,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/anhostfr/hangar/internal/client"
+	"github.com/sowahq/hangar/cmd/common"
+	"github.com/sowahq/hangar/internal/client"
 	"github.com/urfave/cli/v2"
 )
 
@@ -18,7 +19,7 @@ func Commands() []*cli.Command {
 			Name:  "status",
 			Usage: "Show cluster status",
 			Flags: []cli.Flag{
-				&cli.StringFlag{Name: "server", Aliases: []string{"s"}, Value: "http://localhost:8080"},
+				common.ServerFlag(),
 			},
 			Action: statusCmd,
 		},
@@ -31,7 +32,7 @@ func Commands() []*cli.Command {
 					Usage:     "Remove node from layout",
 					ArgsUsage: "<node-id>",
 					Flags: []cli.Flag{
-						&cli.StringFlag{Name: "server", Aliases: []string{"s"}, Value: "http://localhost:8080"},
+						common.ServerFlag(),
 					},
 					Action: nodeRemove,
 				},
@@ -40,7 +41,7 @@ func Commands() []*cli.Command {
 					Usage:     "Mark node as draining (HRW skip writes, finish reads)",
 					ArgsUsage: "<node-id>",
 					Flags: []cli.Flag{
-						&cli.StringFlag{Name: "server", Aliases: []string{"s"}, Value: "http://localhost:8080"},
+						common.ServerFlag(),
 					},
 					Action: nodeDrain,
 				},
@@ -67,7 +68,7 @@ func Commands() []*cli.Command {
 					Name:  "show",
 					Usage: "Show currently applied layout",
 					Flags: []cli.Flag{
-						&cli.StringFlag{Name: "server", Aliases: []string{"s"}, Value: "http://localhost:8080"},
+						common.ServerFlag(),
 					},
 					Action: layoutShow,
 				},
@@ -76,13 +77,82 @@ func Commands() []*cli.Command {
 					Usage:     "Apply layout from JSON file (version must be > current)",
 					ArgsUsage: "<path>",
 					Flags: []cli.Flag{
-						&cli.StringFlag{Name: "server", Aliases: []string{"s"}, Value: "http://localhost:8080"},
+						common.ServerFlag(),
 					},
 					Action: layoutApply,
 				},
 			},
 		},
+		{
+			Name:  "anti-entropy",
+			Usage: "Manage anti-entropy repair",
+			Subcommands: []*cli.Command{
+				{
+					Name:   "run",
+					Usage:  "Trigger an anti-entropy scan and repair pass",
+					Flags:  []cli.Flag{common.ServerFlag()},
+					Action: antiEntropyRun,
+				},
+			},
+		},
+		{
+			Name:  "deep-scrub",
+			Usage: "Manage deep-scrub verification (erasure coding)",
+			Subcommands: []*cli.Command{
+				{
+					Name:   "run",
+					Usage:  "Trigger a deep-scrub verification pass",
+					Flags:  []cli.Flag{common.ServerFlag()},
+					Action: deepScrubRun,
+				},
+			},
+		},
+		{
+			Name:  "secret",
+			Usage: "Inspect cluster shared secret state",
+			Subcommands: []*cli.Command{
+				{
+					Name:   "status",
+					Usage:  "Show shared secret fingerprints",
+					Flags:  []cli.Flag{common.ServerFlag()},
+					Action: secretStatus,
+				},
+			},
+		},
 	}
+}
+
+func antiEntropyRun(c *cli.Context) error {
+	cl := client.NewClient(c.String("server"))
+	out, err := cl.RunClusterAntiEntropy()
+	if err != nil {
+		return err
+	}
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	return enc.Encode(out)
+}
+
+func deepScrubRun(c *cli.Context) error {
+	cl := client.NewClient(c.String("server"))
+	out, err := cl.RunClusterDeepScrub()
+	if err != nil {
+		return err
+	}
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	return enc.Encode(out)
+}
+
+func secretStatus(c *cli.Context) error {
+	cl := client.NewClient(c.String("server"))
+	out, err := cl.GetClusterSecretStatus()
+	if err != nil {
+		return err
+	}
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	return enc.Encode(out)
 }
 
 func initCmd(c *cli.Context) error {

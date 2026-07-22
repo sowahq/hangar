@@ -71,6 +71,54 @@ func (c *Client) DrainClusterNode(id string) (map[string]any, error) {
 	return out, nil
 }
 
+func (c *Client) RunClusterAntiEntropy() (map[string]any, error) {
+	resp, err := c.doRequest("POST", "/admin/cluster/anti-entropy/run", nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if err := c.handleErrorResponse(resp); err != nil {
+		return nil, err
+	}
+	var out map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return nil, fmt.Errorf("decode: %w", err)
+	}
+	return out, nil
+}
+
+func (c *Client) RunClusterDeepScrub() (map[string]any, error) {
+	resp, err := c.doRequest("POST", "/admin/cluster/deep-scrub/run", nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if err := c.handleErrorResponse(resp); err != nil {
+		return nil, err
+	}
+	var out map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return nil, fmt.Errorf("decode: %w", err)
+	}
+	return out, nil
+}
+
+func (c *Client) GetClusterSecretStatus() (map[string]any, error) {
+	resp, err := c.doRequest("GET", "/admin/cluster/secret/status", nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if err := c.handleErrorResponse(resp); err != nil {
+		return nil, err
+	}
+	var out map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return nil, fmt.Errorf("decode: %w", err)
+	}
+	return out, nil
+}
+
 func (c *Client) ApplyClusterLayout(raw []byte) (map[string]any, error) {
 	req, err := http.NewRequest("PUT", c.baseURL+"/admin/cluster/layout", bytes.NewReader(raw))
 	if err != nil {

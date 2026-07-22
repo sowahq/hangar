@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/BurntSushi/toml"
-	backupsvc "github.com/anhostfr/hangar/internal/service/backup"
+	backupsvc "github.com/sowahq/hangar/internal/service/backup"
 	"github.com/urfave/cli/v2"
 )
 
