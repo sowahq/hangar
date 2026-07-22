@@ -1,0 +1,22 @@
+version: "2"
+
+linters:
+  default: none
+  enable:
+    - govet
+    - staticcheck
+    - ineffassign
+    - unused
+  settings:
+    staticcheck:
+      checks:
+        - all
+        - "-ST*"
+        - "-QF*"
+        - "-S1001"
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters:
+          - staticcheck
+        text: "SA4023"
