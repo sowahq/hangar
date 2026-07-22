@@ -1,6 +1,8 @@
 package admin
 
 import (
+	"encoding/json"
+
 	bucketService "github.com/sowahq/hangar/internal/service/bucket"
 	"github.com/gofiber/fiber/v2"
 )
@@ -20,8 +22,17 @@ func CreateBucket(c *fiber.Ctx) error {
 	bucketName := c.Params("bucket")
 
 	req := &bucketService.CreateBucketRequest{
-		Name:   bucketName,
-		Public: false,
+		Name: bucketName,
+	}
+
+	if body := c.Body(); len(body) > 0 {
+		var opts publicRequest
+		if err := json.Unmarshal(body, &opts); err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": "invalid JSON body",
+			})
+		}
+		req.Public = opts.Public
 	}
 
 	response, err := bucketService.CreateBucket(req)
