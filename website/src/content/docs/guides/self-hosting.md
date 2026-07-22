@@ -123,6 +123,13 @@ Add `--public` to make a bucket readable without auth (e.g. for [static website 
 docker exec hangar hangar bucket create assets --public
 ```
 
+Toggle visibility on an existing bucket anytime:
+
+```sh
+docker exec hangar hangar bucket public assets
+docker exec hangar hangar bucket public assets --off
+```
+
 Cap a bucket's size or object count with a quota (`0` = unlimited):
 
 ```sh
