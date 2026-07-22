@@ -34,5 +34,8 @@ EXPOSE 8080
 
 VOLUME ["/data"]
 
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD ["wget","-q","--spider","http://127.0.0.1:8080/healthz"]
+
 ENTRYPOINT ["/sbin/tini","--","/usr/local/bin/hangar"]
 CMD ["server","-c","/data/config.toml"]

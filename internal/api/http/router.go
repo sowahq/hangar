@@ -3,13 +3,13 @@ package http
 import (
 	"time"
 
-	"github.com/anhostfr/hangar/internal/api/http/admin"
-	"github.com/anhostfr/hangar/internal/api/http/handlers"
-	"github.com/anhostfr/hangar/internal/api/http/middleware"
-	"github.com/anhostfr/hangar/internal/api/http/response"
-	"github.com/anhostfr/hangar/internal/config"
-	"github.com/anhostfr/hangar/internal/service/auth"
-	"github.com/anhostfr/hangar/internal/service/metrics"
+	"github.com/sowahq/hangar/internal/api/http/admin"
+	"github.com/sowahq/hangar/internal/api/http/handlers"
+	"github.com/sowahq/hangar/internal/api/http/middleware"
+	"github.com/sowahq/hangar/internal/api/http/response"
+	"github.com/sowahq/hangar/internal/config"
+	"github.com/sowahq/hangar/internal/service/auth"
+	"github.com/sowahq/hangar/internal/service/metrics"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/limiter"
 	"github.com/phuslu/log"
@@ -25,6 +25,8 @@ func Router() *fiber.App {
 		Network:                      "tcp",
 		ErrorHandler:                 response.ErrorHandler,
 	})
+
+	router.Get("/healthz", handlers.Healthz)
 
 	if config.MetricsEnabled() {
 		router.Use(metrics.Middleware("http"))
@@ -48,7 +50,7 @@ func Router() *fiber.App {
 
 	router.Get("/status", handlers.Status)
 
-	adminGroup := router.Group("/admin")
+	adminGroup := router.Group("/admin", middleware.RequireAdminToken())
 	adminGroup.Get("/buckets", admin.ListBuckets)
 	adminGroup.Put("/buckets/:bucket", admin.CreateBucket)
 	adminGroup.Get("/buckets/:bucket", admin.GetBucket)

@@ -11,7 +11,7 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/go-playground/validator/v10"
 
-	"github.com/anhostfr/hangar/internal/database"
+	"github.com/sowahq/hangar/internal/database"
 )
 
 type serverConfig struct {
@@ -20,8 +20,14 @@ type serverConfig struct {
 	Pprof bool `toml:"pprof"`
 
 	API struct {
-		BindAddr string `toml:"bind_addr" validate:"required"`
+		BindAddr   string `toml:"bind_addr" validate:"required"`
+		AdminToken string `toml:"admin_token"`
 	} `toml:"api"`
+
+	TLS struct {
+		CertFile string `toml:"cert_file"`
+		KeyFile  string `toml:"key_file"`
+	} `toml:"tls"`
 
 	Storage struct {
 		ChunkSize         int  `toml:"chunk_size" validate:"min=1024"`
@@ -100,6 +106,8 @@ type serverConfig struct {
 }
 
 var masterKey []byte
+
+var adminToken string
 
 var clusterSharedSecret []byte
 var clusterPreviousSecret []byte
@@ -427,6 +435,18 @@ func LoadServerConfig(path string) error {
 		}
 	}
 
+	if c.TLS.CertFile != "" || c.TLS.KeyFile != "" {
+		if c.TLS.CertFile == "" || c.TLS.KeyFile == "" {
+			return fmt.Errorf("tls: both cert_file and key_file must be set")
+		}
+		if _, err := os.Stat(c.TLS.CertFile); err != nil {
+			return fmt.Errorf("tls: cert_file %q: %w", c.TLS.CertFile, err)
+		}
+		if _, err := os.Stat(c.TLS.KeyFile); err != nil {
+			return fmt.Errorf("tls: key_file %q: %w", c.TLS.KeyFile, err)
+		}
+	}
+
 	syncWrites := true
 	if c.Storage.SyncWrites != nil {
 		syncWrites = *c.Storage.SyncWrites
@@ -437,8 +457,61 @@ func LoadServerConfig(path string) error {
 	}
 
 	loadMasterKey()
+	loadAdminToken()
 
 	return nil
+}
+
+func loadAdminToken() {
+	raw := c.API.AdminToken
+	if env := os.Getenv("HANGAR_ADMIN_TOKEN"); env != "" {
+		raw = env
+	}
+
+	adminToken = raw
+
+	if adminToken == "" {
+		log.Printf("admin API is unauthenticated — set [api] admin_token or HANGAR_ADMIN_TOKEN")
+	}
+}
+
+func AdminToken() string {
+	mu.RLock()
+	defer mu.RUnlock()
+	return adminToken
+}
+
+func SetAdminTokenForTest(tok string) {
+	mu.Lock()
+	defer mu.Unlock()
+	adminToken = tok
+}
+
+func TLSEnabled() bool {
+	mu.RLock()
+	defer mu.RUnlock()
+	if c == nil {
+		c = DefaultServerConfig()
+	}
+	return c.TLS.CertFile != "" && c.TLS.KeyFile != ""
+}
+
+func TLSCertFile() string {
+	mu.RLock()
+	defer mu.RUnlock()
+	if c == nil {
+		c = DefaultServerConfig()
+	}
+	return c.TLS.CertFile
+}
+
+func TLSKeyFile() string {
+	mu.RLock()
+	defer mu.RUnlock()
+	if c == nil {
+		c = DefaultServerConfig()
+	}
+	return c.TLS.KeyFile
 }
 
 func loadMasterKey() {

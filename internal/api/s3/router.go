@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/anhostfr/hangar/internal/config"
-	"github.com/anhostfr/hangar/internal/service/auth"
-	"github.com/anhostfr/hangar/internal/service/metrics"
+	"github.com/sowahq/hangar/internal/config"
+	"github.com/sowahq/hangar/internal/service/auth"
+	"github.com/sowahq/hangar/internal/service/metrics"
 	"github.com/gofiber/fiber/v2"
 	"github.com/phuslu/log"
 	"github.com/valyala/fasthttp"
@@ -105,10 +105,16 @@ func Router() *fiber.App {
 }
 
 func Listen(app *fiber.App, addr string) error {
+	tlsEnabled := config.TLSEnabled()
+
 	base := config.S3VirtualHostBase()
 	if base == "" {
+		if tlsEnabled {
+			return app.ListenTLS(addr, config.TLSCertFile(), config.TLSKeyFile())
+		}
 		return app.Listen(addr)
 	}
+
 	handler := virtualHostWrap(base, app.Handler())
 	server := &fasthttp.Server{
 		Handler:                      handler,
@@ -119,6 +125,11 @@ func Listen(app *fiber.App, addr string) error {
 		NoDefaultServerHeader:        true,
 	}
 	log.Info().Msgf("S3 virtual-host addressing enabled (base=%s)", base)
+
+	if tlsEnabled {
+		return server.ListenAndServeTLS(addr, config.TLSCertFile(), config.TLSKeyFile())
+	}
+
 	return server.ListenAndServe(addr)
 }
 

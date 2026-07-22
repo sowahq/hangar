@@ -6,11 +6,13 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"time"
 )
 
 type Client struct {
 	baseURL    string
+	adminToken string
 	httpClient *http.Client
 }
 
@@ -20,7 +22,8 @@ type ErrorResponse struct {
 
 func NewClient(baseURL string) *Client {
 	return &Client{
-		baseURL: baseURL,
+		baseURL:    baseURL,
+		adminToken: os.Getenv("HANGAR_ADMIN_TOKEN"),
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
@@ -46,6 +49,10 @@ func (c *Client) doRequest(method, path string, body any) (*http.Response, error
 
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
+	}
+
+	if c.adminToken != "" {
+		req.Header.Set("Authorization", "Bearer "+c.adminToken)
 	}
 
 	resp, err := c.httpClient.Do(req)
