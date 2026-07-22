@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/anhostfr/hangar/internal/service/bucket"
+	"github.com/sowahq/hangar/internal/service/bucket"
 )
 
 func seedLockedBucket(t *testing.T, name string) {
@@ -27,7 +27,7 @@ func TestS3PutObjectWithLockHeaders(t *testing.T) {
 	s := newS3TestServer(t)
 	seedLockedBucket(t, "objlk")
 
-	retainUntil := s.now.Add(48 * time.Hour).UTC().Format(time.RFC3339)
+	retainUntil := time.Now().Add(48 * time.Hour).UTC().Format(time.RFC3339)
 	req := s.sign(t, http.MethodPut, "/objlk/x.txt", "", []byte("locked"))
 	req.Header.Set(hdrObjectLockMode, "GOVERNANCE")
 	req.Header.Set(hdrObjectLockRetainUntilDate, retainUntil)
@@ -63,7 +63,7 @@ func TestS3PutObjectLockHeadersRejectedWhenBucketDisabled(t *testing.T) {
 		t.Fatalf("seed: %v", err)
 	}
 
-	retainUntil := s.now.Add(48 * time.Hour).UTC().Format(time.RFC3339)
+	retainUntil := time.Now().Add(48 * time.Hour).UTC().Format(time.RFC3339)
 	req := s.sign(t, http.MethodPut, "/nolk/x.txt", "", []byte("x"))
 	req.Header.Set(hdrObjectLockMode, "GOVERNANCE")
 	req.Header.Set(hdrObjectLockRetainUntilDate, retainUntil)
@@ -103,7 +103,7 @@ func TestS3RetentionEndpointPutGet(t *testing.T) {
 		t.Fatalf("seed put: %d", resp.StatusCode)
 	}
 
-	retainUntil := s.now.Add(72 * time.Hour).UTC().Format(time.RFC3339)
+	retainUntil := time.Now().Add(72 * time.Hour).UTC().Format(time.RFC3339)
 	body, _ := xml.Marshal(RetentionXML{Mode: "GOVERNANCE", RetainUntilDate: retainUntil})
 	resp = s.do(t, http.MethodPut, "/rete/x.txt", "retention=", body)
 	resp.Body.Close()
