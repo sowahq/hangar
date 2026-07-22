@@ -31,6 +31,26 @@ func Commands() []*cli.Command {
 			Action: createS3Key,
 		},
 		{
+			Name:      "update",
+			Usage:     "Replace permissions and bucket scope of an S3 access key",
+			ArgsUsage: "<access-key-id>",
+			Flags: []cli.Flag{
+				common.ServerFlag(),
+				&cli.StringSliceFlag{
+					Name:     "perm",
+					Usage:    "Permission (read, write, delete, admin). Repeatable. Replaces existing.",
+					Aliases:  []string{"p"},
+					Required: true,
+				},
+				&cli.StringSliceFlag{
+					Name:    "bucket",
+					Usage:   "Restrict to bucket. Repeatable. Empty = all buckets. Replaces existing.",
+					Aliases: []string{"b"},
+				},
+			},
+			Action: updateS3Key,
+		},
+		{
 			Name:   "list",
 			Usage:  "List all S3 access keys",
 			Flags:  []cli.Flag{common.ServerFlag()},
@@ -73,6 +93,25 @@ func listS3Keys(c *cli.Context) error {
 	}
 	data, _ := json.MarshalIndent(result, "", "  ")
 	fmt.Printf("Found %d S3 key(s):\n%s\n", result.Count, data)
+	return nil
+}
+
+func updateS3Key(c *cli.Context) error {
+	if c.NArg() == 0 {
+		return fmt.Errorf("access key id is required")
+	}
+	id := c.Args().First()
+	apiClient := client.NewClient(c.String("server"))
+	req := &client.UpdateS3KeyRequest{
+		Permissions: c.StringSlice("perm"),
+		Buckets:     c.StringSlice("bucket"),
+	}
+	result, err := apiClient.UpdateS3Key(id, req)
+	if err != nil {
+		return fmt.Errorf("failed to update s3 key: %w", err)
+	}
+	data, _ := json.MarshalIndent(result, "", "  ")
+	fmt.Printf("S3 access key updated:\n%s\n", data)
 	return nil
 }
 

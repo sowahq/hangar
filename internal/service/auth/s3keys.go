@@ -107,6 +107,40 @@ func CreateS3Key(perms, buckets []string) (*S3Key, error) {
 	return key, nil
 }
 
+func UpdateS3Key(id string, perms, buckets []string) (*S3Key, error) {
+	if err := validatePerms(perms); err != nil {
+		return nil, err
+	}
+
+	db := database.LocalStore()
+	if db == nil {
+		return nil, fmt.Errorf("database not initialized")
+	}
+
+	key, err := GetS3Key(id)
+	if err != nil {
+		return nil, err
+	}
+
+	if buckets == nil {
+		buckets = []string{}
+	}
+
+	key.Permissions = perms
+	key.Buckets = buckets
+
+	data, err := json.Marshal(key)
+	if err != nil {
+		return nil, fmt.Errorf("marshal: %w", err)
+	}
+
+	if err := db.Put(s3KeyKey(id), data); err != nil {
+		return nil, fmt.Errorf("store: %w", err)
+	}
+
+	return key, nil
+}
+
 func GetS3Key(id string) (*S3Key, error) {
 	db := database.LocalStore()
 	if db == nil {

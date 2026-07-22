@@ -14,6 +14,11 @@ type createS3KeyRequest struct {
 	Buckets     []string `json:"buckets"`
 }
 
+type updateS3KeyRequest struct {
+	Permissions []string `json:"permissions"`
+	Buckets     []string `json:"buckets"`
+}
+
 type s3KeyResponse struct {
 	AccessKeyID string   `json:"access_key_id"`
 	SecretKey   string   `json:"secret_key,omitempty"`
@@ -71,6 +76,43 @@ func ListS3Keys(c *fiber.Ctx) error {
 		})
 	}
 	return response.JSON(c, fiber.Map{"keys": out, "count": len(out)})
+}
+
+func UpdateS3Key(c *fiber.Ctx) error {
+	id := c.Params("id")
+	if id == "" {
+		return response.Error(c, fiber.StatusBadRequest, "Missing access key id")
+	}
+
+	var req updateS3KeyRequest
+	body := c.Body()
+	if len(body) == 0 {
+		return response.Error(c, fiber.StatusBadRequest, "Body required")
+	}
+	if err := json.Unmarshal(body, &req); err != nil {
+		return response.Error(c, fiber.StatusBadRequest, "Invalid JSON body")
+	}
+	if len(req.Permissions) == 0 {
+		return response.Error(c, fiber.StatusBadRequest, "Permissions required")
+	}
+
+	k, err := auth.UpdateS3Key(id, req.Permissions, req.Buckets)
+
+	recordAdmin(c, "s3key.update", "s3key", id, err)
+
+	if err != nil {
+		if errors.Is(err, auth.ErrS3KeyNotFound) {
+			return response.Error(c, fiber.StatusNotFound, "S3 key not found")
+		}
+		return response.ErrorWithLog(c, fiber.StatusBadRequest, err.Error(), err, "Failed to update s3 key")
+	}
+
+	return response.JSON(c, s3KeyResponse{
+		AccessKeyID: k.AccessKeyID,
+		Permissions: k.Permissions,
+		Buckets:     k.Buckets,
+		CreatedAt:   k.CreatedAt,
+	})
 }
 
 func DeleteS3Key(c *fiber.Ctx) error {

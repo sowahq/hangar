@@ -125,3 +125,42 @@ func TestS3KeyHasPermission(t *testing.T) {
 		})
 	}
 }
+
+func TestUpdateS3Key(t *testing.T) {
+	testutil.SetupDB(t)
+	k, err := CreateS3Key([]string{"read"}, []string{"b1"})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	secret := k.SecretKey
+
+	upd, err := UpdateS3Key(k.AccessKeyID, []string{"read", "write", "delete"}, []string{"b1", "b2"})
+	if err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	if !upd.HasPermission("delete") || !upd.HasPermission("write") {
+		t.Fatalf("perms not updated: %v", upd.Permissions)
+	}
+	if upd.SecretKey != secret {
+		t.Fatalf("secret changed on update")
+	}
+	if upd.AccessKeyID != k.AccessKeyID {
+		t.Fatalf("access key id changed")
+	}
+
+	got, err := GetS3Key(k.AccessKeyID)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if !got.HasPermission("delete") || len(got.Buckets) != 2 {
+		t.Fatalf("persisted state wrong: perms=%v buckets=%v", got.Permissions, got.Buckets)
+	}
+
+	if _, err := UpdateS3Key(k.AccessKeyID, []string{"bogus"}, nil); err == nil {
+		t.Fatal("invalid permission accepted")
+	}
+
+	if _, err := UpdateS3Key("AKIA-nonexistent", []string{"read"}, nil); !errors.Is(err, ErrS3KeyNotFound) {
+		t.Fatalf("update unknown key err=%v want ErrS3KeyNotFound", err)
+	}
+}

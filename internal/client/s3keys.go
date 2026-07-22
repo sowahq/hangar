@@ -10,6 +10,11 @@ type CreateS3KeyRequest struct {
 	Buckets     []string `json:"buckets,omitempty"`
 }
 
+type UpdateS3KeyRequest struct {
+	Permissions []string `json:"permissions"`
+	Buckets     []string `json:"buckets"`
+}
+
 type S3KeyResponse struct {
 	AccessKeyID string   `json:"access_key_id"`
 	SecretKey   string   `json:"secret_key,omitempty"`
@@ -53,6 +58,24 @@ func (c *Client) ListS3Keys() (*ListS3KeysResponse, error) {
 	}
 
 	var result ListS3KeysResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+	return &result, nil
+}
+
+func (c *Client) UpdateS3Key(id string, req *UpdateS3KeyRequest) (*S3KeyResponse, error) {
+	resp, err := c.doRequest("PATCH", "/admin/s3keys/"+id, req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if err := c.handleErrorResponse(resp); err != nil {
+		return nil, err
+	}
+
+	var result S3KeyResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}

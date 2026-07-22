@@ -63,6 +63,7 @@ func Router() *fiber.App {
 	adminGroup.Delete("/buckets/:bucket/tokens/:id", admin.DeleteToken)
 	adminGroup.Post("/s3keys", admin.CreateS3Key)
 	adminGroup.Get("/s3keys", admin.ListS3Keys)
+	adminGroup.Patch("/s3keys/:id", admin.UpdateS3Key)
 	adminGroup.Delete("/s3keys/:id", admin.DeleteS3Key)
 	adminGroup.Get("/audit", admin.TailAudit)
 	adminGroup.Get("/sse/keys", admin.ListSSEKeys)
