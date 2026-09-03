@@ -43,6 +43,33 @@ func setMaster(t *testing.T) {
 	t.Cleanup(func() { config.SetMasterKeyForTest(nil) })
 }
 
+func TestSSECPerObjectKeyDerivation(t *testing.T) {
+	key := randBytes(t, 32)
+	req := customerSSE(t, key)
+
+	k1, salt1, _, _, err := NewSSEParams(req)
+	if err != nil {
+		t.Fatalf("params 1: %v", err)
+	}
+	k2, salt2, _, _, err := NewSSEParams(req)
+	if err != nil {
+		t.Fatalf("params 2: %v", err)
+	}
+
+	if len(salt1) == 0 || len(salt2) == 0 {
+		t.Fatal("expected a per-object salt for SSE-C")
+	}
+	if bytes.Equal(salt1, salt2) {
+		t.Fatal("two objects reused the same SSE-C salt")
+	}
+	if bytes.Equal(k1, k2) {
+		t.Fatal("two objects derived the same SSE-C key: nonce space is not separated")
+	}
+	if bytes.Equal(k1, key) {
+		t.Fatal("SSE-C used the raw customer key without derivation")
+	}
+}
+
 func TestPutGetSSERoundtrip(t *testing.T) {
 	custKey := randBytes(t, 32)
 
