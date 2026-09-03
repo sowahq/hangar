@@ -81,7 +81,7 @@ func TestBuildTLSConfigs(t *testing.T) {
 		{name: "disabled", opt: TLSOptions{}, wantNil: true},
 		{name: "missing key", opt: TLSOptions{CertFile: cert}, wantErr: true},
 		{name: "missing cert", opt: TLSOptions{KeyFile: key}, wantErr: true},
-		{name: "cert+key no ca", opt: TLSOptions{CertFile: cert, KeyFile: key}},
+		{name: "cert+key no ca", opt: TLSOptions{CertFile: cert, KeyFile: key}, wantErr: true},
 		{name: "cert+key+ca mtls", opt: TLSOptions{CertFile: cert, KeyFile: key, CAFile: ca}, wantMTLS: true},
 	}
 

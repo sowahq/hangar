@@ -26,38 +26,35 @@ func BuildTLSConfigs(o TLSOptions) (server, client *tls.Config, err error) {
 	if o.CertFile == "" || o.KeyFile == "" {
 		return nil, nil, errors.New("cluster: tls_cert and tls_key are both required when TLS is configured")
 	}
+	if o.CAFile == "" {
+		return nil, nil, errors.New("cluster: tls_ca is required when TLS is configured (mutual authentication)")
+	}
 
 	cert, err := tls.LoadX509KeyPair(o.CertFile, o.KeyFile)
 	if err != nil {
 		return nil, nil, fmt.Errorf("load cert/key: %w", err)
 	}
 
-	var caPool *x509.CertPool
-	if o.CAFile != "" {
-		raw, rerr := os.ReadFile(o.CAFile)
-		if rerr != nil {
-			return nil, nil, fmt.Errorf("read ca: %w", rerr)
-		}
-		caPool = x509.NewCertPool()
-		if !caPool.AppendCertsFromPEM(raw) {
-			return nil, nil, errors.New("cluster: tls_ca contains no valid PEM certificates")
-		}
+	raw, rerr := os.ReadFile(o.CAFile)
+	if rerr != nil {
+		return nil, nil, fmt.Errorf("read ca: %w", rerr)
+	}
+	caPool := x509.NewCertPool()
+	if !caPool.AppendCertsFromPEM(raw) {
+		return nil, nil, errors.New("cluster: tls_ca contains no valid PEM certificates")
 	}
 
 	server = &tls.Config{
 		Certificates: []tls.Certificate{cert},
 		MinVersion:   tls.VersionTLS12,
+		ClientCAs:    caPool,
+		ClientAuth:   tls.RequireAndVerifyClientCert,
 	}
 	client = &tls.Config{
 		Certificates: []tls.Certificate{cert},
 		MinVersion:   tls.VersionTLS12,
 		ServerName:   o.ServerName,
-	}
-
-	if caPool != nil {
-		server.ClientCAs = caPool
-		server.ClientAuth = tls.RequireAndVerifyClientCert
-		client.RootCAs = caPool
+		RootCAs:      caPool,
 	}
 
 	return server, client, nil
