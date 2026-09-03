@@ -86,14 +86,15 @@ func handlePostPolicy(c *fiber.Ctx) error {
 		return writeError(c, fiber.StatusBadRequest, "MalformedPolicy", err.Error(), "/"+bucketName)
 	}
 
-	if doc.Expiration != "" {
-		exp, expErr := time.Parse(time.RFC3339, doc.Expiration)
-		if expErr != nil {
-			return writeError(c, fiber.StatusBadRequest, "MalformedPolicy", "invalid expiration", "/"+bucketName)
-		}
-		if time.Now().After(exp) {
-			return writeError(c, fiber.StatusForbidden, "AccessDenied", "policy expired", "/"+bucketName)
-		}
+	if doc.Expiration == "" {
+		return writeError(c, fiber.StatusBadRequest, "MalformedPolicy", "policy expiration required", "/"+bucketName)
+	}
+	exp, expErr := time.Parse(time.RFC3339, doc.Expiration)
+	if expErr != nil {
+		return writeError(c, fiber.StatusBadRequest, "MalformedPolicy", "invalid expiration", "/"+bucketName)
+	}
+	if time.Now().After(exp) {
+		return writeError(c, fiber.StatusForbidden, "AccessDenied", "policy expired", "/"+bucketName)
 	}
 
 	fileHdr, fileErr := pickFormFile(form)

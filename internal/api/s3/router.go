@@ -105,6 +105,14 @@ func s3AuthError(c *fiber.Ctx, err error) error {
 	}
 }
 
+func securityHeadersMiddleware(c *fiber.Ctx) error {
+	c.Set("X-Content-Type-Options", "nosniff")
+	if config.TLSEnabled() {
+		c.Set("Strict-Transport-Security", "max-age=31536000")
+	}
+	return c.Next()
+}
+
 func Router() *fiber.App {
 	return NewRouter(time.Now)
 }
@@ -152,6 +160,7 @@ func NewRouter(now func() time.Time) *fiber.App {
 		app.Use(metrics.Middleware("s3"))
 	}
 
+	app.Use(securityHeadersMiddleware)
 	app.Use(accessLogMiddleware)
 	app.Use(sigv4Middleware(now))
 	app.Use(corsResponseMiddleware)

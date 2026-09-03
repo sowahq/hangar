@@ -143,7 +143,7 @@ func DefaultServerConfig() *serverConfig {
 	config.S3.Region = "us-east-1"
 
 	config.Metrics.Enabled = false
-	config.Metrics.BindAddr = ":9100"
+	config.Metrics.BindAddr = "127.0.0.1:9100"
 
 	config.Audit.Enabled = false
 	config.Audit.MaxSizeMB = 100

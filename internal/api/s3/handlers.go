@@ -19,6 +19,7 @@ import (
 	"github.com/sowahq/hangar/internal/storage"
 	"github.com/sowahq/hangar/pkg/ioutils"
 	"github.com/gofiber/fiber/v2"
+	"github.com/phuslu/log"
 )
 
 const xmlContentType = "application/xml"
@@ -42,6 +43,10 @@ func writeXML(c *fiber.Ctx, status int, v any) error {
 
 func writeError(c *fiber.Ctx, status int, code, message, resource string) error {
 	reqID, _ := c.Locals("s3_req_id").(string)
+	if code == "InternalError" {
+		log.Error().Str("req_id", reqID).Str("resource", resource).Str("detail", message).Msg("s3 internal error")
+		message = "We encountered an internal error. Please try again."
+	}
 	return writeXML(c, status, ErrorXML{
 		Code:      code,
 		Message:   message,
