@@ -1,8 +1,10 @@
 package handlers
 
 import (
+	"crypto/subtle"
 	"os"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -13,6 +15,16 @@ import (
 	"github.com/sowahq/hangar/internal/service/gc"
 	"github.com/sowahq/hangar/pkg/sysinfo"
 )
+
+func statusDetailAllowed(c *fiber.Ctx) bool {
+	token := config.AdminToken()
+	if token == "" {
+		return config.AllowUnauthenticatedAdmin()
+	}
+
+	raw := strings.TrimSpace(strings.TrimPrefix(c.Get("Authorization"), "Bearer "))
+	return subtle.ConstantTimeCompare([]byte(raw), []byte(token)) == 1
+}
 
 type healthCheck struct {
 	Name   string `json:"name"`
@@ -64,6 +76,19 @@ func Status(c *fiber.Ctx) error {
 		gcStr = lastTick.UTC().Format(time.RFC3339)
 	}
 	checks = append(checks, healthCheck{Name: "gc", OK: true})
+
+	if !statusDetailAllowed(c) {
+		for i := range checks {
+			checks[i].Detail = ""
+		}
+		return response.JSON(c, fiber.Map{
+			"status":       overall,
+			"db":           dbOK,
+			"data_dir_ok":  dataOK,
+			"gc_last_tick": gcStr,
+			"checks":       checks,
+		})
+	}
 
 	return response.JSON(c, fiber.Map{
 		"status":          overall,
