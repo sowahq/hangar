@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"sync"
 	"time"
 
 	"storj.io/drpc/drpcconn"
@@ -26,6 +27,39 @@ var (
 const HandshakeWindow = 30 * time.Second
 
 const ProtoVersion = rpc.ProtoVersion
+
+type replayGuard struct {
+	mu   sync.Mutex
+	seen map[string]time.Time
+}
+
+func newReplayGuard() *replayGuard {
+	return &replayGuard{seen: make(map[string]time.Time)}
+}
+
+func (g *replayGuard) observe(nonce []byte, now time.Time, window time.Duration) bool {
+	if g == nil || len(nonce) == 0 {
+		return true
+	}
+
+	key := string(nonce)
+
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	for k, t := range g.seen {
+		if now.Sub(t) > window {
+			delete(g.seen, k)
+		}
+	}
+
+	if _, ok := g.seen[key]; ok {
+		return false
+	}
+
+	g.seen[key] = now
+	return true
+}
 
 func SecretFingerprint(secret []byte) string {
 	if len(secret) == 0 {

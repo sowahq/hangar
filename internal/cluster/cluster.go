@@ -206,6 +206,8 @@ type Cluster struct {
 	layoutV  uint64
 	layout   *Layout
 	layoutCB func()
+
+	replay *replayGuard
 }
 
 func (c *Cluster) ReconcileView(want map[NodeID]string, self LayoutNode) {
@@ -252,8 +254,9 @@ func New(cfg Config) *Cluster {
 	}
 
 	c := &Cluster{
-		cfg:  cfg,
-		view: NewView(),
+		cfg:    cfg,
+		view:   NewView(),
+		replay: newReplayGuard(),
 	}
 
 	now := cfg.NowFn()
@@ -339,15 +342,21 @@ func (c *Cluster) NodeStatus(id NodeID) Status {
 }
 
 func (c *Cluster) VerifyHello(h *rpc.Hello, now time.Time) error {
-	if err := VerifyHello(h, c.cfg.Secret, nil, now); err == nil {
-		return nil
-	} else if !errors.Is(err, ErrAuthFailed) {
+	err := VerifyHello(h, c.cfg.Secret, nil, now)
+	if err != nil && !errors.Is(err, ErrAuthFailed) {
 		return err
 	}
-	if len(c.cfg.PreviousSecret) > 0 {
-		return VerifyHello(h, c.cfg.PreviousSecret, nil, now)
+	if err != nil && len(c.cfg.PreviousSecret) > 0 {
+		err = VerifyHello(h, c.cfg.PreviousSecret, nil, now)
 	}
-	return ErrAuthFailed
+	if err != nil {
+		return err
+	}
+
+	if !c.replay.observe(h.Nonce, now, HandshakeWindow) {
+		return ErrAuthFailed
+	}
+	return nil
 }
 
 func (c *Cluster) BuildHeartbeat() *rpc.Heartbeat {

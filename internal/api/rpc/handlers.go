@@ -9,6 +9,8 @@ import (
 
 const chunkStreamFrameSize = 64 * 1024
 
+const maxRPCChunkBytes = 128 << 20
+
 func (s *Server) PutMetadata(ctx context.Context, op *MetadataOp) (*MetadataAck, error) {
 	if s.Metadata == nil {
 		return s.DRPCClusterUnimplementedServer.PutMetadata(ctx, op)
@@ -145,6 +147,9 @@ func (s *Server) PutChunk(stream DRPCCluster_PutChunkStream) error {
 			shard = msg.ShardIdx
 		}
 		if len(msg.Payload) > 0 {
+			if buf.Len()+len(msg.Payload) > maxRPCChunkBytes {
+				return stream.SendAndClose(&PutChunkAck{Stored: false, Error: "chunk exceeds size limit"})
+			}
 			buf.Write(msg.Payload)
 		}
 		if msg.Last {
