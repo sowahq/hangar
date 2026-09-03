@@ -5,23 +5,31 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/gofiber/fiber/v2"
 	"github.com/sowahq/hangar/internal/api/http/response"
 	"github.com/sowahq/hangar/internal/config"
-	"github.com/gofiber/fiber/v2"
 )
 
 func TestRequireAdminToken(t *testing.T) {
 	tests := []struct {
-		name       string
-		configured string
-		header     string
-		wantStatus int
+		name        string
+		configured  string
+		allowUnauth bool
+		header      string
+		wantStatus  int
 	}{
 		{
-			name:       "no token configured allows request",
+			name:       "no token configured denies request",
 			configured: "",
 			header:     "",
-			wantStatus: http.StatusOK,
+			wantStatus: http.StatusServiceUnavailable,
+		},
+		{
+			name:        "no token but explicit opt-in allows request",
+			configured:  "",
+			allowUnauth: true,
+			header:      "",
+			wantStatus:  http.StatusOK,
 		},
 		{
 			name:       "token configured missing header is rejected",
@@ -52,7 +60,11 @@ func TestRequireAdminToken(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			config.SetAdminTokenForTest(tt.configured)
-			t.Cleanup(func() { config.SetAdminTokenForTest("") })
+			config.SetAllowUnauthenticatedAdminForTest(tt.allowUnauth)
+			t.Cleanup(func() {
+				config.SetAdminTokenForTest("")
+				config.SetAllowUnauthenticatedAdminForTest(false)
+			})
 
 			app := fiber.New(fiber.Config{ErrorHandler: response.ErrorHandler})
 			app.Get("/admin/ping", RequireAdminToken(), func(c *fiber.Ctx) error {
