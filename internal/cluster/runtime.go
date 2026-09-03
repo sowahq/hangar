@@ -58,6 +58,9 @@ func Start(ctx context.Context, cfg Config) (*Runtime, error) {
 		ln = tls.NewListener(ln, cfg.TLSServer)
 	}
 
+	connAuth := rpc.NewConnAuth()
+	ln = newAuthListener(ln, connAuth)
+
 	cl := New(cfg)
 
 	runCtx, cancel := context.WithCancel(ctx)
@@ -80,6 +83,7 @@ func Start(ctx context.Context, cfg Config) (*Runtime, error) {
 	srv.KV = localKVHandler{}
 	srv.Catchup = localCatchupHandler{}
 	srv.Joiner = &joinHandler{rt: rt}
+	srv.Auth = connAuth
 
 	mux := drpcmux.New()
 	if err := rpc.DRPCRegisterCluster(mux, srv); err != nil {
@@ -88,7 +92,7 @@ func Start(ctx context.Context, cfg Config) (*Runtime, error) {
 		return nil, fmt.Errorf("cluster: register rpc: %w", err)
 	}
 
-	dsrv := drpcserver.New(mux)
+	dsrv := drpcserver.New(rpc.NewAuthGate(mux, connAuth))
 
 	cl.SetLayoutCallback(func() {
 		rt.reconcilePeers()
