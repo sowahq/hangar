@@ -4,6 +4,8 @@ import (
 	"context"
 	"io"
 	"time"
+
+	"storj.io/drpc/drpcctx"
 )
 
 const ProtoVersion uint32 = 1
@@ -63,6 +65,7 @@ type Server struct {
 	KV       KVHandler
 	Catchup  CatchupHandler
 	Joiner   JoinHandler
+	Auth     *ConnAuth
 }
 
 func NewServer(b Bridge) *Server {
@@ -76,6 +79,12 @@ func (s *Server) Handshake(ctx context.Context, h *Hello) (*HelloAck, error) {
 
 	if err := s.bridge.VerifyHello(h, time.Now()); err != nil {
 		return &HelloAck{Accepted: false, Reason: err.Error(), ProtoVersion: ProtoVersion}, nil
+	}
+
+	if s.Auth != nil {
+		if tr, ok := drpcctx.Transport(ctx); ok {
+			s.Auth.Mark(tr)
+		}
 	}
 
 	return &HelloAck{
