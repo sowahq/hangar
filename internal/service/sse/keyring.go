@@ -31,6 +31,7 @@ type Key struct {
 	ID        string `json:"id"`
 	Bytes     []byte `json:"bytes"`
 	CreatedAt int64  `json:"created_at"`
+	Wrapped   bool   `json:"wrapped,omitempty"`
 }
 
 type KeyInfo struct {
@@ -46,7 +47,14 @@ func storeKey(k *Key) error {
 	if db == nil {
 		return fmt.Errorf("database not initialized")
 	}
-	data, err := json.Marshal(k)
+
+	wrapped, err := wrapKeyBytes(k.Bytes)
+	if err != nil {
+		return err
+	}
+
+	stored := Key{ID: k.ID, Bytes: wrapped, CreatedAt: k.CreatedAt, Wrapped: true}
+	data, err := json.Marshal(&stored)
 	if err != nil {
 		return err
 	}
@@ -68,6 +76,14 @@ func loadKey(id string) (*Key, error) {
 	var k Key
 	if err := json.Unmarshal(data, &k); err != nil {
 		return nil, err
+	}
+	if k.Wrapped {
+		plain, err := unwrapKeyBytes(k.Bytes)
+		if err != nil {
+			return nil, err
+		}
+		k.Bytes = plain
+		k.Wrapped = false
 	}
 	return &k, nil
 }

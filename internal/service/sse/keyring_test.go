@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"testing"
 
+	"github.com/sowahq/hangar/internal/config"
+	"github.com/sowahq/hangar/internal/database"
 	"github.com/sowahq/hangar/internal/testutil"
 )
 
@@ -87,7 +89,36 @@ func TestKeyringBootstrapAndRotate(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			testutil.SetupDB(t)
+			config.SetMasterKeyForTest(bytes.Repeat([]byte{9}, 32))
+			t.Cleanup(func() { config.SetMasterKeyForTest(nil) })
 			tt.fn(t)
 		})
+	}
+}
+
+func TestKeyringStoredCiphertext(t *testing.T) {
+	testutil.SetupDB(t)
+	config.SetMasterKeyForTest(bytes.Repeat([]byte{9}, 32))
+	t.Cleanup(func() { config.SetMasterKeyForTest(nil) })
+
+	master := bytes.Repeat([]byte{3}, 32)
+	if err := Bootstrap(master); err != nil {
+		t.Fatalf("bootstrap: %v", err)
+	}
+
+	raw, err := database.LocalStore().Get([]byte(keyPrefix + defaultKeyID))
+	if err != nil {
+		t.Fatalf("get raw: %v", err)
+	}
+	if bytes.Contains(raw, master) {
+		t.Fatal("keyring stored the raw key material in cleartext")
+	}
+
+	_, k, err := ActiveKey()
+	if err != nil {
+		t.Fatalf("active: %v", err)
+	}
+	if !bytes.Equal(k, master) {
+		t.Fatal("unwrapped key does not match the master")
 	}
 }
