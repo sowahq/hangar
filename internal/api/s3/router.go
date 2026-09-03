@@ -16,9 +16,9 @@ import (
 
 func adaptRequest(c *fiber.Ctx) *Request {
 	h := make(http.Header)
-	c.Request().Header.VisitAll(func(k, v []byte) {
+	for k, v := range c.Request().Header.All() {
 		h.Add(string(k), string(v))
-	})
+	}
 
 	if h.Get("Host") == "" {
 		h.Set("Host", string(c.Request().Host()))
