@@ -20,8 +20,9 @@ type serverConfig struct {
 	Pprof bool `toml:"pprof"`
 
 	API struct {
-		BindAddr   string `toml:"bind_addr" validate:"required"`
-		AdminToken string `toml:"admin_token"`
+		BindAddr                  string `toml:"bind_addr" validate:"required"`
+		AdminToken                string `toml:"admin_token"`
+		AllowUnauthenticatedAdmin bool   `toml:"allow_unauthenticated_admin"`
 	} `toml:"api"`
 
 	TLS struct {
@@ -373,7 +374,7 @@ func LoadServerConfig(path string) error {
 
 	if _, err := toml.DecodeFile(path, &c); err != nil {
 		c = DefaultServerConfig()
-		f, createErr := os.Create(path)
+		f, createErr := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 		if createErr != nil {
 			return createErr
 		}
@@ -471,7 +472,11 @@ func loadAdminToken() {
 	adminToken = raw
 
 	if adminToken == "" {
-		log.Printf("admin API is unauthenticated — set [api] admin_token or HANGAR_ADMIN_TOKEN")
+		if c.API.AllowUnauthenticatedAdmin {
+			log.Printf("admin API is UNAUTHENTICATED — allow_unauthenticated_admin is set; anyone reaching %s controls this node", c.API.BindAddr)
+		} else {
+			log.Printf("admin API is DISABLED — set [api] admin_token or HANGAR_ADMIN_TOKEN (or allow_unauthenticated_admin to opt in)")
+		}
 	}
 }
 
@@ -479,6 +484,24 @@ func AdminToken() string {
 	mu.RLock()
 	defer mu.RUnlock()
 	return adminToken
+}
+
+func AllowUnauthenticatedAdmin() bool {
+	mu.RLock()
+	defer mu.RUnlock()
+	if c == nil {
+		return false
+	}
+	return c.API.AllowUnauthenticatedAdmin
+}
+
+func SetAllowUnauthenticatedAdminForTest(allow bool) {
+	mu.Lock()
+	defer mu.Unlock()
+	if c == nil {
+		c = DefaultServerConfig()
+	}
+	c.API.AllowUnauthenticatedAdmin = allow
 }
 
 func SetAdminTokenForTest(tok string) {

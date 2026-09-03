@@ -10,12 +10,16 @@ import (
 )
 
 // RequireAdminToken guards the admin API with a bearer token. When no token is
-// configured the guard is a no-op, preserving the unauthenticated behaviour.
+// configured the admin API is denied, unless the operator explicitly opts into
+// an unauthenticated admin plane via allow_unauthenticated_admin.
 func RequireAdminToken() fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		token := config.AdminToken()
 		if token == "" {
-			return c.Next()
+			if config.AllowUnauthenticatedAdmin() {
+				return c.Next()
+			}
+			return response.Error(c, fiber.StatusServiceUnavailable, "Admin API disabled: no admin token configured")
 		}
 
 		authHeader := c.Get("Authorization")
