@@ -14,9 +14,11 @@ import (
 )
 
 var (
-	ErrChunkedMalformed     = errors.New("aws-chunked: malformed framing")
-	ErrChunkedBadSignature  = errors.New("aws-chunked: chunk signature mismatch")
+	ErrChunkedMalformed    = errors.New("aws-chunked: malformed framing")
+	ErrChunkedBadSignature = errors.New("aws-chunked: chunk signature mismatch")
 )
+
+const maxAWSChunkSize = 64 << 20
 
 type chunkedReader struct {
 	src        *bufio.Reader
@@ -83,6 +85,9 @@ func (cr *chunkedReader) readChunk() error {
 	size, err := strconv.ParseInt(sizeStr, 16, 64)
 	if err != nil || size < 0 {
 		return fmt.Errorf("%w: bad chunk size %q", ErrChunkedMalformed, sizeStr)
+	}
+	if size > maxAWSChunkSize {
+		return fmt.Errorf("%w: chunk size %d exceeds %d", ErrChunkedMalformed, size, maxAWSChunkSize)
 	}
 
 	chunkSig := parseChunkSig(sigPart)

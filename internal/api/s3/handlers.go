@@ -23,6 +23,12 @@ import (
 
 const xmlContentType = "application/xml"
 
+const (
+	maxControlXMLBody = 8 << 20
+	maxDeleteObjects  = 1000
+	maxCompleteParts  = 10000
+)
+
 func writeXML(c *fiber.Ctx, status int, v any) error {
 	c.Set(fiber.HeaderContentType, xmlContentType)
 	c.Status(status)
@@ -385,6 +391,9 @@ func handleCompleteMultipart(c *fiber.Ctx, bucketName, key, uploadID string) err
 	if len(body) == 0 {
 		return writeError(c, fiber.StatusBadRequest, "MalformedXML", "missing CompleteMultipartUpload body", "/"+bucketName+"/"+key)
 	}
+	if len(body) > maxControlXMLBody {
+		return writeError(c, fiber.StatusBadRequest, "MalformedXML", "CompleteMultipartUpload body too large", "/"+bucketName+"/"+key)
+	}
 
 	var req CompleteMultipartUpload
 	if err := xml.Unmarshal(body, &req); err != nil {
@@ -392,6 +401,9 @@ func handleCompleteMultipart(c *fiber.Ctx, bucketName, key, uploadID string) err
 	}
 	if len(req.Parts) == 0 {
 		return writeError(c, fiber.StatusBadRequest, "MalformedXML", "no parts specified", "/"+bucketName+"/"+key)
+	}
+	if len(req.Parts) > maxCompleteParts {
+		return writeError(c, fiber.StatusBadRequest, "MalformedXML", "too many parts specified", "/"+bucketName+"/"+key)
 	}
 
 	parts := make([]int, 0, len(req.Parts))
@@ -587,7 +599,7 @@ func requestBody(c *fiber.Ctx) (io.Reader, int64) {
 	if ah, ok := c.Locals("s3_auth").(*AuthHeader); ok && ah != nil && ah.Streaming {
 		decoded := int64(0)
 		if v := c.Get("x-amz-decoded-content-length"); v != "" {
-			if n, err := strconv.ParseInt(v, 10, 64); err == nil {
+			if n, err := strconv.ParseInt(v, 10, 64); err == nil && n >= 0 {
 				decoded = n
 			}
 		}
@@ -625,6 +637,9 @@ func handleDeleteObjects(c *fiber.Ctx) error {
 	if len(body) == 0 {
 		return writeError(c, fiber.StatusBadRequest, "MalformedXML", "empty delete body", "/"+name)
 	}
+	if len(body) > maxControlXMLBody {
+		return writeError(c, fiber.StatusBadRequest, "MalformedXML", "delete body too large", "/"+name)
+	}
 
 	var req DeleteRequest
 	if err := xml.Unmarshal(body, &req); err != nil {
@@ -633,6 +648,9 @@ func handleDeleteObjects(c *fiber.Ctx) error {
 
 	if len(req.Objects) == 0 {
 		return writeError(c, fiber.StatusBadRequest, "MalformedXML", "no objects to delete", "/"+name)
+	}
+	if len(req.Objects) > maxDeleteObjects {
+		return writeError(c, fiber.StatusBadRequest, "MalformedXML", "too many keys in a single delete request", "/"+name)
 	}
 
 	bypass := bypassGovernance(c)
