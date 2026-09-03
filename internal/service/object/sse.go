@@ -3,6 +3,7 @@ package object
 import (
 	"crypto/md5"
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -19,7 +20,12 @@ const (
 	SSEAlgoC    = "AES256-C"
 
 	hkdfInfoS3 = "hangar-sse-s3"
+	hkdfInfoC  = "hangar-sse-c"
 )
+
+func constantTimeEqual(a, b string) bool {
+	return subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1
+}
 
 var (
 	ErrSSEMasterKeyMissing       = errors.New("sse-s3 disabled: master key not configured")
@@ -49,7 +55,7 @@ func ParseCustomerKey(b64Key, md5Header string) ([]byte, string, error) {
 
 	sum := md5.Sum(key)
 	expected := base64.StdEncoding.EncodeToString(sum[:])
-	if expected != md5Header {
+	if !constantTimeEqual(expected, md5Header) {
 		return nil, "", ErrSSECustomerKeyMD5Mismatch
 	}
 
@@ -125,15 +131,22 @@ func NewSSEParams(req *SSERequest) (key []byte, salt, noncePrefix []byte, custom
 			return nil, nil, nil, "", ErrSSECustomerKeyInvalid
 		}
 
+		salt = make([]byte, crypto.SaltSize)
+		if _, err = rand.Read(salt); err != nil {
+			return nil, nil, nil, "", fmt.Errorf("salt rand: %w", err)
+		}
+
 		noncePrefix = make([]byte, crypto.NoncePrefixLen)
 		if _, err = rand.Read(noncePrefix); err != nil {
 			return nil, nil, nil, "", fmt.Errorf("nonce rand: %w", err)
 		}
 
-		key = make([]byte, crypto.KeySize)
-		copy(key, req.CustomerKey)
+		key, err = crypto.DeriveKey(req.CustomerKey, salt, []byte(hkdfInfoC))
+		if err != nil {
+			return nil, nil, nil, "", fmt.Errorf("derive: %w", err)
+		}
 
-		return key, nil, noncePrefix, req.CustomerKeyMD5, nil
+		return key, salt, noncePrefix, req.CustomerKeyMD5, nil
 	}
 
 	return nil, nil, nil, "", ErrSSEAlgorithmInvalid
@@ -168,12 +181,13 @@ func setupSSEWrite(req *SSERequest) (*ssePutCtx, error) {
 		}, nil
 
 	case SSEAlgoC:
-		key, _, np, md5sum, err := NewSSEParams(req)
+		key, salt, np, md5sum, err := NewSSEParams(req)
 		if err != nil {
 			return nil, err
 		}
 		return &ssePutCtx{
 			algo:           SSEAlgoC,
+			salt:           salt,
 			noncePrefix:    np,
 			customerKeyMD5: md5sum,
 			encParams:      &storage.EncryptParams{Key: key, NoncePrefix: np, PartNumber: 1},
@@ -207,16 +221,20 @@ func ResolveReadKey(m *storage.Metadatas, req *SSERequest) ([]byte, error) {
 		if req == nil || req.Algorithm != SSEAlgoC {
 			return nil, ErrSSECustomerKeyRequired
 		}
-		if req.CustomerKeyMD5 != m.SSECustomerKeyMD5 {
+		if !constantTimeEqual(req.CustomerKeyMD5, m.SSECustomerKeyMD5) {
 			return nil, ErrSSECustomerKeyMD5Mismatch
 		}
 		if len(req.CustomerKey) != crypto.KeySize {
 			return nil, ErrSSECustomerKeyInvalid
 		}
 
-		key := make([]byte, crypto.KeySize)
-		copy(key, req.CustomerKey)
-		return key, nil
+		if len(m.SSESalt) == 0 {
+			key := make([]byte, crypto.KeySize)
+			copy(key, req.CustomerKey)
+			return key, nil
+		}
+
+		return crypto.DeriveKey(req.CustomerKey, m.SSESalt, []byte(hkdfInfoC))
 	}
 
 	return nil, ErrSSEAlgorithmInvalid
@@ -242,11 +260,20 @@ func uploadPartEncryptParams(h *storage.MultipartHeader, req *UploadPartRequest)
 		if req.SSE == nil || req.SSE.Algorithm != SSEAlgoC {
 			return nil, ErrSSECustomerKeyRequired
 		}
-		if req.SSE.CustomerKeyMD5 != h.SSECustomerKeyMD5 {
+		if !constantTimeEqual(req.SSE.CustomerKeyMD5, h.SSECustomerKeyMD5) {
 			return nil, ErrSSECustomerKeyMD5Mismatch
 		}
-		key := make([]byte, crypto.KeySize)
-		copy(key, req.SSE.CustomerKey)
+
+		if len(h.SSESalt) == 0 {
+			key := make([]byte, crypto.KeySize)
+			copy(key, req.SSE.CustomerKey)
+			return &storage.EncryptParams{Key: key, NoncePrefix: h.SSENoncePrefix, PartNumber: uint16(req.PartNumber)}, nil
+		}
+
+		key, err := crypto.DeriveKey(req.SSE.CustomerKey, h.SSESalt, []byte(hkdfInfoC))
+		if err != nil {
+			return nil, fmt.Errorf("derive: %w", err)
+		}
 		return &storage.EncryptParams{Key: key, NoncePrefix: h.SSENoncePrefix, PartNumber: uint16(req.PartNumber)}, nil
 	}
 
