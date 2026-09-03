@@ -3,6 +3,7 @@ package crypto
 import (
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/binary"
 	"errors"
@@ -78,6 +79,28 @@ func Open(key, nonce, ciphertext, aad []byte) ([]byte, error) {
 	}
 
 	return pt, nil
+}
+
+func EnvelopeSeal(key, plaintext, aad []byte) ([]byte, error) {
+	nonce := make([]byte, NonceSize)
+	if _, err := rand.Read(nonce); err != nil {
+		return nil, err
+	}
+
+	ct, err := Seal(key, nonce, plaintext, aad)
+	if err != nil {
+		return nil, err
+	}
+
+	return append(nonce, ct...), nil
+}
+
+func EnvelopeOpen(key, blob, aad []byte) ([]byte, error) {
+	if len(blob) < NonceSize {
+		return nil, ErrCiphertextLen
+	}
+
+	return Open(key, blob[:NonceSize], blob[NonceSize:], aad)
 }
 
 func DeriveKey(master, salt, info []byte) ([]byte, error) {
