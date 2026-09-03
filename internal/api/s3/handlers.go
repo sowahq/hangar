@@ -351,6 +351,12 @@ func handleUploadPart(c *fiber.Ctx) error {
 
 	partBody, _ := requestBody(c)
 
+	partStreaming := false
+	if ah, ok := c.Locals("s3_auth").(*AuthHeader); ok && ah != nil && ah.Streaming {
+		partStreaming = true
+	}
+	partBody = maybeValidatingBody(c, partBody, partStreaming)
+
 	checksumAlgo, checksumVal := parseChecksum(c)
 
 	res, err := object.UploadPart(&object.UploadPartRequest{
@@ -371,6 +377,10 @@ func handleUploadPart(c *fiber.Ctx) error {
 			return writeError(c, fiber.StatusNotFound, "NoSuchUpload", err.Error(), "/"+bucketName+"/"+key)
 		case errors.Is(err, object.ErrInsufficientStorage):
 			return writeError(c, fiber.StatusInsufficientStorage, "InsufficientStorage", "Insufficient storage on node", "/"+bucketName+"/"+key)
+		case errors.Is(err, ErrContentSHA256Mismatch):
+			return writeError(c, fiber.StatusBadRequest, "XAmzContentSHA256Mismatch", err.Error(), "/"+bucketName+"/"+key)
+		case errors.Is(err, ErrBadDigest):
+			return writeError(c, fiber.StatusBadRequest, "BadDigest", err.Error(), "/"+bucketName+"/"+key)
 		}
 		if ok, r := sseErrorResponse(c, err, "/"+bucketName+"/"+key); ok {
 			return r
