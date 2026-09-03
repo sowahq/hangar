@@ -2,29 +2,31 @@ module github.com/sowahq/hangar
 
 go 1.25.0
 
+toolchain go1.25.13
+
 require (
 	github.com/BurntSushi/toml v1.5.0
 	github.com/bytedance/sonic v1.14.0
 	github.com/cockroachdb/pebble v1.1.5
 	github.com/go-playground/validator/v10 v10.27.0
-	github.com/gofiber/fiber/v2 v2.52.12
-	github.com/klauspost/compress v1.18.0
+	github.com/gofiber/fiber/v2 v2.52.15
+	github.com/klauspost/compress v1.18.7
 	github.com/klauspost/reedsolomon v1.14.0
 	github.com/phuslu/log v1.0.119
 	github.com/prometheus/client_golang v1.23.2
 	github.com/urfave/cli/v2 v2.27.7
-	github.com/valyala/fasthttp v1.51.0
+	github.com/valyala/fasthttp v1.70.0
 	github.com/zeebo/blake3 v0.2.4
 	github.com/zeebo/xxh3 v1.1.0
-	golang.org/x/crypto v0.50.0
-	golang.org/x/sys v0.44.0
+	golang.org/x/crypto v0.52.0
+	golang.org/x/sys v0.45.0
 	google.golang.org/protobuf v1.36.11
 	storj.io/drpc v1.0.0
 )
 
 require (
 	github.com/DataDog/zstd v1.4.5 // indirect
-	github.com/andybalholm/brotli v1.1.0 // indirect
+	github.com/andybalholm/brotli v1.2.1 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bytedance/sonic/loader v0.3.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
@@ -61,12 +63,11 @@ require (
 	github.com/tinylib/msgp v1.2.5 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
-	github.com/valyala/tcplisten v1.0.0 // indirect
 	github.com/xrash/smetrics v0.0.0-20240521201337-686a1a2994c1 // indirect
 	github.com/zeebo/errs v1.2.2 // indirect
 	go.yaml.in/yaml/v2 v2.4.2 // indirect
 	golang.org/x/arch v0.0.0-20210923205945-b76863e36670 // indirect
 	golang.org/x/exp v0.0.0-20230626212559-97b1e661b5df // indirect
-	golang.org/x/net v0.53.0 // indirect
-	golang.org/x/text v0.36.0 // indirect
+	golang.org/x/net v0.54.0 // indirect
+	golang.org/x/text v0.37.0 // indirect
 )
