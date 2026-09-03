@@ -1,11 +1,59 @@
 package auth
 
 import (
+	"bytes"
 	"errors"
 	"testing"
 
+	"github.com/sowahq/hangar/internal/config"
+	"github.com/sowahq/hangar/internal/database"
 	"github.com/sowahq/hangar/internal/testutil"
 )
+
+func TestS3KeySecretEncryptedAtRest(t *testing.T) {
+	testutil.SetupDB(t)
+	config.SetMasterKeyForTest(bytes.Repeat([]byte{5}, 32))
+	t.Cleanup(func() { config.SetMasterKeyForTest(nil) })
+
+	k, err := CreateS3Key([]string{PermRead}, nil)
+	if err != nil {
+		t.Fatalf("CreateS3Key: %v", err)
+	}
+
+	raw, err := database.LocalStore().Get(s3KeyKey(k.AccessKeyID))
+	if err != nil {
+		t.Fatalf("get raw: %v", err)
+	}
+	if bytes.Contains(raw, []byte(k.SecretKey)) {
+		t.Fatal("secret key stored in cleartext")
+	}
+
+	got, err := GetS3Key(k.AccessKeyID)
+	if err != nil {
+		t.Fatalf("GetS3Key: %v", err)
+	}
+	if got.SecretKey != k.SecretKey {
+		t.Fatal("decrypted secret does not match")
+	}
+}
+
+func TestS3KeyPlaintextWithoutMaster(t *testing.T) {
+	testutil.SetupDB(t)
+	config.SetMasterKeyForTest(nil)
+
+	k, err := CreateS3Key([]string{PermRead}, nil)
+	if err != nil {
+		t.Fatalf("CreateS3Key: %v", err)
+	}
+
+	got, err := GetS3Key(k.AccessKeyID)
+	if err != nil {
+		t.Fatalf("GetS3Key: %v", err)
+	}
+	if got.SecretKey != k.SecretKey {
+		t.Fatal("secret mismatch without master")
+	}
+}
 
 func TestCreateS3Key(t *testing.T) {
 	tests := []struct {

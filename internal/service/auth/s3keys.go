@@ -24,11 +24,28 @@ const (
 )
 
 type S3Key struct {
-	AccessKeyID string   `json:"access_key_id"`
-	SecretKey   string   `json:"secret_key"`
-	Permissions []string `json:"permissions"`
-	Buckets     []string `json:"buckets"`
-	CreatedAt   int64    `json:"created_at"`
+	AccessKeyID   string   `json:"access_key_id"`
+	SecretKey     string   `json:"secret_key"`
+	Permissions   []string `json:"permissions"`
+	Buckets       []string `json:"buckets"`
+	CreatedAt     int64    `json:"created_at"`
+	SecretWrapped bool     `json:"secret_wrapped,omitempty"`
+}
+
+func storeS3Key(db *database.PebbleDB, key *S3Key) error {
+	storedSecret, wrapped := wrapSecret(key.SecretKey)
+	stored := *key
+	stored.SecretKey = storedSecret
+	stored.SecretWrapped = wrapped
+
+	data, err := json.Marshal(&stored)
+	if err != nil {
+		return fmt.Errorf("marshal: %w", err)
+	}
+	if err := db.Put(s3KeyKey(key.AccessKeyID), data); err != nil {
+		return fmt.Errorf("store: %w", err)
+	}
+	return nil
 }
 
 func s3KeyKey(id string) []byte {
@@ -97,12 +114,8 @@ func CreateS3Key(perms, buckets []string) (*S3Key, error) {
 		Buckets:     buckets,
 		CreatedAt:   nowUnixMilli(),
 	}
-	data, err := json.Marshal(key)
-	if err != nil {
-		return nil, fmt.Errorf("marshal: %w", err)
-	}
-	if err := db.Put(s3KeyKey(id), data); err != nil {
-		return nil, fmt.Errorf("store: %w", err)
+	if err := storeS3Key(db, key); err != nil {
+		return nil, err
 	}
 	return key, nil
 }
@@ -129,13 +142,8 @@ func UpdateS3Key(id string, perms, buckets []string) (*S3Key, error) {
 	key.Permissions = perms
 	key.Buckets = buckets
 
-	data, err := json.Marshal(key)
-	if err != nil {
-		return nil, fmt.Errorf("marshal: %w", err)
-	}
-
-	if err := db.Put(s3KeyKey(id), data); err != nil {
-		return nil, fmt.Errorf("store: %w", err)
+	if err := storeS3Key(db, key); err != nil {
+		return nil, err
 	}
 
 	return key, nil
@@ -156,6 +164,14 @@ func GetS3Key(id string) (*S3Key, error) {
 	var k S3Key
 	if err := json.Unmarshal(data, &k); err != nil {
 		return nil, fmt.Errorf("unmarshal: %w", err)
+	}
+	if k.SecretWrapped {
+		plain, err := unwrapSecret(k.SecretKey)
+		if err != nil {
+			return nil, err
+		}
+		k.SecretKey = plain
+		k.SecretWrapped = false
 	}
 	return &k, nil
 }
@@ -191,6 +207,14 @@ func ListS3Keys() ([]S3Key, error) {
 		var k S3Key
 		if err := json.Unmarshal(iter.Value(), &k); err != nil {
 			continue
+		}
+		if k.SecretWrapped {
+			if plain, err := unwrapSecret(k.SecretKey); err == nil {
+				k.SecretKey = plain
+			} else {
+				k.SecretKey = ""
+			}
+			k.SecretWrapped = false
 		}
 		out = append(out, k)
 	}

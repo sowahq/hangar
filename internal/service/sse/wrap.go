@@ -1,9 +1,7 @@
 package sse
 
 import (
-	"crypto/rand"
 	"errors"
-	"fmt"
 
 	"github.com/sowahq/hangar/internal/config"
 	"github.com/sowahq/hangar/pkg/crypto"
@@ -30,17 +28,7 @@ func wrapKeyBytes(plain []byte) ([]byte, error) {
 		return nil, err
 	}
 
-	nonce := make([]byte, crypto.NonceSize)
-	if _, err := rand.Read(nonce); err != nil {
-		return nil, err
-	}
-
-	ct, err := crypto.Seal(kek, nonce, plain, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return append(nonce, ct...), nil
+	return crypto.EnvelopeSeal(kek, plain, nil)
 }
 
 func unwrapKeyBytes(blob []byte) ([]byte, error) {
@@ -49,9 +37,5 @@ func unwrapKeyBytes(blob []byte) ([]byte, error) {
 		return nil, err
 	}
 
-	if len(blob) < crypto.NonceSize {
-		return nil, fmt.Errorf("sse keyring: wrapped key too short")
-	}
-
-	return crypto.Open(kek, blob[:crypto.NonceSize], blob[crypto.NonceSize:], nil)
+	return crypto.EnvelopeOpen(kek, blob, nil)
 }
